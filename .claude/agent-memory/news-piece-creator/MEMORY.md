@@ -1,0 +1,1 @@
+- [ML News Pipeline Setup](project_pipeline_setup.md) — Sub-agents run inline; pdfunite used for merging; pypdf/PyPDF2 not installed; pdflatex TeXLive 2023 available
