@@ -1,0 +1,236 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-01}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  single-image generation \textbullet{}
+  diffusion models \textbullet{}
+  patch statistics \textbullet{}
+  training-free}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Efficient and Training-Free Single-Image Diffusion Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Closed-Form Patch Denoising Replaces Hours of Training with
+  Seconds of Inference---CVPR 2026 Highlight}\par\vspace{6pt}
+
+{\small\textbf{By} Haojun Qiu, Kiriakos N.\ Kutulakos \& David B.\ Lindell
+  (University of Toronto / Vector Institute)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2606.04299 \textbullet{}
+  CVPR 2026 Highlight \textbullet{} Submitted June 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Single-image generative models no longer need to be trained. By treating a
+reference image as an empirical patch distribution and computing the score
+function analytically in closed form, a new method from the University of
+Toronto generates diverse, high-quality samples in seconds---$300\times$ faster
+than trained alternatives---while matching or exceeding their quality on
+standard benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Generating novel images that match the internal patch
+    statistics of a single reference image currently requires hours of neural
+    network training.
+  \item[Why it matters:] Training-based single-image methods are too slow for
+    interactive editing, personalised synthesis, or low-resource scenarios;
+    a training-free alternative removes the bottleneck entirely.
+  \item[Method:] Model the image as a finite empirical distribution over patches
+    at multiple scales; compute the diffusion score function in closed form via
+    Gaussian kernel regression over that patch set.
+  \item[Result:] State-of-the-art SIFID on most textures, $300\times$ speed-up
+    over SinDDPM, and support for text-guided stylisation and retargeting without
+    any fine-tuning.
+  \item[Evidence:] CVPR 2026 Highlight; evaluated against SinDDPM, SinFusion,
+    SSGAN, ConSinGAN on standard single-image benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Single-image generation (SIG) asks: given one photograph or texture, synthesise
+new images that share its internal visual statistics. Applications span
+texture synthesis, artistic style transfer, image retargeting, and
+data augmentation for rare visual classes. The task is intrinsically
+self-supervised---the only training signal is the image itself.
+
+The dominant recent approach trains a small diffusion model on the patches
+extracted from a single image (SinDDPM, SinFusion). While effective, even
+these small networks require hours of GPU time per reference image---a steep
+price when the target is a single photo. The underlying cost is neural
+network training, which is needed because the score function is otherwise
+intractable for a general data distribution.
+
+This paper observes that for a single image the score function \emph{is}
+tractable: the image contains only finitely many patches, so the score at any
+noisy point is exactly the posterior mean over that finite set---a
+Nadaraya-Watson kernel regression with a Gaussian kernel, computable in
+closed form. Embedding this closed-form denoiser inside a standard diffusion
+sampling loop yields a complete, training-free generative model that runs in
+seconds on a commodity GPU.
+
+\section{Why Existing Approaches Fall Short}
+
+Neural single-image diffusion models (SinDDPM, SinFusion) require
+training a U-Net on the reference image from scratch. Training takes
+1--8 hours depending on image resolution, making interactive use
+impractical. Moreover, these networks are \emph{not} reusable: each new
+reference image requires fresh training.
+
+Score function engineering approaches (e.g., SinGAN) use a GAN
+pyramid but suffer from training instability and do not support
+the flexible text-guided generation that diffusion models enable.
+
+The fundamental gap is the absence of a principled, efficient score
+estimator that does not require parametric training.
+
+\section{Core Mechanism}
+
+For a single image $I$, extract patches $\mathcal{P} = \{x_1,\ldots,x_N\}$
+at multiple scales. For a noisy patch $y = x^* + \sigma\varepsilon$,
+$\varepsilon\sim\mathcal{N}(0,I)$, the optimal minimum-MSE denoiser is the
+posterior mean:
+\[
+D_\sigma(y) = \mathbb{E}[x \mid y]
+= \frac{\sum_{i=1}^{N} x_i\,e^{-\|y-x_i\|^2/2\sigma^2}}
+       {\sum_{i=1}^{N} e^{-\|y-x_i\|^2/2\sigma^2}}.
+\]
+This is Gaussian kernel regression over the patch set---no neural network
+required. The score function follows from Tweedie's formula:
+\[
+\nabla_y \log p_\sigma(y) = \frac{D_\sigma(y) - y}{\sigma^2}.
+\]
+
+\section{Technical Formulation}
+
+\textbf{Patch dataset.}
+For resolution $h\times w$ and patch size $p\times p$, the patch set
+$\mathcal{P}^\ell$ at scale $\ell$ has $N^\ell = (h_\ell - p + 1)(w_\ell - p + 1)$
+elements, each of dimension $d = p^2 \cdot C$ (with $C$ channels).
+
+\textbf{Optimal denoiser.}
+Under the empirical prior $p(x) = \frac{1}{N}\sum_{i=1}^N \delta(x - x_i)$,
+the posterior given noisy observation $y$ is:
+\[
+p(x \mid y) \propto \mathcal{N}(y; x, \sigma^2 I)\cdot p(x)
+= \sum_{i=1}^N w_i(y)\,\delta(x-x_i),
+\]
+\[
+w_i(y,\sigma) \propto \exp\!\left(-\frac{\|y - x_i\|^2}{2\sigma^2}\right).
+\]
+The posterior mean $D_\sigma(y) = \sum_i w_i x_i$ is the closed-form denoiser.
+
+\textbf{Computational cost.}
+Each denoising step costs $O(N d)$ inner products. For $p=8$, $C=3$
+and a $512\times512$ image, $N\approx2.5\times10^5$ and $d=192$,
+giving $\approx5\times10^7$ operations---substantially cheaper than a
+forward pass of even a small U-Net.
+
+\textbf{Multi-scale generation.}
+Coarse-to-fine: generate at the lowest resolution first using
+$\mathcal{P}^1$, upsample, and condition the next-scale denoiser on the
+upsampled result via score guidance:
+\[
+\tilde\nabla_y \log p_\sigma^\ell(y) =
+\nabla_y\log p_\sigma^\ell(y) + \omega\,\nabla_y\log p_\sigma^{\ell-1}(y_\downarrow),
+\]
+where $y_\downarrow$ is $y$ downsampled to scale $\ell{-}1$ and $\omega$
+is a guidance weight.
+
+\section{Learning or Inference Procedure}
+
+No training is performed. At inference:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Extract patch sets $\{\mathcal{P}^\ell\}_{\ell=1}^{L}$ from $I$.
+  \item Initialise $x_T^1 \sim \mathcal{N}(0,I)$ at the coarsest scale.
+  \item Run DDPM reverse process using $D_\sigma$ as the denoiser (instead
+    of a neural network) for $T$ steps.
+  \item Upsample, condition, and repeat for finer scales.
+  \item Output $x_0^L$ as the generated image.
+\end{enumerate}
+Total wall-clock time: $<10$ seconds on a single GPU for a $256\times256$
+output, vs.\ $>3$ hours for SinDDPM.
+
+\section{What the Guarantee Says}
+
+The paper proves that $D_\sigma$ is the \emph{Bayes-optimal} denoiser under
+the empirical patch prior: no estimator achieves lower MSE for that prior.
+As $N\to\infty$ (more patches, i.e., larger image), the empirical prior
+concentrates on the true patch distribution and $D_\sigma$ converges to
+the score function of the true distribution---so the method is
+asymptotically exact.
+
+\section{Experimental Findings}
+
+On the Oxford Textures and USC-SIPI image datasets:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Lower SIFID (Single-Image FID) than SinDDPM on
+    8 of 10 tested textures.
+  \item $300\times$ faster at inference (seconds vs.\ hours).
+  \item Competitive FID on random sample diversity.
+  \item Text-guided stylisation (using CLIP guidance on the denoiser score)
+    produces coherent results with no fine-tuning.
+  \item Image retargeting (change aspect ratio while preserving texture)
+    outperforms SinGAN in perceptual quality.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Patch size $p$:} $p=8$ gives the best SIFID/diversity trade-off;
+larger patches lose texture variety (fewer distinct patches), smaller
+patches lose global coherence.
+
+\textbf{Number of scales $L$:} $L=3$ is sufficient; $L=1$ generates
+texturally correct but spatially incoherent images.
+
+\textbf{Guidance weight $\omega$:} Higher $\omega$ produces images more
+faithful to the reference layout; lower $\omega$ increases diversity.
+
+\section*{Reference}
+
+Haojun Qiu, Kiriakos N.\ Kutulakos, David B.\ Lindell.
+\textbf{Efficient and Training-Free Single-Image Diffusion Models}.
+CVPR 2026. arXiv:2606.04299.
+\url{https://arxiv.org/abs/2606.04299}
+
+\end{document}

@@ -1,0 +1,30 @@
+ML Papers — Edition 2026-07-01
+==============================
+Five recent papers from arXiv (2606.* series, June 2026), covering
+offline RL, image generation, diffusion model theory, LLM agents,
+and multimodal interpretability.
+
+1. Reversal Q-Learning
+   Authors: Aditya Oberai, Seohong Park, Sergey Levine (UC Berkeley)
+   Venue: arXiv preprint
+   URL: https://arxiv.org/abs/2606.17551
+
+2. Efficient and Training-Free Single-Image Diffusion Models
+   Authors: Haojun Qiu, Kiriakos N. Kutulakos, David B. Lindell (University of Toronto / Vector Institute)
+   Venue: arXiv preprint
+   URL: https://arxiv.org/abs/2606.04299
+
+3. Local Coverage Governs Memorization in Diffusion Models
+   Authors: Claudia Merger, Sebastian Goldt (SISSA / ICTP)
+   Venue: arXiv preprint
+   URL: https://arxiv.org/abs/2606.14390
+
+4. EurekAgent: Agent Environment Engineering is All You Need For Autonomous Scientific Discovery
+   Authors: Amy Xin, Jiening Siow, Junjie Wang, Zijun Yao, Fanjin Zhang, Jian Song, Lei Hou, Juanzi Li (Tsinghua University)
+   Venue: arXiv preprint
+   URL: https://arxiv.org/abs/2606.13662
+
+5. Multimodal Concept Bottleneck Models
+   Authors: Tongqing Shi, Ge Yan, Tuomas Oikarinen, Tsui-Wei Weng (UCSD)
+   Venue: arXiv preprint (NeurIPS 2025 Mechanistic Interpretability Workshop)
+   URL: https://arxiv.org/abs/2606.19882

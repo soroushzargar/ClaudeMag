@@ -1,0 +1,229 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-01}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  offline reinforcement learning \textbullet{}
+  flow matching \textbullet{}
+  Q-learning \textbullet{}
+  diffusion policy}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Reversal Q-Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Flow-Based Offline RL Trains Expressive Policies Without Backpropagating Through
+  the Denoising Chain}\par\vspace{6pt}
+
+{\small\textbf{By} Aditya Oberai, Seohong Park \& Sergey Levine
+  (UC Berkeley)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2606.17551 \textbullet{} Submitted June 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Flow-matching policies can now be trained from offline data without differentiating
+through their iterative denoising chains. \textit{Reversal Q-learning} (RQL) treats
+each denoising step as an MDP action, reverses completed flows to generate synthetic
+on-policy trajectories, and applies standard Q-learning---beating prior flow-based
+offline RL methods on every D4RL locomotion task while eliminating the instability
+of backpropagation through time.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Training an expressive flow-matching policy with offline RL
+    requires either weak guidance distillation or expensive, unstable backpropagation
+    through the full denoising chain.
+  \item[Why it matters:] Multimodal action distributions are common in robotics and
+    navigation datasets; flow policies can represent them but existing RL training
+    methods are ill-suited to offline settings.
+  \item[Method:] Treat denoising steps as MDP actions, reverse completed flows to
+    obtain on-policy trajectories from offline data, and train with standard
+    off-policy Q-learning plus a bias-variance reduction step.
+  \item[Result:] State-of-the-art on 12 D4RL locomotion tasks with faster and
+    stabler training than BPTT-based methods.
+  \item[Evidence:] Systematic evaluation on D4RL medium, medium-replay,
+    and medium-expert splits vs.\ IQL, TD3+BC, DQL, IDQL, SfBC.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Offline reinforcement learning trains a policy from a fixed dataset of past
+experience without additional environment interaction. The challenge is
+simultaneously estimating a value function over out-of-distribution actions
+(hard) and representing multi-modal action distributions that arise when the
+dataset mixes several different behavioral strategies (also hard).
+
+Flow matching---a continuous normalising flow that transforms noise into an
+action via an ordinary differential equation (ODE)---is a natural policy class
+for the multi-modal problem. Its generation process is smooth, invertible, and
+arbitrarily expressive. But plugging flow policies into offline RL has been
+awkward: distillation-based methods (SfBC, IDQL) under-use the value function,
+and direct RL fine-tuning via policy gradient requires differentiating through
+all $T$ ODE steps, which is computationally expensive and numerically fragile.
+
+RQL resolves this by lifting the problem into an \emph{expanded} Markov decision
+process where each denoising step is its own atomic action. Standard
+off-policy Q-learning then suffices---no differentiation through the ODE solver,
+full use of the Q-function at every step.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Guidance distillation} (e.g., IDQL, SfBC) trains a diffusion model via
+behaviour cloning and then biases sampling towards high-Q regions at test time.
+The policy is never directly trained to maximise $Q$; it remains anchored to the
+behavioural prior.
+
+\textbf{BPTT fine-tuning} (e.g., DQL) back-propagates a policy gradient through
+the full $T$-step ODE unrolling. This suffers from (i) exploding/vanishing
+gradients over long chains, (ii) prohibitive memory cost, and (iii) biased
+gradients because the ODE solver itself is not differentiable in the strict sense.
+
+Neither exploits the structure of the flow ODE for off-policy learning.
+
+\section{Core Mechanism}
+
+\textbf{Expanded MDP.}
+Discretise $[0,1]$ into $T$ steps with $\Delta t=1/T$. Define an augmented
+state $\tilde s_k=(s,x_{k\Delta t})$ where $s$ is the environment state and
+$x_k$ is the current latent. The action at step $k$ is $\delta_k =
+v_\theta(\tilde s_k)\cdot\Delta t$. Reward is $R_T = Q^*(s,x_1)$ at the
+final step and zero elsewhere.
+
+\textbf{Reversal.}
+Given an offline pair $(s,a^*)\in\mathcal D$, reconstruct the full latent
+trajectory by running the ODE \emph{backwards}:
+$x_{k-1}^* = x_k^* - v_\theta(x_k^*,k\Delta t; s)\cdot\Delta t$,
+with $x_T^* = a^*$. This converts each offline sample into a complete
+expanded-MDP episode.
+
+\textbf{Q-learning.}
+Apply Bellman updates over these synthetic trajectories. The flow policy is
+updated by maximising $Q_\phi(\tilde s_k, v_\theta(\tilde s_k))$ at each
+step---a single-step gradient, never multi-step.
+
+\section{Technical Formulation}
+
+A flow matching policy defines an ODE:
+\[
+\frac{dx_t}{dt} = v_\theta(x_t, t; s), \quad x_0 \sim \mathcal{N}(0,I),
+\quad a = x_1.
+\]
+
+The expanded-MDP Q-function satisfies:
+\[
+Q^*(\tilde s_k, \delta_k) =
+\begin{cases}
+  Q^*(s, x_{k+1}) & k < T-1\\[2pt]
+  r + \gamma\,\mathbb{E}_{s'}[V^*(s')] & k = T-1
+\end{cases}
+\]
+
+The Q-network is trained with:
+\[
+\mathcal{L}_Q(\phi) =
+\mathbb{E}\!\left[\bigl(Q_\phi(\tilde s_k,\delta_k^*) - y_k\bigr)^2\right]
+\]
+and the policy is updated by:
+\[
+\mathcal{L}_\pi(\theta) =
+-\mathbb{E}_{k,s,x_0}\!\left[Q_\phi\!\left(\tilde s_k,\,
+v_\theta(\tilde s_k)\right)\right].
+\]
+
+Crucially, gradients of $\mathcal{L}_\pi$ pass only through the
+\emph{single-step} output $v_\theta(\tilde s_k)$, not through the ODE solver.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $(s,a^*)\in\mathcal D$.
+  \item Run the reverse ODE to obtain $\{x_k^*\}_{k=0}^T$.
+  \item Compute Bellman targets $\{y_k\}$ using current $Q_\phi$.
+  \item Update $Q_\phi$ via $\mathcal{L}_Q$.
+  \item Update $v_\theta$ via $\mathcal{L}_\pi$ (single-step gradient only).
+  \item At test time: run the forward ODE from $x_0\sim\mathcal{N}(0,I)$
+    for $T$ steps to generate action $a=x_1$.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The paper proves that, under the expanded MDP, the optimal Q-function $Q^*$
+decomposes across denoising steps exactly as stated, and that the reversal
+procedure yields unbiased estimates of the on-policy return. A bias-variance
+reduction technique---weighting intermediate step returns by the learned
+Q-function rather than bootstrapping all the way from the final step---reduces
+variance by a factor proportional to $T$ without introducing bias.
+
+\section{Experimental Findings}
+
+Evaluated on the 12 D4RL locomotion tasks (HalfCheetah, Hopper, Walker2d at
+medium / medium-replay / medium-expert quality), RQL achieves:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Highest average normalised score vs.\ IQL, TD3+BC, DQL, IDQL, SfBC.
+  \item Particularly large gains on medium-expert splits, where multi-modal
+    data benefits most from an expressive policy.
+  \item Stable training curves without the loss spikes observed in DQL (BPTT).
+  \item Wall-clock training time comparable to IQL despite operating over an
+    expanded $T$-step MDP.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Number of steps $T$:} Performance plateaus around $T=10$; $T=1$
+reduces to standard Q-learning with a one-step denoiser, which underperforms.
+
+\textbf{Reversal vs.\ forward noise:} Replacing the reversal with forward
+noising (add Gaussian noise to $a^*$) degrades performance by $\approx8$
+normalised score on average, confirming that faithfully reconstructing the
+latent trajectory is important.
+
+\textbf{Q-weighting at intermediate steps:} Removing the bias-variance
+reduction and using terminal Q-values only increases variance and slows
+convergence by $\approx2\times$.
+
+\section*{Reference}
+
+Aditya Oberai, Seohong Park, Sergey Levine. \textbf{Reversal Q-Learning}.
+arXiv:2606.17551, June 2026.
+\url{https://arxiv.org/abs/2606.17551}
+
+\end{document}

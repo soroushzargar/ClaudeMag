@@ -1,0 +1,128 @@
+% Claude Mag — ML Research News Template
+% Usage: replace all PLACEHOLDER_* tokens before compilation
+\documentclass[10pt,twocolumn]{article}
+
+% ---------- packages ----------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.2cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+% ---------- colours ----------
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+% ---------- header / footer ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small PLACEHOLDER_DATE}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+% ---------- title block macros ----------
+\newcommand{\keywords}[1]{%
+  {\small\color{keywordgray}\textbf{Keywords:} #1}\par\vspace{4pt}%
+}
+\newcommand{\articletitle}[1]{%
+  {\LARGE\bfseries\raggedright #1}\par\vspace{4pt}%
+}
+\newcommand{\articlesubtitle}[1]{%
+  {\large\itshape\raggedright #1}\par\vspace{6pt}%
+}
+\newcommand{\byline}[1]{%
+  {\small\textbf{By} #1}\par\vspace{2pt}%
+}
+\newcommand{\dateline}[1]{%
+  {\small\color{keywordgray}#1}\par%
+  \vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}%
+}
+
+% ---------- at-a-glance infobox ----------
+\newenvironment{ataglance}{%
+  \begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,innertopmargin=6pt,innerbottommargin=6pt]%
+  \textbf{\small AT A GLANCE}\par\vspace{4pt}%
+  \begin{description}[leftmargin=0pt,labelwidth=\widthof{\textbf{Evidence:\ }},
+      labelsep=4pt,itemsep=2pt,parsep=0pt,font=\small\bfseries]%
+}{%
+  \end{description}%
+  \end{mdframed}%
+}
+
+% ---------- section formatting ----------
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}[\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\titleformat{\subsection}{\small\bfseries}{}{0pt}{}
+\titlespacing{\subsection}{0pt}{6pt}{2pt}
+
+% ---------- document ----------
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+% ---- keywords row ----
+\keywords{PLACEHOLDER_KW1 \textbullet{} PLACEHOLDER_KW2 \textbullet{} PLACEHOLDER_KW3 \textbullet{} PLACEHOLDER_KW4}
+
+% ---- main title ----
+\articletitle{PLACEHOLDER_TITLE}
+\articlesubtitle{PLACEHOLDER_SUBTITLE}
+\byline{PLACEHOLDER_BYLINE}
+\dateline{PLACEHOLDER_DATELINE}
+
+% ---- lead paragraph ----
+PLACEHOLDER_LEAD
+
+% ---- at-a-glance infobox ----
+\begin{ataglance}
+  \item[Problem:] PLACEHOLDER_PROBLEM
+  \item[Why it matters:] PLACEHOLDER_WHY
+  \item[Method:] PLACEHOLDER_METHOD
+  \item[Result:] PLACEHOLDER_RESULT
+  \item[Evidence:] PLACEHOLDER_EVIDENCE
+\end{ataglance}
+
+% =============== BODY ===============
+
+\section{The Big Picture}
+PLACEHOLDER_BIG_PICTURE
+
+\section{Why Existing Approaches Fall Short}
+PLACEHOLDER_EXISTING_FAIL
+
+\section{Core Mechanism}
+PLACEHOLDER_CORE_MECHANISM
+
+\section{Technical Formulation}
+PLACEHOLDER_TECHNICAL
+
+\section{Learning or Inference Procedure}
+PLACEHOLDER_PROCEDURE
+
+\section{What the Guarantee Says}
+PLACEHOLDER_GUARANTEE
+
+\section{Experimental Findings}
+PLACEHOLDER_EXPERIMENTS
+
+\section{Ablations and Interpretation}
+PLACEHOLDER_ABLATIONS
+
+\section*{Reference}
+\textbf{PLACEHOLDER_PAPER_REF}
+
+\end{document}

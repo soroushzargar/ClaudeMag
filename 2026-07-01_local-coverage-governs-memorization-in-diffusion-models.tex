@@ -1,0 +1,238 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-01}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  memorization \textbullet{}
+  kernel density estimation \textbullet{}
+  generalization theory}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Local Coverage Governs Memorization in Diffusion Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Sharp Phase Transition Separates Memorized from Generalised Outputs---and
+  It Depends Only on Neighbourhood Density}\par\vspace{6pt}
+
+{\small\textbf{By} Claudia Merger \& Sebastian Goldt
+  (SISSA / ICTP, Trieste)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2606.14390 \textbullet{} Submitted 12 June 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A new theoretical result explains why diffusion models memorise some training
+examples and generalise on others---sometimes simultaneously. The criterion
+is purely local: a training point is memorised if and only if its neighbourhood
+in the data space contains too few other training samples for the model to
+interpolate. In the high-dimensional limit, the transition is sharp and
+its critical threshold scales as $n^{-1/k}$ with dataset size $n$ and
+intrinsic data dimensionality $k$.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] No principled theory predicts which training points a
+    diffusion model will memorise versus generalise.
+  \item[Why it matters:] Memorisation enables training-data extraction
+    attacks, raises copyright concerns, and reveals a gap in our theoretical
+    understanding of diffusion generative models.
+  \item[Method:] Exploit the KDE interpretation of the diffusion score
+    function to derive a closed-form local coverage criterion for
+    memorisation, with a sharp phase transition in the high-$d$ limit.
+  \item[Result:] The criterion correctly predicts memorised vs.\ novel
+    samples on CIFAR-10 and CelebA without any model-specific information.
+  \item[Evidence:] Validated on synthetic Gaussian mixtures ($d\in\{10,50,200\}$),
+    CIFAR-10, and CelebA.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Diffusion models generate images by iteratively denoising a Gaussian noise
+vector. When trained on a large dataset, most outputs are novel; but a small
+fraction---particularly samples close to rare or isolated training images---are
+effectively verbatim copies of training data. This memorisation is not a bug
+in the model; it is a fundamental property of how the score function behaves
+near sparse regions of the data distribution.
+
+The community has documented memorisation empirically (cataloguing which prompts
+or seeds trigger it) and proposed detection heuristics (membership inference,
+attention-map analysis). What has been missing is a simple, principled answer
+to the question: \emph{why does a particular training point get memorised?}
+
+This paper answers that question. Leveraging the well-known connection between
+score matching and kernel density estimation (KDE), the authors show that the
+score function is dominated by the nearest training neighbours of any query
+point. If a training point has too few neighbours within the relevant kernel
+bandwidth, the score field around it points straight back to that point at
+every noise level---ensuring the reverse diffusion ODE converges there.
+In high dimensions, this transition is sharp.
+
+\section{Why Existing Approaches Fall Short}
+
+Empirical approaches study memorisation as a global property of the
+trained model: ``this model memorises 3\% of its training set.'' They
+cannot predict \emph{which} 3\% without running the model.
+
+Attention-map analyses (Bright Ending Attention, BEA) detect memorisation
+post hoc by examining the model's internal activations. They require
+model access and do not provide a generalisable theory.
+
+Membership inference attacks frame memorisation as a binary classification
+problem, but they neither explain the mechanism nor provide a quantitative
+criterion depending on data geometry.
+
+\section{Core Mechanism}
+
+The score function of a diffusion model at noise level $\sigma$ is
+well-approximated (for overparameterised networks) by the KDE score:
+\[
+\hat s(x,\sigma) = \nabla_x \log \hat p_\sigma(x),
+\quad
+\hat p_\sigma(x) = \frac{1}{n}\sum_{i=1}^n \mathcal{N}(x;\,x_i,\,\sigma^2 I).
+\]
+
+Near a training point $x_j$, the score is:
+\[
+\hat s(x_j, \sigma)
+\approx \frac{\sum_{i\neq j}(x_i - x_j)\,w_{ij}(\sigma)}
+             {1 + \sum_{i\neq j} w_{ij}(\sigma)},
+\quad
+w_{ij}(\sigma) = e^{-\|x_i - x_j\|^2/2\sigma^2}.
+\]
+When $\sum_{i\neq j} w_{ij}(\sigma) \ll 1$ (no close neighbours), the score
+at $x_j$ points approximately to zero---i.e., toward $x_j$ itself at all
+scales. The reverse ODE then converges to $x_j$ from any initialisation
+in its vicinity: memorisation.
+
+\section{Technical Formulation}
+
+\textbf{Memorisation criterion.}
+Define the \emph{local coverage} of $x_j$ at scale $\sigma$:
+\[
+C_\sigma(x_j) = \frac{1}{n}\sum_{i\neq j}
+  \exp\!\left(-\frac{\|x_i - x_j\|^2}{2\sigma^2}\right).
+\]
+Training point $x_j$ is \textbf{memorised} iff
+$C_\sigma(x_j) \ll 1/n$ for all $\sigma \in [\sigma_\min, \sigma_\max]$
+(the range of noise levels used during training).
+
+\textbf{Phase transition in high dimensions.}
+For data supported on a $k$-dimensional manifold of radius $R$, the
+number of training samples within ball $B(x_j, \sigma)$ is
+$\bar n(\sigma) \approx n\,(\sigma/R)^k$. Memorisation occurs iff
+$\bar n(\sigma) = O(1)$, i.e., iff $\sigma < \sigma^*$ where:
+\[
+\sigma^* \sim R\,n^{-1/k}.
+\]
+This is the \textbf{critical radius}: points $x_j$ with no neighbours
+within $\sigma^*$ are always memorised; points with many neighbours
+within $\sigma^*$ always generalise. The transition is \emph{sharp} in
+the limit $d \to\infty$, $n\to\infty$ with $k$ fixed.
+
+\textbf{Predictor.}
+The paper proposes a practical memorisation predictor: compute
+$C_{\hat\sigma^*}(x_j)$ in the embedding space of a pre-trained feature
+extractor and threshold at $C^* = 1/n$. This requires no model
+access---only the dataset.
+
+\section{Learning or Inference Procedure}
+
+The analysis is purely theoretical; no new training procedure is introduced.
+The practical predictor works as follows:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Embed all training points with a feature extractor $\phi$.
+  \item Estimate the intrinsic dimension $k$ of the training set via
+    nearest-neighbour methods.
+  \item Compute $\sigma^* = R\,n^{-1/k}$ where $R$ is the dataset diameter.
+  \item For each training point $x_j$, compute $C_{\sigma^*}(x_j)$.
+  \item Predict memorisation if $C_{\sigma^*}(x_j) < 1/n$.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+In the high-dimensional limit ($d\to\infty$ with $k/d\to0$), the
+transition is shown to be sharp: for any $\varepsilon>0$, there exist
+constants $c_1,c_2>0$ such that
+\[
+\Pr[\text{memorised} \mid C_\sigma(x_j) < c_1/n] \to 1,
+\]
+\[
+\Pr[\text{generalised} \mid C_\sigma(x_j) > c_2/n] \to 1,
+\]
+as $n,d\to\infty$. Memorisation probability varies continuously between
+these extremes at finite $n$.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Synthetic:} On Gaussian mixtures with controlled
+    inter-point distance, the empirical memorisation fraction matches
+    the theoretical prediction to within measurement noise at
+    $d\in\{10,50,200\}$.
+  \item \textbf{CIFAR-10:} The local coverage criterion identifies
+    memorised samples (confirmed by running inference from fixed seeds)
+    with $>85\%$ precision and $>80\%$ recall without any model access.
+  \item \textbf{CelebA:} Rare attribute combinations (e.g., red hair +
+    glasses) are correctly predicted as memorised; common attributes
+    (e.g., brown eyes) are correctly predicted as generalised.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Feature space:} Using raw pixel distances yields weaker
+predictions than CLIP embeddings ($\Delta$-precision $\approx +15\%$),
+confirming that perceptual distance is the relevant metric.
+
+\textbf{Kernel bandwidth:} Results are robust to $\sigma$ within a
+factor of 2 of $\sigma^*$, consistent with the sharp transition theory.
+
+\textbf{Dataset size:} As $n$ increases, the fraction of memorised
+samples decreases as $n^{-1/k}$, matching the theoretical scaling.
+
+\section*{Reference}
+
+Claudia Merger, Sebastian Goldt.
+\textbf{Local Coverage Governs Memorization in Diffusion Models}.
+arXiv:2606.14390, June 2026.
+\url{https://arxiv.org/abs/2606.14390}
+
+\end{document}

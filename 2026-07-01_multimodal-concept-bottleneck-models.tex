@@ -1,0 +1,252 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-01}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  interpretability \textbullet{}
+  CLIP \textbullet{}
+  concept bottleneck models \textbullet{}
+  zero-shot classification}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Multimodal Concept Bottleneck Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Dual Concept Layers Make CLIP Fully Interpretable Without Sacrificing
+  Accuracy---or Requiring Retraining for New Classes}\par\vspace{6pt}
+
+{\small\textbf{By} Tongqing Shi, Ge Yan, Tuomas Oikarinen \& Tsui-Wei Weng
+  (UC San Diego)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2606.19882 \textbullet{} Submitted June 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Interpretable image classifiers no longer need to sacrifice accuracy or be
+retrained for every new class. MM-CBM introduces dual Concept Bottleneck
+Layers for both the image and text branches of CLIP, forcing predictions to
+pass through a human-readable concept space while matching black-box CLIP
+accuracy within 5\%---and enabling zero-shot transfer to unseen classes
+with no additional training.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing Concept Bottleneck Models are limited to fixed
+    label sets and suffer from concept leakage, where predictive signals
+    outside the intended concept space are inadvertently exploited.
+  \item[Why it matters:] Interpretable multimodal models are critical for
+    high-stakes domains (medical imaging, autonomous driving) where users
+    need to understand and intervene on model reasoning.
+  \item[Method:] Dual Concept Bottleneck Layers (CBLs) align both image
+    and text CLIP embeddings into a shared interpretable concept space;
+    classification is a pure concept-space dot product with no linear
+    head, eliminating leakage by construction.
+  \item[Result:] Up to 51.26\% accuracy improvement over prior CBMs;
+    within 5\% of black-box CLIP; zero-shot transfer to unseen classes.
+  \item[Evidence:] CUB-200-2011, ImageNet, Oxford Pets, Stanford Cars;
+    vs.\ Label-free CBM, Post-hoc CBM, LaBo.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Deep neural networks are powerful but opaque. Concept Bottleneck Models
+(CBMs) are a popular interpretability approach: they insert a bottleneck
+layer whose activations correspond to named concepts (e.g.\ ``has wings,''
+``metallic surface,'' ``striped''), making the model's reasoning transparent.
+A user can inspect which concepts drove a prediction and directly intervene
+by modifying concept scores.
+
+Standard CBMs have two structural limitations. First, they are trained for
+a fixed label space. If a new class appears, the model must be retrained.
+Second, the final classification head (a linear layer over concept scores)
+can exploit non-concept information encoded in concept activations---a
+phenomenon called \emph{concept leakage}. The model appears interpretable
+but silently uses signals invisible to the user.
+
+MM-CBM addresses both problems by extending CBMs into CLIP's shared
+vision-language embedding space. Two Concept Bottleneck Layers---one for
+image embeddings, one for text embeddings---project both modalities into
+a unified concept space. Classification is then a dot product between the
+image concept vector and the text concept vector for each class description.
+No separate classification head is needed; leakage is impossible because
+the concept space fully mediates inference. New classes require only their
+text description---no retraining.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Label-free CBM:} Uses CLIP to identify concept-image alignments
+without manual concept labels, but still trains a linear head, preserving
+leakage.
+
+\textbf{Post-hoc CBM:} Applies concept bottleneck post-training by
+projecting frozen representations onto concepts. Accuracy drops significantly
+on fine-grained datasets.
+
+\textbf{LaBo:} Uses language models to generate concepts and assembles
+a bottleneck via logistic regression. Fixed to training classes; concept
+leakage present via the regression head.
+
+None of these methods operate purely in the concept space, and all
+require retraining or re-optimisation for new classes.
+
+\section{Core Mechanism}
+
+Let $K$ concept descriptions $\{c_1,\ldots,c_K\}$ be given (e.g., from
+a domain expert or generated by an LLM). Compute concept text embeddings
+$e_k = f_T(c_k)$ using CLIP's text encoder $f_T$.
+
+For an image $x_v$ with CLIP embedding $z_v = f_V(x_v)$, the image
+concept vector is:
+\[
+[c_v]_k = \frac{\langle W_v\,z_v,\,e_k\rangle}
+               {\|W_v\,z_v\|\cdot\|e_k\|},
+\quad k=1,\ldots,K,
+\]
+where $W_v\in\mathbb{R}^{d\times d}$ is the learnable image CBL projection.
+The text concept vector for class $l_j$ is:
+\[
+[c_t(l_j)]_k = \frac{\langle W_t\,z_t(l_j),\,e_k\rangle}
+                    {\|W_t\,z_t(l_j)\|\cdot\|e_k\|}.
+\]
+Classification: $\hat y = \arg\max_j \langle c_v, c_t(l_j)\rangle$.
+No linear head; no leakage.
+
+\section{Technical Formulation}
+
+\textbf{Training objective.}
+Let $\mathcal{D}_\mathrm{aux}$ be an auxiliary dataset of image-text
+pairs. The loss combines three terms:
+\[
+\mathcal{L} = \mathcal{L}_\mathrm{align}
+            + \lambda_\mathrm{task}\,\mathcal{L}_\mathrm{task}
+            + \lambda_\mathrm{sparse}\,\|c_v\|_1.
+\]
+
+$\mathcal{L}_\mathrm{align}$ is a CLIP-style contrastive loss on
+$(c_v, c_t)$ pairs:
+\[
+\mathcal{L}_\mathrm{align} =
+-\frac{1}{B}\sum_{b=1}^B\log
+\frac{e^{\langle c_v^b,c_t^b\rangle/\tau}}
+     {\sum_{b'} e^{\langle c_v^b,c_t^{b'}\rangle/\tau}}.
+\]
+
+$\mathcal{L}_\mathrm{task}$ is cross-entropy on training classes,
+using $c_v$ as logits (after matching against class concept vectors).
+
+$\|c_v\|_1$ is an $L_1$ sparsity penalty ensuring that each prediction
+uses only a small number of active concepts.
+
+\textbf{Zero-shot transfer.}
+For a new class $l_\mathrm{new}$, compute $c_t(l_\mathrm{new})$
+using the text encoder and CBL. No retraining required. This follows
+from the universal concept space shared by image and text CBLs.
+
+\textbf{User intervention.}
+To intervene on concept $k$: set $[c_v]_k \leftarrow v$ for any
+desired value $v \in [-1, 1]$. The corrected concept vector propagates
+directly to the prediction via the dot product---fully transparent.
+
+\section{Learning or Inference Procedure}
+
+Training:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Freeze CLIP encoders $f_V$, $f_T$.
+  \item Initialise $W_v$, $W_t$ as identity.
+  \item Train on $\mathcal{D}_\mathrm{aux}$ minimising $\mathcal{L}$
+    with Adam optimiser ($5\times10^{-4}$ lr, 50 epochs).
+\end{enumerate}
+Inference: two forward passes ($f_V$ and $W_v$), one dot product per
+class. Complexity $O(K \cdot d)$ per image---faster than CLIP zero-shot.
+
+\section{What the Guarantee Says}
+
+By construction, all predictive signal in MM-CBM flows through the
+concept vectors $c_v$ and $c_t$. Since the final classifier is a dot
+product in the concept space (no additional parameters), the model cannot
+encode information outside the $K$-dimensional concept subspace. This is
+a \textbf{zero-leakage} guarantee: any prediction not expressible via
+concept scores is structurally impossible.
+
+For zero-shot transfer, the guarantee is that any class expressible via
+concept descriptions $\{c_k\}$ is immediately classifiable. Accuracy
+on unseen classes depends on how well the concept vocabulary spans the
+relevant visual dimensions---a design choice, not a training variable.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{CUB-200-2011:} MM-CBM achieves 78.3\% vs.\ 53.1\%
+    for Label-free CBM (a 47.5\% relative gain) while staying within
+    4\% of black-box CLIP.
+  \item \textbf{ImageNet:} Within 5\% of CLIP zero-shot; best
+    interpretable method.
+  \item \textbf{Oxford Pets / Stanford Cars:} Consistent improvements
+    over all CBM baselines (average 51.26\% accuracy improvement).
+  \item \textbf{Intervention:} Correcting one concept score improves
+    accuracy by 12\% on targeted error cases.
+  \item \textbf{Zero-shot:} Correctly classifies 8 unseen bird species
+    added at test time, with no accuracy degradation on original classes.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Remove image CBL} ($W_v = I$): Accuracy drops by $\approx8$
+percentage points; concept alignment is worse.
+
+\textbf{Remove text CBL} ($W_t = I$): Similar drop; text concept vectors
+do not align with visual concept space without projection.
+
+\textbf{Remove sparsity loss:} Accuracy $+0.3$\% but average concept
+activations per prediction increase $8\times$, making interpretations
+unintelligible.
+
+\textbf{Concept set size $K$:} Performance plateaus at $K=100$;
+smaller sets ($K<30$) significantly hurt accuracy on fine-grained tasks.
+
+\section*{Reference}
+
+Tongqing Shi, Ge Yan, Tuomas Oikarinen, Tsui-Wei Weng.
+\textbf{Multimodal Concept Bottleneck Models}.
+arXiv:2606.19882, June 2026.
+\url{https://arxiv.org/abs/2606.19882}
+
+\end{document}
