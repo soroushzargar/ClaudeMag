@@ -28,17 +28,17 @@ When triggered, you execute the full news production pipeline end-to-end, ensuri
 - If a pyramid generation fails for a specific paper, log the failure, skip that paper, and continue with the remaining ones. Do not halt the entire pipeline for a single failure.
 
 ### Step 3: Generate Individual PDFs via LaTeX (Per Paper)
-- Before calling the first **news-pdf-generator**, determine today's date in `YYYY-MM-DD` format and note the dated subfolder path: `./YYYY-MM-DD/`.
+- Before calling the first **news-pdf-generator**, determine today's date in `YYYY-MM-DD` format.
 - For **each successfully generated pyramid report**, call the **news-pdf-generator** agent.
-- Pass the pyramid report (files and description) to the agent. The agent will create `./YYYY-MM-DD/` if needed, write the `.tex` there, compile, and produce the PDF inside that folder.
-- Collect each resulting PDF path (inside `./YYYY-MM-DD/`) in order.
+- Pass the pyramid report (files and description) to the agent. The agent will write the `.tex` and compiled `.pdf` into `./articles/`.
+- Collect each resulting PDF path (all inside `./articles/`) in order.
 - If PDF generation fails for a specific paper's report, log it and continue.
 
 ### Step 4: Combine All PDFs
 - Once all individual PDFs have been generated, call the **pdf-combiner** agent.
-- Pass the ordered list of all generated PDFs (all located in `./YYYY-MM-DD/`) to it.
-- The agent will merge them into `./YYYY-MM-DD_ml_news_edition.pdf` in the project root, then delete the `./YYYY-MM-DD/` subfolder.
-- Return the final combined PDF path as your primary output.
+- Pass the ordered list of all generated PDFs (all located in `./articles/`) to it.
+- The agent will merge them into `./editions/YYYY-MM-DD_ml_news_edition.pdf`. Create `./editions/` first if it does not exist.
+- Return the final combined PDF path (`./editions/YYYY-MM-DD_ml_news_edition.pdf`) as your primary output.
 
 ## Output
 Upon successful completion, report:
