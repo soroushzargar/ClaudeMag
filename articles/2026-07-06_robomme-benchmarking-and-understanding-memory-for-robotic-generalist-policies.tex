@@ -1,0 +1,230 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-06}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  robotic manipulation \textbullet{}
+  vision-language-action models \textbullet{}
+  memory benchmarking \textbullet{}
+  long-horizon tasks}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RoboMME: Benchmarking and Understanding Memory for
+  Robotic Generalist Policies}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  16 Tasks Across Four Memory Categories Reveal That Current VLA Memory
+  Mechanisms Are Far From Solving Long-Horizon Manipulation}\par\vspace{6pt}
+
+{\small\textbf{By} Yinpei Dai, Hongze Fu, Jayjun Lee, Yuejiang Liu,
+  Haoran Zhang, Jianing Yang, Chelsea Finn, Nima Fazeli \& Joyce Chai}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2603.04639 \textbullet{}
+  ICML 2026 Spotlight Presentation}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-language-action models have made remarkable progress on short-horizon
+manipulation, but long-horizon tasks demanding memory remain poorly understood.
+RoboMME introduces the first large-scale standardized benchmark for memory in
+robotic generalist policies, comprising 16 tasks across temporal, spatial,
+object, and procedural memory categories, and a systematic study of 14
+memory-augmented VLA variants. The result: every variant fails significantly on
+tasks requiring 5+ step sequences, with the oracle gap exceeding 45\%.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLA evaluations focus on memoryless tasks; no standardized
+    benchmark assesses how well different memory architectures support
+    long-horizon, history-dependent manipulation.
+  \item[Why it matters:] Real-world manipulation involves counting actions,
+    retrieving occluded objects, and executing multi-step procedures ---
+    all fundamentally memory-dependent.
+  \item[Method:] 16 tasks classified into four memory types; 14 VLA variants
+    built on the $\pi_{0.5}$ backbone systematically covering representation
+    and integration strategy choices.
+  \item[Result:] FrameSamp+Modul achieves best aggregate performance;
+    all variants fail on 5+ step procedural sequences.
+  \item[Evidence:] Evaluated on LIBERO and LIBERO-Plus with procedurally
+    generated variants ensuring evaluation diversity.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+VLA models extend multimodal LLMs with action outputs, achieving impressive
+generalization across robot platforms and tasks. Yet every established
+benchmark --- LIBERO, SimplerEnv, MetaWorld --- evaluates performance on tasks
+solvable from the current observation alone, without reference to history. This
+memoryless evaluation regime is convenient but incomplete.
+
+Real-world manipulation is deeply history-dependent. A robot sorting items
+must remember which bin each object was assigned to. A robot following a recipe
+must track which ingredients have already been added. A robot retrieving objects
+from a drawer must remember where the object was before it was occluded. Without
+a principled benchmark for these capabilities, the field has no way to measure
+progress on long-horizon robustness.
+
+RoboMME fills this gap.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Benchmark limitations:} Existing benchmarks either test single
+tasks independently (no temporal dependency) or use cumulative success rate
+on fixed-length sequences, conflating task difficulty with memory requirement.
+RoboMME's taxonomy separates these confounds.
+
+\textbf{Architecture comparisons:} Prior work comparing memory mechanisms
+(frame stacking, recurrent states, external memory) uses different tasks,
+backbones, and training procedures, making conclusions non-transferable.
+RoboMME fixes the backbone ($\pi_{0.5}$) and training recipe, varying only
+the memory component.
+
+\section{Core Mechanism}
+
+\textbf{Memory taxonomy (four types):}
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Temporal memory:} Track a sequence of subgoals over time
+    (e.g., place five objects in a specified order; count repeated actions).
+  \item \textbf{Spatial memory:} Remember and retrieve the location of objects
+    that become temporarily occluded during the episode.
+  \item \textbf{Object memory:} Identify and track specific objects across
+    visual changes (different lighting, partial occlusion, displacement).
+  \item \textbf{Procedural memory:} Execute a multi-step procedure from
+    an instruction, where the full procedure is not visible in the
+    current observation.
+\end{itemize}
+
+\textbf{Memory mechanism variants (14):} Each variant combines a
+\emph{representation} (FrameSamp with $k \in \{1,4,8\}$ frames; recurrent
+hidden state; explicit key-value external memory) with an \emph{integration
+strategy} (early concatenation; modulation of the VLM trunk; late fusion into
+the action expert). The full factorial design yields 14 meaningful combinations.
+
+\section{Technical Formulation}
+
+\textbf{Memory score:} For task $\tau$ and memory category $c$,
+\[
+S_\tau = \frac{1}{N_\tau}\sum_{i=1}^{N_\tau} \mathbf{1}[\text{episode } i \text{ succeeds}], \quad
+M_c = \frac{1}{|T_c|}\sum_{\tau \in T_c} S_\tau.
+\]
+
+\textbf{Memory dependence gap:} For each task $\tau$,
+\[
+\Delta_\tau = S_\tau(\text{memory agent}) - S_\tau(\text{Markov agent}),
+\]
+where the Markov agent uses only the current observation (history length 1).
+Tasks with $\Delta_\tau > 0.1$ are classified as genuinely memory-dependent.
+
+\textbf{Oracle gap:} The gap to an oracle with perfect recall of all history,
+\[
+\Delta^\text{oracle}_\tau = S_\tau(\text{oracle}) - \max_\text{variant} S_\tau(\text{variant}).
+\]
+For procedural memory tasks, $\Delta^\text{oracle} \approx 0.45$ on average ---
+current mechanisms capture at most 55\% of the available memory signal.
+
+\textbf{FrameSamp+Modul} cross-attends $k$ sampled historical frames into the
+VLM backbone via:
+\[
+\mathbf{h}_t = \text{VLM}(o_t) + \text{CrossAttn}(\text{VLM}(o_t),\,\{h_{t_j}\}_{j=1}^k),
+\]
+where $\{t_j\}$ are selected historical timesteps.
+
+\section{Learning or Inference Procedure}
+
+All 14 variants share the same training recipe:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-train on heterogeneous robot demonstration data (OXE-Mix).
+  \item Fine-tune on RoboMME task demonstrations with per-variant
+    memory module.
+  \item Evaluate on held-out procedurally generated episodes (100 per task).
+  \item Report $S_\tau$ and $\Delta_\tau$ for all tasks; $M_c$ per category.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+RoboMME does not provide formal guarantees, but establishes two empirical
+claims with high statistical confidence ($p < 0.01$ across all reported gaps):
+(1) 12 of 16 tasks show $\Delta_\tau > 0.1$, confirming genuine memory
+dependence. (2) No variant achieves $S_\tau > 0.6$ on tasks requiring 5+ step
+procedural sequences.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{FrameSamp+Modul:} Best aggregate $M_c$ across all four
+    categories; particularly strong on temporal counting and time-sensitive tasks.
+  \item \textbf{Recurrent:} Best on procedural memory tasks (leverages
+    hidden state compression), but degrades on temporal counting.
+  \item \textbf{ExternalMem:} Marginal gains over FrameSamp on most tasks;
+    naive key-value memory is not yet a silver bullet.
+  \item \textbf{Dense history (FrameSamp $k=8$):} Surprisingly weak;
+    long raw history contexts confuse the VLM backbone without selective
+    attention.
+  \item \textbf{All variants:} Fail significantly on 5+ step procedural
+    sequences, with oracle gap $>$45\%.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{History length $k$:} Performance peaks at $k=4$ for most tasks;
+$k=8$ hurts due to context confusion. Task-adaptive $k$ selection (based
+on estimated episode length) is a promising direction.
+
+\textbf{Integration strategy:} Modulation consistently outperforms early
+concatenation and late fusion, suggesting that injecting historical context
+into intermediate VLM representations is more effective than prepending raw
+tokens or appending to the action expert.
+
+\textbf{What memory helps most:} Spatial and object memory benefit most
+from frame sampling; procedural memory benefits most from recurrence.
+A hybrid design adapting the memory mechanism to the inferred task type
+is a natural future direction.
+
+\section*{Reference}
+
+Yinpei Dai, Hongze Fu, Jayjun Lee, Yuejiang Liu, Haoran Zhang, Jianing Yang,
+Chelsea Finn, Nima Fazeli, Joyce Chai.
+\textbf{RoboMME: Benchmarking and Understanding Memory for
+Robotic Generalist Policies}.
+arXiv:2603.04639, March 2026.
+\url{https://arxiv.org/abs/2603.04639}
+
+\end{document}

@@ -1,0 +1,57 @@
+ML Papers List — 2026-07-06
+Generated for ClaudeMag
+
+1. LLMs Get Lost In Multi-Turn Conversation [Outstanding Paper / Oral — ICLR 2026]
+   Authors: Philippe Laban, Hiroaki Hayashi, Yingbo Zhou, Jennifer Neville
+   Venue/ID: ICLR 2026 Outstanding Paper | arXiv:2505.06120
+   URL: https://arxiv.org/abs/2505.06120
+   Summary: Investigates how LLM task performance deteriorates across extended multi-turn
+   conversations, showing accuracy drops of roughly 39% compared to single-turn equivalents.
+   The study reveals that models increasingly lose track of user intent and context as dialogue
+   length grows, with implications for production-grade conversational AI systems.
+
+2. Transformers are Inherently Succinct [Outstanding Paper / Oral — ICLR 2026]
+   Authors: Pascal Bergsträßer, Ryan Cotterell, Anthony W. Lin
+   Venue/ID: ICLR 2026 Outstanding Paper | arXiv:2510.19315
+   URL: https://arxiv.org/abs/2510.19315
+   Summary: Establishes that fixed-precision transformers are exponentially more succinct than
+   both linear temporal logic (LTL) and recurrent neural networks, and doubly exponentially
+   more succinct than finite automata. As a corollary, verifying even simple properties of
+   transformers is shown to be EXPSPACE-complete, grounding transformer expressivity in
+   classical complexity theory.
+
+3. Efficiently Reconstructing Dynamic Scenes One D4RT at a Time [Best Paper / Oral — CVPR 2026]
+   Authors: Chuhan Zhang, Guillaume Le Moing, Skanda Koppula, Ignacio Rocco, Liliane Momeni,
+   Junyu Xie, Shuyang Sun, Rahul Sukthankar, Joëlle K. Barral, Raia Hadsell,
+   Zoubin Ghahramani, Andrew Zisserman, Junlin Zhang, Mehdi S. M. Sajjadi
+   Affiliation: Google DeepMind, University College London, University of Oxford
+   Venue/ID: CVPR 2026 Best Paper
+   URL: https://openaccess.thecvf.com/content/CVPR2026/html/Zhang_Efficiently_Reconstructing_Dynamic_Scenes_One_D4RT_at_a_Time_CVPR_2026_paper.html
+   Summary: Introduces D4RT, a unified feedforward transformer that jointly infers depth,
+   spatio-temporal correspondence, and camera parameters from a single video, replacing the
+   traditional multi-model 4D reconstruction pipeline with one query interface. The approach
+   achieves 18-300x speedups over prior state-of-the-art methods while setting new performance
+   benchmarks across a wide spectrum of 4D reconstruction tasks.
+
+4. Maximum Likelihood Reinforcement Learning [Oral — ICML 2026]
+   Authors: Fahim Tajwar, Guanning Zeng, Yueer Zhou, Yuda Song, Daman Arora, Yiding Jiang,
+   Jeff Schneider, Russ Salakhutdinov, Haiwen Feng, Andrea Zanette
+   Affiliation: Carnegie Mellon University
+   Venue/ID: ICML 2026 Oral | arXiv:2602.02710
+   URL: https://arxiv.org/abs/2602.02710
+   Summary: Identifies that standard RL objectives in sampling-based setups (e.g. code
+   generation, math) optimize only a lower-order approximation of the true likelihood over
+   correct rollouts rather than maximizing it directly. Introduces MaxRL, a family of objectives
+   that smoothly interpolates between REINFORCE and maximum likelihood, achieving stronger
+   results on correctness-based tasks with binary outcome feedback.
+
+5. RoboMME: Benchmarking and Understanding Memory for Robotic Generalist Policies [Spotlight — ICML 2026]
+   Authors: Yinpei Dai, Hongze Fu, Jayjun Lee, Yuejiang Liu, Haoran Zhang, Jianing Yang,
+   Chelsea Finn, Nima Fazeli, Joyce Chai
+   Venue/ID: ICML 2026 Spotlight | arXiv:2603.04639
+   URL: https://arxiv.org/abs/2603.04639
+   Summary: Presents RoboMME, a large-scale standardized benchmark for evaluating memory in
+   vision-language-action (VLA) models, comprising 16 manipulation tasks spanning temporal,
+   spatial, object, and procedural memory categories. Also introduces 14 memory-augmented VLA
+   variants built on the pi_0.5 backbone, revealing that current VLA memory mechanisms remain
+   far from solving long-horizon manipulation reliably.

@@ -1,0 +1,237 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-06}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  maximum likelihood \textbullet{}
+  LLM training \textbullet{}
+  policy gradient}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Maximum Likelihood Reinforcement Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  REINFORCE Optimizes a Lower-Bound Approximation of True Likelihood ---
+  MaxRL Fixes This with More Sampling Compute}\par\vspace{6pt}
+
+{\small\textbf{By} Fahim Tajwar, Guanning Zeng, Yueer Zhou, Yuda Song,
+  Daman Arora, Yiding Jiang, Jeff Schneider, Ruslan Salakhutdinov,
+  Haiwen Feng \& Andrea Zanette (Carnegie Mellon University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2602.02710 \textbullet{}
+  ICML 2026 Oral Presentation}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Standard reinforcement learning for LLMs does not maximize the likelihood
+of correct rollouts --- it optimizes a Jensen lower bound that allows
+probability to diffuse across mediocre samples. \textit{Maximum Likelihood
+Reinforcement Learning} (MaxRL) introduces a compute-indexed family of
+objectives that converge to exact maximum likelihood as more rollout samples
+are drawn per query, achieving consistent improvements on math reasoning,
+navigation, and large-scale Qwen3 training at no increase in gradient steps.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] REINFORCE optimizes only a lower-order approximation of
+    true maximum likelihood over correct rollouts in sampling-based RL settings.
+  \item[Why it matters:] The objective gap causes probability mass to diffuse
+    across mediocre rollouts rather than concentrating on correct answers.
+  \item[Method:] Importance-weighted MLE estimator with $k$ samples per query,
+    interpolating between REINFORCE ($k=1$) and exact MLE ($k\to\infty$).
+  \item[Result:] Consistent improvement on maze navigation, GSM8K, and
+    large-scale Qwen3 training; gains scale with $k$.
+  \item[Evidence:] Toy classification verifies closeness to MLE; ablations
+    confirm the importance-weighting is the key ingredient.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Training language models with reinforcement learning on binary correctness
+signals --- did the generated code pass the tests? does the math proof check
+out? --- is the dominant paradigm for post-training. The underlying objective
+is maximum likelihood: given that a correct response exists, maximize the
+probability the model assigns to it.
+
+But the paper reveals a gap. REINFORCE, the workhorse of this paradigm,
+does not maximize this likelihood. It optimizes a lower bound, one that is
+tight only when the model already concentrates most probability on correct
+responses. In practice, especially early in training, REINFORCE wastes gradient
+signal on rolling updates that nudge mediocre rollouts upward rather than
+concentrating on correct ones.
+
+MaxRL closes this gap by drawing $k > 1$ samples per query and constructing
+an importance-weighted objective whose gradient converges to the true MLE
+gradient as $k$ grows. More sampling compute buys a closer approximation
+to the ideal training signal.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{REINFORCE:} With one sample per query and binary reward,
+the REINFORCE gradient is:
+\[
+\nabla_\theta J_\text{REINFORCE} =
+  \mathbb{E}_{y \sim \pi_\theta}\!\left[r(y) \nabla_\theta \log \pi_\theta(y|x)\right].
+\]
+This equals the gradient of $\mathbb{E}_x[\mathbb{E}_{y \sim \pi_\theta}[r(y) \log
+\pi_\theta(y|x)]]$, a lower bound on $\mathbb{E}_x[\log \sum_{y \in Y^+}
+\pi_\theta(y|x)]$ by Jensen's inequality. The gap is non-negligible when
+$\pi_\theta$ spreads probability across many incorrect responses.
+
+\textbf{Group Relative Policy Optimization (GRPO):} Draws $k$ samples but
+uses them for reward normalization rather than MLE approximation; the
+resulting objective is still a REINFORCE variant, not a MLE estimator.
+
+\section{Core Mechanism}
+
+MaxRL forms an importance-weighted estimate of the true MLE gradient using
+$k$ rollouts per query. The weights rescale each rollout's contribution
+proportionally to the model's current assignment of probability to that rollout
+among all correct rollouts sampled:
+
+\[
+w_i = \frac{r(y_i)\,\pi_\theta(y_i|x)}
+           {\displaystyle\sum_{j=1}^k r(y_j)\,\pi_\theta(y_j|x)}.
+\]
+
+The MaxRL objective is:
+\[
+J_\text{MaxRL}^{(k)}(\theta) =
+  \mathbb{E}_{x,\,y_{1:k} \sim \pi_\theta}
+  \!\left[\log \frac{1}{k} \sum_{i=1}^k r(y_i)\,\pi_\theta(y_i|x)\right],
+\]
+whose gradient is:
+\[
+\nabla_\theta J_\text{MaxRL}^{(k)} =
+  \mathbb{E}\!\left[\sum_{i=1}^k w_i \,\nabla_\theta \log \pi_\theta(y_i|x)\right].
+\]
+
+At $k=1$ this reduces to REINFORCE; as $k \to \infty$ this converges to
+the exact MLE gradient almost surely.
+
+\section{Technical Formulation}
+
+Let $Y^+$ be the set of correct responses for query $x$. The true
+maximum likelihood objective is:
+\[
+J_\text{MLE}(\theta) = \mathbb{E}_{x}\!\left[\log \sum_{y \in Y^+} \pi_\theta(y|x)\right].
+\]
+
+\textbf{REINFORCE lower bound:} By Jensen's inequality applied to the
+concave $\log$,
+\[
+J_\text{REINFORCE}(\theta) \leq J_\text{MLE}(\theta),
+\]
+with equality only when all probability mass is on a single correct response.
+
+\textbf{MaxRL convergence:}
+\[
+J_\text{MaxRL}^{(k)}(\theta) \xrightarrow{\;k \to \infty\;} J_\text{MLE}(\theta)
+\quad \text{a.s.}
+\]
+by the law of large numbers applied to the importance-weighted estimator.
+
+The gap between MaxRL and MLE at finite $k$ is bounded by:
+\[
+|J_\text{MLE} - J_\text{MaxRL}^{(k)}| = O\!\left(k^{-1/2}\right)
+\]
+under mild regularity conditions on $\pi_\theta$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item For each query $x$, sample $k$ rollouts $y_1, \ldots, y_k \sim \pi_\theta(\cdot|x)$.
+  \item Evaluate reward $r(y_i) \in \{0,1\}$ for each rollout.
+  \item Compute importance weights $w_i$ using current policy probabilities.
+  \item Compute $\nabla_\theta J_\text{MaxRL}^{(k)}$ using the weighted
+    gradient estimate.
+  \item Update $\theta$ via Adam.
+  \item At inference: standard autoregressive sampling (MaxRL changes
+    only the training objective, not the inference procedure).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+MaxRL is a consistent estimator of the MLE gradient: as $k$ grows,
+the training objective converges to exact maximum likelihood. The rate of
+convergence is $O(k^{-1/2})$ in the objective value. No distributional
+shift correction or importance weight clipping is required as long as
+$\pi_\theta$ remains supported on $Y^+$.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Toy classification:} MaxRL closely tracks exact MLE training
+    signal; REINFORCE lags by a measurable margin throughout.
+  \item \textbf{Maze navigation:} MaxRL achieves higher success rate than
+    REINFORCE and GRPO at equivalent gradient steps.
+  \item \textbf{GSM8K:} 3--5\% accuracy improvement over REINFORCE with
+    the same compute; gains scale with $k$ up to $k = 16$.
+  \item \textbf{Qwen3 (large-scale):} Consistent accuracy improvement;
+    MaxRL with $k=8$ matches REINFORCE with $k=1$ at roughly half the
+    gradient steps.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Effect of $k$:} Performance improves monotonically with $k$ up to
+$k \approx 16$, beyond which gains plateau (model capacity becomes the
+bottleneck, not objective quality).
+
+\textbf{Importance weights vs.\ uniform:} Replacing $w_i$ with uniform
+weights (equivalent to supervised fine-tuning on correct samples) degrades
+performance, confirming that the reweighting term is the key ingredient,
+not merely drawing more samples.
+
+\textbf{Relationship to GRPO:} GRPO's reward normalization does not
+approximate MLE; it is a variance-reduction technique within the REINFORCE
+objective. MaxRL's improvement is orthogonal and additive to GRPO's tricks.
+
+\section*{Reference}
+
+Fahim Tajwar, Guanning Zeng, Yueer Zhou, Yuda Song, Daman Arora,
+Yiding Jiang, Jeff Schneider, Ruslan Salakhutdinov, Haiwen Feng,
+Andrea Zanette. \textbf{Maximum Likelihood Reinforcement Learning}.
+arXiv:2602.02710, February 2026.
+\url{https://arxiv.org/abs/2602.02710}
+
+\end{document}

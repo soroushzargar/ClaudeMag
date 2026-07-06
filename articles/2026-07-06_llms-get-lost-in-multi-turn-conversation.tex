@@ -1,0 +1,217 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-06}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multi-turn conversation \textbullet{}
+  LLM evaluation \textbullet{}
+  performance degradation \textbullet{}
+  conversational AI}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  LLMs Get Lost In Multi-Turn Conversation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  All Frontier Models Suffer a 39\% Average Performance Drop
+  Moving from Single-Turn to Multi-Turn Settings}\par\vspace{6pt}
+
+{\small\textbf{By} Philippe Laban, Hiroaki Hayashi, Yingbo Zhou \&
+  Jennifer Neville (Salesforce AI Research)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2505.06120 \textbullet{}
+  ICLR 2026 Outstanding Paper Award}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Every frontier language model tested---open- and closed-weight---performs
+significantly worse in multi-turn conversations than in equivalent single-turn
+tasks. Across more than 200,000 simulated conversations spanning six generation
+tasks, the average performance drop is \textbf{39\%}. More troublingly,
+once a model takes a wrong conversational turn, it fails to recover:
+it gets lost and stays lost.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLMs are evaluated almost exclusively in single-turn,
+    fully-specified instruction settings, masking a critical failure mode in
+    multi-turn dialogue.
+  \item[Why it matters:] Real-world use involves extended conversations where
+    user intent is underspecified and refined iteratively; models that degrade
+    are unsafe to deploy in agentic contexts.
+  \item[Method:] 200,000+ simulated conversations on six generation tasks,
+    decomposing the performance gap into aptitude loss and misalignment loss.
+  \item[Result:] 39\% average drop across all frontier models; recovery after a
+    wrong turn is essentially zero across all settings.
+  \item[Evidence:] GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro, Llama 3.1
+    (70B/405B), Mistral Large all exhibit the same pattern.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+LLMs are conversational interfaces by design, yet nearly every benchmark
+measures performance on single isolated turns with fully specified prompts.
+This gap matters: analysis of real user logs shows that underspecification is
+the norm, not the exception. Users iterate, refine, and clarify. The question
+of how models perform across that iterative process has been largely ignored.
+
+This paper closes that gap with a large-scale simulation study comparing
+single-turn and multi-turn performance on the same underlying tasks. The
+results are stark and consistent: every model tested degrades substantially
+in the multi-turn setting, and none recovers once a conversational wrong
+turn has been taken.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard benchmarks like MMLU, HumanEval, and MT-Bench evaluate models
+on isolated, well-formed prompts. Even ``multi-turn'' benchmarks typically
+measure whether a model can carry context forward, not whether it can
+integrate iterative user refinements without losing the original intent.
+
+The underspecification problem is orthogonal to context length: even short
+conversations (3--5 turns) show significant degradation. This rules out
+context-length limitations as the primary cause and points instead to a
+failure in \emph{intent tracking} as conversation state evolves.
+
+\section{Core Mechanism}
+
+The authors decompose the multi-turn performance drop into two components:
+
+\textbf{Aptitude loss:} A minor degradation in the model's core task ability
+when presented with conversation history rather than a direct prompt---small
+but measurable ($\approx 5$--8 percentage points).
+
+\textbf{Misalignment loss:} The dominant effect ($\approx 31$--35 percentage
+points on average). As the conversation progresses, the model increasingly
+anchors to its own prior outputs rather than the user's current intent.
+A single wrong inference early in the conversation corrupts all downstream
+turns---the ``getting lost'' phenomenon.
+
+\textbf{Non-recovery:} The recovery rate $R_n$---the probability that
+performance at turn $n+k$ exceeds performance at turn $n$ after a detected
+misalignment---is approximately zero across all models, tasks, and
+conversation lengths tested.
+
+\section{Technical Formulation}
+
+Let $T = (t_1, t_2, \ldots, t_n)$ be a conversation and $y$ the target
+output. Model performance at turn $n$ is:
+\[
+\text{Perf}_n = P\!\left(f(T_{1:n}) = y\right).
+\]
+The paper observes $\text{Perf}_n < \text{Perf}_1$ for all $n > 1$, all
+models, all tasks.
+
+The \emph{recovery rate} is defined as:
+\[
+R_n = \frac{1}{K}\sum_{k=1}^{K}
+  \mathbf{1}\!\left[\text{Perf}_{n+k} > \text{Perf}_n\right].
+\]
+Empirically, $R_n \approx 0$ across all conditions.
+
+The performance gap is decomposed as:
+\[
+\Delta = \underbrace{(\text{Perf}_1 - \text{Perf}_1^{\text{hist}})}_{\text{aptitude loss}}
+       + \underbrace{(\text{Perf}_1^{\text{hist}} - \text{Perf}_n)}_{\text{misalignment loss}}
+\]
+where $\text{Perf}_1^{\text{hist}}$ is single-turn performance when history
+is present but the core prompt is unchanged.
+
+\section{Learning or Inference Procedure}
+
+The evaluation protocol creates multi-turn conversations by simulation:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a task instance $(x, y)$ from each benchmark.
+  \item Construct an underspecified initial prompt $t_1$ that omits key
+    constraints or details.
+  \item Simulate a user who provides clarifications at each turn $t_k$,
+    moving toward the fully-specified target.
+  \item Score the model's response at each turn against $y$.
+  \item Aggregate across 200,000+ conversations.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The paper does not provide formal guarantees, but its empirical finding
+is stated as a universal claim: \emph{no evaluated model} achieves
+multi-turn performance within 20\% of its single-turn performance,
+and \emph{no evaluated model} has a recovery rate above 5\% after
+a wrong turn.
+
+\section{Experimental Findings}
+
+Evaluated on six tasks---summarization, email drafting, code generation,
+QA, creative writing, data extraction---the paper reports:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item 39\% average performance drop across all models and tasks.
+  \item Code generation and QA: largest drops ($\approx$45\%).
+  \item Creative writing: smallest drop ($\approx$28\%).
+  \item Closed-weight models (GPT-4o, Claude, Gemini) do not outperform
+    open-weight models (Llama, Mistral) on multi-turn robustness.
+  \item Performance degradation begins at turn 2 and worsens monotonically
+    through turn 5, then plateaus.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Turn count:} Degradation is sharpest between turns 1 and 2, then
+increases more slowly. The model's initial interpretation of the underspecified
+prompt is highly persistent.
+
+\textbf{Clarification type:} Constraints added at turn 3+ are less reliably
+incorporated than those present at turn 1. Retroactive clarifications are
+especially poorly handled.
+
+\textbf{Model scale:} Larger models within the same family show slightly
+smaller aptitude loss but equivalent misalignment loss --- scale alone does
+not solve multi-turn robustness.
+
+\textbf{Implications:} The result motivates dedicated multi-turn training
+objectives, retrieval-augmented intent tracking, and explicit user-intent
+summarization as architectural additions.
+
+\section*{Reference}
+
+Philippe Laban, Hiroaki Hayashi, Yingbo Zhou, Jennifer Neville.
+\textbf{LLMs Get Lost In Multi-Turn Conversation}.
+arXiv:2505.06120, May 2025.
+\url{https://arxiv.org/abs/2505.06120}
+
+\end{document}

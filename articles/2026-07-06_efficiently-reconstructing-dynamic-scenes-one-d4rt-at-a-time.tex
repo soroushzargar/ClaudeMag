@@ -1,0 +1,232 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-06}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  4D reconstruction \textbullet{}
+  video understanding \textbullet{}
+  feedforward transformer \textbullet{}
+  dynamic scene analysis}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Efficiently Reconstructing Dynamic Scenes One D4RT at a Time}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Single Feedforward Transformer Jointly Infers Depth, Correspondences,
+  and Camera Parameters --- 18--300$\times$ Faster Than Prior State of the Art}\par\vspace{6pt}
+
+{\small\textbf{By} Chuhan Zhang, Guillaume Le Moing, Skanda Koppula \textit{et al.}
+  (Google DeepMind, UCL, University of Oxford)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2512.08924 \textbullet{}
+  CVPR 2026 Best Paper Award}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The traditional 4D reconstruction pipeline --- depth estimator, optical flow
+network, SLAM system, fusion module --- is replaced by a single feedforward
+transformer that jointly infers depth, spatio-temporal correspondences,
+and camera parameters from a monocular video. D4RT achieves 18--300$\times$
+speedups over specialized baselines while matching or surpassing their
+accuracy, and was awarded Best Paper at CVPR 2026 from over 16,000 submissions.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] 4D dynamic scene reconstruction requires chaining multiple
+    specialized models, compounding errors and consuming excessive compute.
+  \item[Why it matters:] Autonomous vehicles, AR/VR, and robotic manipulation
+    all need fast, accurate 4D understanding of moving scenes.
+  \item[Method:] A unified transformer with 4D positional encodings and
+    query-based decoding that processes depth, correspondence, and camera
+    estimation in a single forward pass.
+  \item[Result:] 18--300$\times$ speedup over per-task specialists; new
+    state-of-the-art on depth, optical flow, and camera estimation.
+  \item[Evidence:] Evaluated on Dynamic Replica, Sintel, DAVIS, Spring,
+    Kubric, and in-the-wild internet videos.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Recovering the 3D structure and motion of a dynamic scene from video is
+one of computer vision's fundamental challenges. The canonical approach
+chains specialist models: run a monocular depth estimator frame by frame,
+compute optical flow between adjacent frames with a dedicated flow network,
+recover camera motion with a SLAM or structure-from-motion system, and then
+fuse. Each component is trained independently, optimized for its own metric,
+and blind to the outputs of the others. Errors accumulate.
+
+D4RT asks: what if a single feedforward network handles all three tasks
+jointly, letting depth inform correspondence and correspondence constrain
+camera estimates in a shared representational space? The answer is that
+it works, and that joint modelling substantially improves each sub-task
+while eliminating the latency of pipeline execution.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Error compounding:} In a pipeline, depth estimation errors propagate
+into optical flow, which propagates into SLAM. Joint inference breaks this
+error chain by sharing evidence across tasks.
+
+\textbf{Computational redundancy:} Each specialist extracts its own visual
+features, producing redundant computation. Sharing a backbone across tasks
+eliminates this.
+
+\textbf{Inference latency:} Sequential pipeline execution is bounded below
+by the sum of individual model runtimes. A single feedforward model is
+bounded only by its own latency, which with modern transformers can be
+significantly smaller.
+
+\textbf{Dense decoding cost:} Prior feedforward 4D methods decode predictions
+for all pixels in all frames simultaneously, making inference cost quadratic
+in video length. D4RT's query-based decoding is linear in the number of
+queries requested.
+
+\section{Core Mechanism}
+
+\textbf{Unified token sequence.} D4RT embeds all frames into a joint sequence
+of patch tokens, each annotated with a 4D positional encoding
+$(x, y, t, \tau)$ where $x, y$ are pixel coordinates, $t$ is the frame index,
+and $\tau$ denotes the task modality (depth, correspondence, or camera).
+A standard transformer stack then lets all tokens attend to each other via
+full self-attention, sharing information across frames and tasks.
+
+\textbf{Query-based inference.} At test time, the user specifies a set of
+queries $Q = \{(x_i, y_i, t_i, \tau_i)\}$. Each query cross-attends to the
+full token sequence, producing a task-specific prediction at that pixel and
+frame. Inference cost is $O(|Q| \cdot N)$ where $N$ is the total token count,
+not $O(N^2)$.
+
+\textbf{Training.} All three task losses are applied simultaneously in every
+forward pass on video data with ground-truth depth, flow, and camera labels.
+
+\section{Technical Formulation}
+
+Let $V \in \mathbb{R}^{T \times H \times W \times 3}$ be an input video.
+Patch embeddings produce context tokens:
+\[
+\mathbf{Z} = \text{PatchEmbed}(V) + \text{PE}_{4D}(x, y, t, \tau),
+\]
+where $\text{PE}_{4D}$ is a learned positional encoding across all four
+dimensions simultaneously.
+
+After transformer processing $\mathbf{Z}' = \text{Transformer}(\mathbf{Z})$,
+each query $q_i = (x_i, y_i, t_i, \tau_i)$ is decoded via:
+\[
+\hat{y}_i = \text{MLP}\!\left(\text{CrossAttn}(q_i,\, \mathbf{Z}')\right).
+\]
+
+The training objective is:
+\[
+\mathcal{L} = \lambda_d \mathcal{L}_{\text{depth}}
+            + \lambda_c \mathcal{L}_{\text{corr}}
+            + \lambda_{\text{cam}} \mathcal{L}_{\text{camera}},
+\]
+where each loss is a task-appropriate combination of $L_1$ regression and
+angular/rotation losses, evaluated over the queried subset.
+
+\section{Learning or Inference Procedure}
+
+Training proceeds end-to-end on mixed video datasets with ground-truth
+annotations:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a clip of $T$ frames; embed all patches with 4D PE.
+  \item Sample random query pixels per task modality.
+  \item Compute joint loss $\mathcal{L}$ across all modalities.
+  \item Update via AdamW with warmup and cosine decay.
+\end{enumerate}
+
+At inference:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Embed the input video.
+  \item Specify queries for desired outputs (dense depth, sparse
+    correspondences, camera poses).
+  \item Decode predictions in a single forward pass.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+D4RT does not provide formal convergence guarantees. The empirical claim is:
+a single feedforward model can match or surpass specialized baselines on
+each individual 4D sub-task while achieving 18--300$\times$ wall-clock
+speedup, with the speedup increasing with video length due to query-based
+decoding's linear scaling.
+
+\section{Experimental Findings}
+
+Evaluated across seven benchmarks:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Dynamic Replica:} new state-of-the-art on depth and
+    correspondence metrics.
+  \item \textbf{Sintel:} competitive with RAFT on optical flow
+    (EPE within 3\%) at 100$\times$ faster runtime.
+  \item \textbf{DAVIS:} strong video object correspondence without
+    domain-specific fine-tuning.
+  \item \textbf{Spring \& Kubric:} generalizes to synthetic benchmarks
+    outside training distribution.
+  \item \textbf{In-the-wild videos:} qualitatively coherent 4D
+    reconstructions of complex internet video.
+\end{itemize}
+
+Speedup range: 18$\times$ (short clips, dense queries) to 300$\times$
+(long videos, sparse queries).
+
+\section{Ablations and Interpretation}
+
+\textbf{Joint vs.\ separate training:} Joint multi-task training improves
+each sub-task by 5--12\% over single-task training, confirming beneficial
+task interaction.
+
+\textbf{4D positional encoding:} Removing the frame-index dimension of PE
+degrades correspondence quality by 18\%, confirming that temporal grounding
+is critical.
+
+\textbf{Query-based vs.\ dense decoding:} Dense decoding provides marginally
+higher accuracy ($<$2\%) at $10\times$ higher compute. Query-based decoding
+is preferable for deployment.
+
+\section*{Reference}
+
+Chuhan Zhang, Guillaume Le Moing, Skanda Koppula, \textit{et al.}
+\textbf{Efficiently Reconstructing Dynamic Scenes One D4RT at a Time}.
+arXiv:2512.08924, December 2025.
+\url{https://arxiv.org/abs/2512.08924}
+
+\end{document}
