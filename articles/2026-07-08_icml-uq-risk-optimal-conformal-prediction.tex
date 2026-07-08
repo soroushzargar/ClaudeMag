@@ -1,0 +1,204 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{ICML 2026 Special Edition: Uncertainty \& Conformal Prediction}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  conformal prediction \textbullet{}
+  decision theory \textbullet{}
+  minimax risk \textbullet{}
+  coverage guarantees}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Optimal Decision-Making Based on Prediction Sets}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Risk-Optimal Conformal Prediction Derives the Policy and the Set
+  from the Same Minimax Objective}\par\vspace{6pt}
+
+{\small\textbf{By} Tao Wang \& Edgar Dobriban
+  (University of Pennsylvania, Wharton Statistics and Data Science)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2602.00989 \textbullet{}
+  ICML 2026 Oral}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A conformal prediction set guarantees that the true label falls inside it
+with probability at least $1-\alpha$---but says nothing about what to
+\emph{do} once you have it. This paper derives the minimax-optimal
+downstream decision policy for a fixed prediction set, then works backward
+to the optimal set construction itself, unifying both into a single
+algorithm: \textbf{Risk-Optimal Conformal Prediction (ROCP)}. The result
+consistently cuts worst-case risk and critical mistake rates relative to
+standard max-min and best-response baselines, with the largest gains where
+out-of-set errors are most costly.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Coverage guarantees say nothing about how to act
+    optimally on a prediction set for a downstream decision.
+  \item[Why it matters:] Prediction sets are increasingly used to drive
+    real decisions (triage, risk limits, control); an uncalibrated
+    decision rule can waste or misuse the coverage guarantee.
+  \item[Method:] Minimax decision theory over distributions consistent
+    with the coverage constraint, solved jointly for the optimal policy
+    and the optimal prediction set.
+  \item[Result:] ROCP reduces worst-case risk and critical mistake rates
+    versus max-min and best-response baselines, especially when
+    out-of-set errors are costly.
+  \item[Evidence:] Comparisons against risk-averse max-min policies and
+    naive best-response policies across decision tasks with varying
+    error costs.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Conformal prediction has become the standard way to wrap any black-box
+model with a distribution-free coverage guarantee: the resulting set
+$C(x)$ contains the true label with probability at least $1-\alpha$.
+But in practice, sets are rarely the end product---they feed a downstream
+decision. A clinician acts on a set of possible diagnoses; a control
+system acts on a set of possible next states. Until now, the choice of
+\emph{how} to act on $C(x)$, and even how $C(x)$ should be shaped for
+that purpose, has been left to ad hoc heuristics disconnected from the
+coverage guarantee itself.
+
+This paper treats the full pipeline---set construction and downstream
+decision---as one decision-theoretic problem, and solves for both pieces
+jointly under a minimax risk objective.
+
+\section{Why Existing Approaches Fall Short}
+
+Two heuristics dominate practice. \textbf{Best-response} policies act as
+if the point prediction were exact, ignoring the coverage guarantee
+outright---leaving decisions exposed exactly when the true label lands
+elsewhere in the set. \textbf{Max-min} policies plan for the single
+worst label anywhere in $C(x)$, regardless of how likely the coverage
+guarantee actually makes it---wasting performance hedging against
+possibilities the guarantee doesn't privilege. Neither is derived from
+the same objective that produced the set in the first place, so neither
+is calibrated to the decision task.
+
+\section{Core Mechanism}
+
+The paper first fixes an arbitrary prediction set $C(x)$ and solves for
+the minimax-optimal policy: the one minimizing worst-case expected loss
+over all distributions still consistent with the set's coverage
+guarantee. That optimal policy balances the worst-case loss for labels
+inside $C(x)$ against a penalty for the residual probability mass that
+could fall outside it. Holding this policy fixed, the authors then solve
+backward for the prediction set that minimizes the resulting robust risk
+subject to the coverage constraint---yielding a set shaped for the
+decision task, not merely for coverage.
+
+\section{Technical Formulation}
+
+For decision $a \in \mathcal{A}$ and loss $\ell(a,y)$, define the robust
+risk of policy $\pi$ given set $C$ as
+\[
+R(\pi, C) = \sup_{Q:\, Q(y \in C(x)) \ge 1-\alpha}
+  \mathbb{E}_Q\big[\ell(\pi(C(x)), y)\big].
+\]
+The minimax-optimal $\pi^{\ast}$ balances
+$\sup_{y \in C(x)} \ell(\pi^{\ast}, y)$ against an $\alpha$-weighted
+penalty for loss outside $C(x)$. The optimal set $C^{\ast}(x)$ then
+minimizes $R(\pi^{\ast}, C)$ subject to $P(y \in C(x)) \ge 1-\alpha$.
+ROCP estimates the population quantities needed for $\pi^{\ast}$ and
+$C^{\ast}$ using any black-box probabilistic model, then calibrates a
+nonconformity threshold on held-out data so that $C^{\ast}(x)$ retains
+exact finite-sample marginal coverage under exchangeability.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Fit a black-box probabilistic model to estimate the population
+    quantities entering the oracle minimax policy $\pi^{\ast}$.
+  \item Construct the candidate set $C^{\ast}(x)$ that minimizes the
+    resulting robust risk under the model's estimates.
+  \item Calibrate a nonconformity threshold on a held-out calibration
+    set to enforce exact finite-sample marginal coverage.
+  \item At decision time, apply $\pi^{\ast}$ to the calibrated set
+    $C^{\ast}(x)$ to produce the action $a$.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Regardless of how well the black-box model estimates the oracle
+quantities, the calibration step guarantees
+$P(y \in C^{\ast}(x)) \ge 1-\alpha$ in finite samples under
+exchangeability alone. The risk-optimality of $\pi^{\ast}$ and
+$C^{\ast}$ is with respect to the worst-case distribution consistent
+with that guarantee---so the decision quality improves as the
+underlying model improves, while the coverage guarantee never depends
+on the model being correct.
+
+\section{Experimental Findings}
+
+Across decision tasks with varying costs for out-of-set errors, ROCP
+reduces both worst-case risk and the rate of critical (high-cost)
+mistakes compared to the max-min baseline (over-conservative) and the
+best-response baseline (under-protected). The advantage widens as the
+cost of an out-of-set error grows, precisely the regime where a
+principled decision policy matters most.
+
+\section{Ablations and Interpretation}
+
+\textbf{Cost sensitivity:} When out-of-set costs are low, ROCP, max-min,
+and best-response converge in performance---the decision-theoretic
+refinement matters most when mistakes are expensive.
+
+\textbf{Set size:} ROCP's sets are not simply smaller or larger than
+standard conformal sets; they are reshaped toward the decision task,
+sometimes excluding low-cost-if-missed labels in favor of tighter
+coverage where mistakes are expensive.
+
+\textbf{Model quality:} Decision quality scales with the black-box
+model's accuracy, while the coverage guarantee remains exact even under
+model misspecification---the two guarantees are cleanly separated.
+
+\section*{Reference}
+
+Tao Wang, Edgar Dobriban.
+\textbf{Optimal Decision-Making Based on Prediction Sets}.
+arXiv:2602.00989, February 2026.
+\url{https://arxiv.org/abs/2602.00989}
+
+\end{document}

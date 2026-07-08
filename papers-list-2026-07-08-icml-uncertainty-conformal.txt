@@ -1,0 +1,72 @@
+ML Papers List — 2026-07-08 (ICML 2026 Special Edition: Uncertainty Quantification & Conformal Prediction)
+Generated for ClaudeMag
+
+1. Optimal Decision-Making Based on Prediction Sets [Oral — ICML 2026]
+   Authors: Tao Wang, Edgar Dobriban
+   Affiliation: University of Pennsylvania (Wharton Statistics and Data Science)
+   Venue/ID: ICML 2026 Oral (Jul 7, 2026, 2:15-2:30 PM, Grand Ballroom 101-105) | arXiv:2602.00989
+   URL: https://arxiv.org/abs/2602.00989
+   Summary: Prediction sets can wrap around any ML model to cover unknown test outcomes with a
+   guaranteed probability, but it has been unclear how to use them optimally for downstream
+   decisions. This paper introduces a decision-theoretic framework that minimizes worst-case
+   expected loss subject to the coverage guarantee, characterizes the minimax-optimal policy for
+   a fixed prediction set, and derives the optimal set construction itself. The resulting
+   algorithm, Risk-Optimal Conformal Prediction (ROCP), targets these risk-minimizing sets while
+   retaining finite-sample, distribution-free marginal coverage, consistently reducing worst-case
+   risk and critical mistake rates relative to risk-averse max-min and best-response baselines.
+
+2. Online Conformal Prediction via Universal Portfolio Algorithms [Spotlight — ICML 2026]
+   Authors: Tuo Liu, Edgar Dobriban, Francesco Orabona
+   Affiliation: University of Pennsylvania, Boston University
+   Venue/ID: ICML 2026 Spotlight | arXiv:2602.03168
+   URL: https://arxiv.org/abs/2602.03168
+   Summary: Online conformal prediction (OCP) seeks intervals with long-run 1-alpha coverage on
+   arbitrary, possibly adversarial data streams, but existing methods require manual learning-rate
+   tuning and bespoke regret analyses. The authors develop a general regret-to-coverage theory for
+   interval-valued OCP based on the (1-alpha)-pinball loss, showing that controlling "linearized
+   regret" implies coverage bounds for any online algorithm via a black-box reduction using the
+   Fenchel conjugate of the regret bound. This yields UP-OCP, a parameter-free method that reduces
+   OCP to a two-asset portfolio-selection problem and solves it with universal portfolio algorithms,
+   eliminating the learning-rate tuning that plagued prior online conformal methods.
+
+3. Conf-Gen: Conformal Uncertainty Quantification for Generative Models [Poster — ICML 2026]
+   Authors: Gabriel Loaiza-Ganem, Kevin Zhang, Wei Cui, Marc Law, Kin Kwan Leung
+   Affiliation: Layer 6 AI (TD Bank Group)
+   Venue/ID: ICML 2026 Poster #61800 (Jul 8, 2026, 10:30 AM-12:15 PM KST) | arXiv:2605.28920
+   URL: https://arxiv.org/abs/2605.28920
+   Summary: Conformal prediction and conformal risk control (CRC) give formal uncertainty
+   guarantees for supervised models, but modern generative systems -- LLMs, image generators,
+   conversational agents -- are unsupervised and don't fit the CRC mold. Conf-Gen adapts CRC to
+   generative tasks by relaxing its theoretical assumptions, unifying and generalizing prior
+   ad hoc attempts to apply conformal methods to LLMs. The framework is demonstrated on
+   conformal guarantees that image generators produce non-memorized outputs, that conversational
+   AI systems have asked enough clarifying questions before answering, and that AI agent outputs
+   are correct -- extending conformal methodology into domains with no natural notion of a
+   held-out label.
+
+4. Calibrating Decision Robustness via Inverse Conformal Risk Control [Poster — ICML 2026]
+   Authors: Wenbin Zhou, Shixiang Zhu
+   Affiliation: Carnegie Mellon University
+   Venue/ID: ICML 2026 Poster #61939 (Jul 9, 2026, 10:30 AM-12:15 PM KST) | arXiv:2510.07750
+   URL: https://arxiv.org/abs/2510.07750
+   Summary: Robust optimization guards decisions against uncertainty by hedging against worst-case
+   scenarios within a conformal uncertainty set, but the robustness (coverage) level is usually
+   fixed a priori and ad hoc, yielding either under-protection or wasteful conservatism. Inverse
+   Conformal Risk Control (ICRC) flips the usual conformal recipe: instead of fixing coverage and
+   measuring downstream regret, it provides distribution-free, finite-sample guarantees on both
+   miscoverage and regret simultaneously, tracing out the miscoverage-regret Pareto frontier so
+   practitioners can select a robustness level according to their own cost-risk preferences.
+
+5. Provably Label-Efficient Conformal Prediction [Poster — ICML 2026]
+   Authors: Andrew Ilyas, Joonhyuk Ko, Jingwu Tang, Zhiwei Steven Wu, Jiahao Zhang
+   Affiliation: Massachusetts Institute of Technology, Carnegie Mellon University
+   Venue/ID: ICML 2026 Poster #65796 (Jul 6, 2026, 6:30-8:15 PM PDT, Hall A #4516)
+   URL: https://icml.cc/virtual/2026/poster/65796
+   Summary: Conformal prediction gives finite-sample coverage guarantees but depends on a
+   randomly sampled labeled calibration set, which is expensive to collect -- creating a tradeoff
+   between upfront labeling cost and the downstream efficiency (prediction-set size) of the
+   resulting conformal predictor. The authors formalize conformal prediction under costly,
+   sequential label queries and design an online stopping rule that automatically balances
+   calibration-set size against conformal efficiency while exactly preserving the coverage
+   guarantee. They prove the expected total cost matches the best fixed calibration size in
+   hindsight, and show the stopping rule cuts labeling cost by 41.4% +/- 2.3% experimentally.

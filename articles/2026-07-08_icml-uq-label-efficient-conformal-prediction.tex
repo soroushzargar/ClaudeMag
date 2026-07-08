@@ -1,0 +1,202 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{ICML 2026 Special Edition: Uncertainty \& Conformal Prediction}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  conformal prediction \textbullet{}
+  label efficiency \textbullet{}
+  sequential stopping rules \textbullet{}
+  calibration cost}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Provably Label-Efficient Conformal Prediction}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Sequential Stopping Rule Cuts Calibration Labeling Cost by 41\%
+  Without Sacrificing Coverage}\par\vspace{6pt}
+
+{\small\textbf{By} Andrew Ilyas, Joonhyuk Ko, Jingwu Tang, Zhiwei Steven
+  Wu \& Jiahao Zhang
+  (Massachusetts Institute of Technology, Carnegie Mellon
+  University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}ICML 2026 Poster}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Conformal prediction's finite-sample coverage guarantee is usually
+presented as free once a calibration set exists---but collecting those
+labels rarely is. This paper treats calibration labels as a costly,
+queryable resource and designs an online stopping rule that
+automatically balances labeling cost against prediction-set efficiency.
+The rule matches the best \emph{fixed} calibration size chosen with
+hindsight, cuts total labeling cost by \textbf{41.4\% $\pm$ 2.3\%}, and
+provably preserves exact coverage despite deciding, on the fly, when to
+stop labeling.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Conformal calibration-set size is treated as a free
+    given, but labels needed to build it are often expensive to
+    collect.
+  \item[Why it matters:] Medical labeling, expert annotation, and
+    expensive simulation make calibration cost the dominant cost of
+    deploying conformal prediction in practice.
+  \item[Method:] An online, cost-aware stopping rule for sequential
+    label queries that halts once further labels are provably not
+    worth their cost.
+  \item[Result:] Matches the best fixed calibration size in hindsight;
+    cuts total labeling cost by 41.4\% $\pm$ 2.3\% empirically.
+  \item[Evidence:] Benchmark classification and regression tasks
+    comparing adaptive stopping against fixed calibration-set-size
+    baselines, with coverage validated throughout.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Split conformal prediction fixes a calibration set of size $n$ up
+front; more calibration data generally tightens prediction sets, with
+diminishing returns, and every additional label carries a real
+acquisition cost. Conformal theory has always treated $n$ as given,
+leaving practitioners to guess a calibration budget with no
+statistical guidance. This paper asks the practical question directly:
+given unlabeled examples arriving one at a time and the ability to
+query a label at a cost, when should calibration stop and prediction
+begin?
+
+\section{Why Existing Approaches Fall Short}
+
+Practitioners today either guess a calibration-set size in advance,
+risking wasted labeling budget or an under-calibrated, oversized
+prediction set, or they collect labels until budget runs out with no
+statistical link between that stopping point and the tradeoff they
+actually care about. Naively stopping ``when the sets look tight
+enough'' is an adaptive, data-dependent rule that would ordinarily void
+the exchangeability conformal prediction relies on---so ad hoc adaptive
+stopping has been avoided rather than solved.
+
+\section{Core Mechanism}
+
+The authors formalize a total-cost objective combining the cumulative
+cost of labels queried so far with the expected inefficiency
+(prediction-set size) of the conformal predictor that would result from
+stopping now. They design a sequential stopping rule that halts
+querying once the estimated marginal benefit of one more label---in
+expected set-size reduction---no longer exceeds its cost. The delicate
+technical contribution is showing that this data-dependent stopping
+decision can be constructed so the resulting calibration set still
+yields a conformal predictor with exact finite-sample coverage,
+regardless of the adaptive stopping.
+
+\section{Technical Formulation}
+
+With per-label cost $c$ and a weight $\lambda$ trading off cost against
+expected prediction-set size $\mathbb{E}[|C(X)|]$, define the total
+objective after $m$ queried labels as
+\[
+J(m) = m \cdot c + \lambda \cdot \mathbb{E}\big[|C_m(X)|\big],
+\]
+where $C_m$ is the conformal predictor calibrated on the first $m$
+labels. The stopping time is
+\[
+\tau = \inf\{m : \widehat\Delta(m) \le 0\},
+\]
+where $\widehat\Delta(m)$ estimates the marginal value of querying
+label $m+1$. Under mild regularity conditions, $\mathbb{E}[J(\tau)]$
+matches $\min_m J(m)$---the best fixed calibration size chosen with
+hindsight---up to lower-order terms, while
+$P(Y \in C_\tau(X)) \ge 1-\alpha$ holds exactly despite $\tau$ being a
+data-dependent stopping time.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Observe an unlabeled example; decide whether to query its
+    label based on the current estimate of marginal value
+    $\widehat\Delta(m)$.
+  \item If $\widehat\Delta(m) > 0$, query the label, add it to the
+    calibration set, and increment $m$.
+  \item If $\widehat\Delta(m) \le 0$, stop querying at $\tau = m$.
+  \item Calibrate the conformal predictor on the $\tau$ collected
+    labels and deploy it with the standard coverage guarantee.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Despite $\tau$ being chosen adaptively from the data observed so far,
+the resulting conformal predictor satisfies
+$P(Y \in C_\tau(X)) \ge 1-\alpha$ exactly, in finite samples. Separately,
+the expected total cost at the stopping time matches the best
+achievable cost under a fixed calibration budget selected with
+hindsight knowledge of the data.
+
+\section{Experimental Findings}
+
+Across benchmark classification and regression tasks, the proposed
+stopping rule reduces total labeling cost by \textbf{41.4\% $\pm$ 2.3\%}
+relative to fixed calibration-set-size baselines chosen without this
+guidance, while maintaining nominal coverage throughout the evaluated
+tasks.
+
+\section{Ablations and Interpretation}
+
+\textbf{Cost sensitivity:} As per-label cost $c$ increases relative to
+the set-size weight $\lambda$, the stopping rule halts earlier,
+trading a somewhat larger prediction set for lower total cost---exactly
+the intended behavior.
+
+\textbf{Robustness to misestimation:} Errors in estimating
+$\widehat\Delta(m)$ affect the total-cost optimality of the stopping
+point but never the coverage guarantee, which is preserved by
+construction regardless of how $\tau$ is chosen.
+
+\textbf{Practical takeaway:} Calibration-set size, long treated as a
+free design choice in conformal prediction, can instead be solved for
+directly as a cost-aware stopping problem.
+
+\section*{Reference}
+
+Andrew Ilyas, Joonhyuk Ko, Jingwu Tang, Zhiwei Steven Wu, Jiahao Zhang.
+\textbf{Provably Label-Efficient Conformal Prediction}.
+ICML 2026.
+\url{https://icml.cc/virtual/2026/poster/65796}
+
+\end{document}

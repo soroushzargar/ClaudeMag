@@ -1,0 +1,201 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{ICML 2026 Special Edition: Uncertainty \& Conformal Prediction}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  conformal risk control \textbullet{}
+  generative models \textbullet{}
+  large language models \textbullet{}
+  memorization}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Conf-Gen: Conformal Uncertainty Quantification for Generative
+  Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Extending Formal Risk Guarantees Beyond Supervised Prediction into
+  LLMs, Image Generators, and Agents}\par\vspace{6pt}
+
+{\small\textbf{By} Gabriel Loaiza-Ganem, Kevin Zhang, Wei Cui, Marc Law
+  \& Kin Kwan Leung
+  (Layer 6 AI, TD Bank Group)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2605.28920 \textbullet{}
+  ICML 2026 Poster}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Conformal risk control (CRC) gives formal uncertainty guarantees for
+supervised predictors---but a diffusion sample or an LLM's answer has
+no ground-truth label to calibrate against. \textbf{Conf-Gen} relaxes
+CRC's assumptions just enough to reach generative systems directly,
+producing certified guarantees such as ``this image is not a memorized
+copy,'' ``this dialogue system has asked enough clarifying questions,''
+and ``this agent's output is correct''---unifying and generalizing
+prior one-off attempts to bring conformal guarantees to LLMs.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Conformal risk control assumes labeled prediction
+    pairs; generative and agentic systems have no natural label to
+    calibrate against.
+  \item[Why it matters:] As generative and agentic systems displace
+    classical supervised predictors, the uncertainty-quantification
+    toolkit built for supervised learning risks becoming obsolete.
+  \item[Method:] Relax CRC's exchangeable-labeled-pair requirement to
+    an exchangeable-generation-instance requirement, calibrating
+    task-specific risk functionals directly on generated outputs.
+  \item[Result:] A single calibration recipe transfers across image
+    generation, dialogue, and agentic tasks without redesign.
+  \item[Evidence:] Demonstrations on non-memorization guarantees for
+    image generators, clarification-sufficiency guarantees for
+    dialogue systems, and correctness guarantees for agent outputs.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Conformal prediction and its extension, conformal risk control, are the
+most practically trusted formal uncertainty guarantees in machine
+learning---but both were built for supervised prediction, where a
+labeled calibration pair $(x, y)$ is available. Modern AI progress is
+increasingly driven by unsupervised generative models: LLMs, image and
+video generators, and autonomous agents, none of which produce a
+prediction against a classical ground-truth label. Conf-Gen asks which
+of CRC's assumptions are actually load-bearing, and shows that relaxing
+just the labeled-pair requirement is enough to bring the same
+finite-sample guarantee machinery to generative tasks.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior attempts to bring conformal guarantees to LLMs typically bolted a
+supervised-style calibration step onto a generative pipeline in a
+task-specific, one-off way---for instance treating a single decoding
+step as if it were a classification label. These approaches do not
+generalize: each new generative task (image synthesis, dialogue,
+agentic tool use) required its own bespoke reformulation, with no
+shared theoretical foundation guaranteeing correctness across tasks.
+
+\section{Core Mechanism}
+
+Conf-Gen replaces the labeled-pair requirement with task-specific risk
+functionals defined directly over generated outputs---distance to the
+training set as a memorization score, a count of clarifying questions
+asked, or a verifier's judgment as a correctness score. Calibration
+proceeds exactly as in CRC: find the smallest threshold for which the
+empirical risk, corrected for finite-sample slack, does not exceed the
+target level. What changes is the object being calibrated: a single
+generative process's own outputs, rather than a labeled prediction
+task.
+
+\section{Technical Formulation}
+
+Let $R(\lambda) = \mathbb{E}[\ell(\lambda, X)]$ be the population risk
+as a function of threshold $\lambda$, for a monotone bounded loss
+$\ell$. Calibration selects
+\[
+\hat\lambda = \inf\Big\{\lambda : \hat{R}_n(\lambda) + c_n(\delta)
+  \le \alpha\Big\},
+\]
+where $\hat{R}_n$ is the empirical risk over $n$ calibration instances
+and $c_n(\delta)$ is a finite-sample correction term ensuring
+$R(\hat\lambda) \le \alpha$ with probability at least $1-\delta$.
+Conf-Gen's relaxation replaces the requirement that $(X,Y)$ be an
+exchangeable labeled pair with the weaker requirement that the sequence
+of \emph{generation instances} (and their associated risk scores) be
+exchangeable---sufficient to preserve the guarantee while accommodating
+memorization scores, clarification-sufficiency scores, and
+agent-correctness scores as the risk functional.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Define a task-specific, monotone risk functional over generated
+    outputs (memorization distance, clarification count, verifier
+    score).
+  \item Collect an exchangeable sequence of generation instances and
+    compute the empirical risk at a grid of thresholds $\lambda$.
+  \item Calibrate $\hat\lambda$ as the smallest threshold whose
+    finite-sample-corrected empirical risk meets the target $\alpha$.
+  \item At deployment, apply the calibrated threshold to new generation
+    instances, inheriting the risk guarantee.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+For any monotone bounded risk functional and any exchangeable sequence
+of generation instances, $R(\hat\lambda) \le \alpha$ holds with
+probability at least $1-\delta$ in finite samples---matching the
+guarantee strength of classical CRC, despite the absence of a
+conventional labeled calibration set.
+
+\section{Experimental Findings}
+
+The paper demonstrates Conf-Gen across three qualitatively different
+generative settings: certifying that image generator outputs are not
+memorized copies of training data, certifying that a conversational AI
+has asked sufficient clarifying questions before committing to an
+answer, and certifying the correctness of an AI agent's output---showing
+the same calibration recipe transfers across modalities and task types
+without redesign.
+
+\section{Ablations and Interpretation}
+
+\textbf{Unification:} Conf-Gen recovers prior ad hoc LLM conformal
+methods as special cases, showing they were instances of a single
+underlying relaxation rather than unrelated tricks.
+
+\textbf{Generality:} The framework extends to tasks with no natural
+notion of a held-out label at all, such as certifying properties of an
+agent's multi-step trajectory.
+
+\textbf{Practical takeaway:} Task designers need only supply a monotone
+risk functional over generation instances; the calibration and
+guarantee machinery is otherwise unchanged from classical CRC.
+
+\section*{Reference}
+
+Gabriel Loaiza-Ganem, Kevin Zhang, Wei Cui, Marc Law, Kin Kwan Leung.
+\textbf{Conf-Gen: Conformal Uncertainty Quantification for Generative
+Models}.
+arXiv:2605.28920, May 2026.
+\url{https://arxiv.org/abs/2605.28920}
+
+\end{document}

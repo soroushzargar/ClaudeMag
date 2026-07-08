@@ -1,0 +1,211 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{ICML 2026 Special Edition: Uncertainty \& Conformal Prediction}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  online conformal prediction \textbullet{}
+  universal portfolio algorithms \textbullet{}
+  regret bounds \textbullet{}
+  adversarial streams}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Online Conformal Prediction via Universal Portfolio Algorithms}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Parameter-Free Reduction Turns Coverage Tuning into Portfolio
+  Selection}\par\vspace{6pt}
+
+{\small\textbf{By} Tuo Liu, Edgar Dobriban \& Francesco Orabona
+  (University of Pennsylvania, Boston University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2602.03168 \textbullet{}
+  ICML 2026 Spotlight}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Online conformal prediction promises long-run coverage even on
+adversarial data streams---but every prior method needed a hand-tuned
+learning rate to actually deliver it. This paper shows that controlling
+a general notion of \emph{linearized regret} implies coverage for
+\emph{any} online algorithm, then reduces the resulting regret-minimization
+problem to two-asset portfolio selection. The result, \textbf{UP-OCP}, is
+parameter-free by construction, borrowing decades of tuning-free universal
+portfolio algorithms to deliver calibrated coverage without a single
+knob to turn.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Online conformal methods need a hand-tuned learning
+    rate to guarantee coverage---exactly the kind of choice adversarial
+    streams make impossible to validate in advance.
+  \item[Why it matters:] Mistuned online conformal intervals silently
+    lose their coverage guarantee on the non-stationary or adversarial
+    streams they are meant to handle.
+  \item[Method:] A regret-to-coverage reduction via the Fenchel
+    conjugate, followed by a reduction of the resulting problem to
+    two-asset portfolio selection.
+  \item[Result:] UP-OCP matches or exceeds tuned ACI-style baselines'
+    coverage with zero learning-rate parameters.
+  \item[Evidence:] Comparisons against Adaptive Conformal Inference (ACI)
+    variants on time-series and adversarial streams.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Online conformal prediction (OCP) methods maintain a calibrated
+threshold as data arrive one at a time, aiming for long-run
+$(1-\alpha)$ coverage even when the stream is non-stationary or
+adversarial. The dominant family, descended from Adaptive Conformal
+Inference (ACI), updates the threshold via an online-gradient-style
+rule governed by a learning rate. That learning rate trades off how
+quickly the method tracks distribution shift against how much it
+overreacts to noise---and the correct value is stream-dependent and
+unknowable in advance, precisely in the adversarial setting OCP exists
+to handle without such foreknowledge.
+
+This paper asks a structural question instead of a tuning question:
+what property of an online algorithm's regret actually implies
+coverage, for any algorithm at all?
+
+\section{Why Existing Approaches Fall Short}
+
+ACI-style methods require an algorithm-specific regret analysis for
+every new update rule, and their coverage guarantees are only as good
+as the learning rate chosen for that specific rule. Prior refinements
+made the tuning more forgiving but never removed it. Because the
+correctness of the guarantee depends on a hyperparameter that cannot be
+cross-validated on an adversarial stream without assuming away the very
+adversariality the method is supposed to survive, tuning is not merely
+inconvenient---it is a genuine gap in the coverage guarantee's
+practical reliability.
+
+\section{Core Mechanism}
+
+The authors show that controlling \emph{linearized regret} for the
+$(1-\alpha)$-pinball loss implies a long-run coverage bound for any
+online algorithm, via a black-box reduction that depends only on the
+Fenchel conjugate of an upper bound on that regret. This decouples
+``does it cover'' from ``which algorithm produced the threshold.''
+Recognizing that the threshold-update problem, viewed through this
+regret lens, is structurally identical to sequential betting between
+two assets (covered vs.\ not covered), they import universal portfolio
+algorithms---originally designed for sequential investing with no
+prior knowledge of asset returns---directly into the conformal setting.
+
+\section{Technical Formulation}
+
+Let $s_t$ be the nonconformity score at time $t$ and $q_t$ the
+calibrated threshold, with pinball loss
+\[
+\rho_{1-\alpha}(u) =
+\begin{cases}
+  (1-\alpha)\,u & u \ge 0 \\
+  -\alpha\,u & u < 0
+\end{cases},
+\qquad u = q_t - s_t.
+\]
+Define regret
+\[
+R_T = \sum_{t=1}^{T} \rho_{1-\alpha}(q_t - s_t)
+  - \min_{q} \sum_{t=1}^{T} \rho_{1-\alpha}(q - s_t).
+\]
+Empirical coverage error is controlled by $R_T$ through a bound derived
+from the Fenchel conjugate of the regret's upper envelope. Casting
+$q_t$'s update as a bet fraction between a ``covered'' and ``not
+covered'' asset reduces the problem to constant-rebalanced portfolio
+selection, for which universal portfolio algorithms guarantee
+$O(\log T)$ regret with no learning-rate parameter---translating,
+through the regret-to-coverage bound, into parameter-free coverage.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Observe nonconformity score $s_t$ at each round $t$.
+  \item Map the threshold-selection problem to a bet fraction over a
+    two-asset (covered / not covered) portfolio.
+  \item Update the bet using a universal portfolio algorithm---no
+    learning rate is set or tuned.
+  \item Convert the resulting bet fraction back into the calibrated
+    threshold $q_{t+1}$ and output the prediction interval.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+For any sequence of scores, including adversarially chosen ones, the
+empirical long-run miscoverage rate deviates from $\alpha$ by an amount
+controlled by $R_T/T \to 0$, where $R_T$ is the universal portfolio
+algorithm's $O(\log T)$ regret. The bound holds without assuming any
+distributional structure on the stream and without any user-chosen
+learning rate.
+
+\section{Experimental Findings}
+
+On time-series and deliberately adversarial data streams, UP-OCP
+matches or exceeds the empirical coverage of ACI variants that required
+per-stream learning-rate tuning, while UP-OCP itself uses none---removing
+an entire axis of hyperparameter search from online conformal
+deployment.
+
+\section{Ablations and Interpretation}
+
+\textbf{Against best-tuned ACI:} Even when ACI's learning rate is
+tuned in hindsight on each specific stream, UP-OCP's parameter-free
+coverage remains competitive, showing little practical cost to removing
+the tuning step.
+
+\textbf{Against mistuned ACI:} When ACI's learning rate is chosen
+without stream-specific tuning, its coverage degrades substantially;
+UP-OCP's guarantee is unaffected, since it never depended on a tuned
+parameter in the first place.
+
+\textbf{Beyond intervals:} The authors note the regret-to-coverage
+reduction is not intrinsically tied to the two-asset case, suggesting
+the portfolio-algorithm connection may extend to richer conformal
+prediction settings.
+
+\section*{Reference}
+
+Tuo Liu, Edgar Dobriban, Francesco Orabona.
+\textbf{Online Conformal Prediction via Universal Portfolio Algorithms}.
+arXiv:2602.03168, February 2026.
+\url{https://arxiv.org/abs/2602.03168}
+
+\end{document}

@@ -1,0 +1,205 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{ICML 2026 Special Edition: Uncertainty \& Conformal Prediction}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  conformal risk control \textbullet{}
+  robust optimization \textbullet{}
+  Pareto frontier \textbullet{}
+  predict-then-optimize}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Calibrating Decision Robustness via Inverse Conformal Risk
+  Control}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Tracing the Miscoverage-Regret Pareto Frontier Instead of Fixing a
+  Coverage Target in Advance}\par\vspace{6pt}
+
+{\small\textbf{By} Wenbin Zhou \& Shixiang Zhu
+  (Carnegie Mellon University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2510.07750 \textbullet{}
+  ICML 2026 Poster}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Robust optimization protects decisions by hedging against a conformal
+uncertainty set---but the robustness level behind that set is usually
+fixed ad hoc, either exposing decisions or wasting performance on
+needless conservatism. \textbf{Inverse Conformal Risk Control (ICRC)}
+flips the usual recipe: instead of fixing coverage and later measuring
+regret, it delivers simultaneous, distribution-free, finite-sample
+guarantees on both miscoverage \emph{and} regret across an entire
+family of policies, letting decision-makers pick their robustness level
+directly off a certified Pareto frontier.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The coverage level behind a robust conformal decision
+    policy is normally fixed a priori, with no statistical way to judge
+    whether it was the right choice.
+  \item[Why it matters:] As conformal sets increasingly feed robust
+    optimization pipelines in finance, operations, and safety-critical
+    planning, an unexamined robustness knob leaves performance on the
+    table invisibly.
+  \item[Method:] Simultaneous, distribution-free finite-sample bounds
+    on both miscoverage and regret across a family of robustness
+    levels, valid uniformly.
+  \item[Result:] A certified miscoverage-regret Pareto frontier that
+    decision-makers can select from \emph{after} seeing it, with the
+    guarantee still holding.
+  \item[Evidence:] Robust predict-then-optimize benchmarks comparing
+    ICRC's certified frontier against fixed-$\alpha$ conformal robust
+    optimization.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+In robust predict-then-optimize, a conformal uncertainty set
+$\mathcal{U}_\alpha(x)$ is built at coverage level $\alpha$, and a
+decision minimizes the worst-case cost over that set. The choice of
+$\alpha$ determines both the protection the decision receives and the
+optimization performance (regret) sacrificed for that protection---but
+conventional practice fixes $\alpha$ once, in advance, with no
+principled way to know whether that choice was too cautious or not
+cautious enough for the task's real cost structure. This paper makes
+the entire tradeoff between protection and performance a statistically
+certified, inspectable object rather than a single unexamined
+hyperparameter.
+
+\section{Why Existing Approaches Fall Short}
+
+Fixing a single coverage target $\alpha$ and only afterward measuring
+the regret it induces means the decision-maker learns whether their
+choice was good only after committing to it. Re-running the pipeline
+for a different $\alpha$ offers no statistical guarantee that the new
+choice is valid, since the original calibration was only certified for
+the original $\alpha$. This traps practitioners into a single ad hoc
+choice with no honest way to compare alternatives.
+
+\section{Core Mechanism}
+
+Rather than treating $\alpha$ as a knob set once, ICRC treats the
+entire curve relating miscoverage to regret as the object of interest.
+It constructs a family of policies indexed by robustness level and
+provides distribution-free, finite-sample bounds on both the true
+miscoverage rate and the true regret at every level in that family
+\emph{simultaneously}, so a decision-maker can inspect the empirical
+Pareto frontier after the fact and select whichever point matches their
+actual cost-risk preference---with the guarantee still holding for that
+a posteriori choice.
+
+\section{Technical Formulation}
+
+For a family of robust policies $\{\pi_\alpha\}$ built from uncertainty
+sets $\mathcal{U}_\alpha(x)$, define
+\[
+\text{miscoverage}(\alpha) = P\big(y \notin \mathcal{U}_\alpha(x)\big),
+\]
+\[
+\text{regret}(\alpha) = \mathbb{E}\big[\text{cost}(\pi_\alpha(x), y)\big]
+  - \min_{a} \mathbb{E}[\text{cost}(a, y)].
+\]
+These move in opposite directions as $\alpha$ varies, forming a Pareto
+frontier. ICRC constructs simultaneous confidence bands for both
+functions, valid uniformly over a grid of $\alpha$ values with
+probability at least $1-\delta$, using conformal calibration on a
+held-out set combined with uniform concentration arguments (in the
+style of DKW-type bounds) to control the multiple-testing-like
+inflation from evaluating many $\alpha$ values on the same data.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Build a grid of candidate robustness levels $\alpha$ and their
+    corresponding uncertainty sets $\mathcal{U}_\alpha(x)$.
+  \item On held-out calibration data, estimate miscoverage and regret
+    for every $\alpha$ in the grid.
+  \item Apply uniform concentration bounds to certify simultaneous
+    validity of both estimates across the whole grid.
+  \item Present the certified empirical Pareto frontier; the
+    decision-maker selects $\hat\alpha$ off the frontier according to
+    their cost-risk preference.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+With probability at least $1-\delta$, the true miscoverage and true
+regret curves are simultaneously bracketed by the certified bands at
+every $\alpha$ on the grid---so whichever $\hat\alpha$ the
+decision-maker picks \emph{after} inspecting the frontier still enjoys
+valid finite-sample guarantees on both quantities, unlike a guarantee
+calibrated for one $\alpha$ chosen in advance.
+
+\section{Experimental Findings}
+
+On robust predict-then-optimize benchmarks, ICRC's certified Pareto
+frontier lets practitioners identify robustness levels that achieve
+materially lower regret than conventional fixed-$\alpha$ conformal
+robust optimization at matched miscoverage, and vice versa---revealing
+that ad hoc $\alpha$ choices in prior pipelines were leaving performance
+on the table without practitioners ever being able to see it.
+
+\section{Ablations and Interpretation}
+
+\textbf{Grid resolution:} Finer grids over $\alpha$ tighten the
+achievable frontier at a modest cost in the width of the simultaneous
+confidence bands, reflecting the usual multiple-testing tradeoff.
+
+\textbf{Comparison to fixed-$\alpha$ baselines:} Any single fixed-$\alpha$
+policy corresponds to one point on ICRC's frontier; the benefit is
+purely in being able to see and choose among the alternatives with
+statistical validity.
+
+\textbf{Practical takeaway:} ICRC does not require the analyst to
+predict the right robustness level in advance---it makes the tradeoff
+observable and lets the choice come last.
+
+\section*{Reference}
+
+Wenbin Zhou, Shixiang Zhu.
+\textbf{Calibrating Decision Robustness via Inverse Conformal Risk
+Control}.
+arXiv:2510.07750, October 2025.
+\url{https://arxiv.org/abs/2510.07750}
+
+\end{document}
