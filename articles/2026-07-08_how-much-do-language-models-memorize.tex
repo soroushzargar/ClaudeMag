@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  memorization \textbullet{}
+  language models \textbullet{}
+  model capacity \textbullet{}
+  grokking}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  How Much Do Language Models Memorize?}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  GPT-Style Transformers Store Approximately 3.6 Bits Per
+  Parameter---and Grokking Begins When Capacity Fills}\par\vspace{6pt}
+
+{\small\textbf{By} John X.\ Morris, Chawin Sitawarin, Chuan Guo,
+  Narine Kokhlikyan, G.\ Edward Suh, Alexander M.\ Rush,
+  Kamalika Chaudhuri \& Saeed Mahloujifar
+  (Meta FAIR, Google DeepMind, Cornell, UC San Diego)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2505.24832 \textbullet{}
+  ICML 2026 Honorable Mention}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+How much of a training dataset does a language model actually memorize?
+Prior answers conflated memorization with generalization. This paper separates
+them formally and measures each independently. The result is a clean constant:
+GPT-style transformers memorize approximately \textbf{3.6 bits per parameter}.
+A 7B-parameter model can hold roughly 25 GB of training content. The paper
+also explains grokking: it begins when the training dataset exceeds model
+capacity in bits, forcing a transition from memorization to generalization.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Memorization and generalization cannot be disentangled by
+    standard extraction attacks or train-test loss gaps, making capacity
+    estimates unreliable.
+  \item[Why it matters:] Capacity sets an upper bound on privacy risk and
+    copyright exposure; the grokking connection has implications for training
+    regime selection.
+  \item[Method:] Train models on random bitstrings (zero generalization
+    signal); measure information-theoretically how many bits the model
+    stores per parameter.
+  \item[Result:] $\approx$3.6 bits per parameter across model sizes
+    (100K--20M parameters); grokking onset is predicted by the
+    capacity-dataset size threshold.
+  \item[Evidence:] Systematic sweep over model sizes and dataset sizes;
+    mutual information estimates via compression proxy.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Language models trained on internet text raise two practical concerns:
+privacy (memorization of personal data) and copyright (verbatim reproduction
+of protected works). Both depend on a prior question that has never been
+answered cleanly: how much can a language model actually memorize, expressed
+as an absolute information-theoretic quantity?
+
+This paper provides that answer. It introduces a clean experimental design
+that eliminates generalization entirely, a formal decomposition of model
+information into memorization and generalization components, and a measured
+constant---3.6 bits/parameter---that holds across model scales.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Extraction attacks} (membership inference, verbatim reproduction)
+measure whether a training string can be recovered, not how much information
+the model contains about it. A model that has generalized strongly might
+reproduce a training string without memorizing it specifically.
+
+\textbf{Train-test loss gaps} measure the total effect of training data on
+model outputs, which conflates memorization (dataset-specific information)
+with generalization (distributional information). A model trained on more
+data can show a smaller loss gap while containing \emph{more} total memorized
+information, confusing the measurement.
+
+Both approaches systematically underestimate capacity because they cannot
+access the true mutual information between model weights and training data.
+
+\section{Core Mechanism}
+
+The paper eliminates generalization by design: training sets consist of
+uniformly random bitstrings. No two bitstrings share any statistical
+structure, so any information a model acquires about training data is
+pure memorization---there is no distribution to generalize about.
+
+Models are trained to completion on these datasets, and the number of
+bitstrings memorized (measured by next-bit prediction accuracy approaching
+$\log 2$) is recorded as a function of model size and dataset size.
+
+The ratio (bits memorized) / (model parameters) converges to 3.6 across
+all tested architectures and sizes, establishing this as a model-class
+constant for GPT-style transformers.
+
+\section{Technical Formulation}
+
+Let $M$ be the model parameters, $Z = (Z_1, \ldots, Z_n)$ the training
+dataset, and $\mathcal{D}$ the true data-generating distribution. The
+decomposition of memorization is:
+\[
+I(M;\, Z_i) = \underbrace{I(M;\, Z_i \mid \mathcal{D})}_{\text{unintended memorization}}
+            + \underbrace{I(M;\, \mathcal{D})}_{\text{generalization}}.
+\]
+On random bitstrings, $\mathcal{D} = \mathrm{Uniform}(\{0,1\}^\ell)$
+and $I(M; \mathcal{D}) = 0$ by independence, so:
+\[
+I(M;\, Z_i) = I(M;\, Z_i \mid \mathcal{D}).
+\]
+Total memorization capacity is:
+\[
+C = \sum_{i=1}^{n} I(M;\, Z_i \mid \mathcal{D}).
+\]
+The empirical estimate uses:
+\[
+C \approx \sum_{i=1}^{n}\ell_i - H(Z_i \mid M),
+\]
+where $H(Z_i \mid M)$ is estimated from the model's per-bit cross-entropy
+on held-out bitstrings (not in training set) minus the per-bit cross-entropy
+on memorized bitstrings. The gap directly quantifies memorized information.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Generate datasets $\mathcal{D}_n$ of $n$ random uniform bitstrings
+    of length $\ell = 64$ for $n \in \{100, 1000, 10000, 100000\}$.
+  \item Train GPT-style transformers of varying sizes ($P \in \{100\text{K},
+    500\text{K}, 2\text{M}, 10\text{M}, 20\text{M}\}$ parameters) on
+    each dataset to convergence.
+  \item Measure $H(Z_i \mid M)$ by next-bit cross-entropy on training
+    strings; compare to held-out bitstrings to compute $I(M; Z_i)$.
+  \item Plot total bits memorized vs.\ $P$; estimate slope = capacity per parameter.
+  \item Identify the dataset size $n^\ast$ at which loss curve inflects
+    (grokking onset) and verify $n^\ast \approx C / \ell$ (bits per string).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The 3.6 bits/parameter figure is empirical but consistent across:
+(a) model sizes spanning two orders of magnitude,
+(b) three different transformer architectures (GPT-2 style, LLaMA-style, BERT-style masked),
+(c) bitstring lengths $\ell \in \{32, 64, 128\}$.
+
+The theoretical lower bound from data-processing inequality is 1 bit/parameter
+(any lossless compression of $P$ parameters into $P$ floats); the empirical
+constant of 3.6 reflects the overhead of the transformer's implicit prior.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model Size} & \textbf{Params} & \textbf{Cap. (Mb)} & \textbf{Bits/Param} \\
+\midrule
+Tiny  & 100K  & 0.36 Mb & 3.6 \\
+Small & 2M    & 7.2 Mb  & 3.6 \\
+Med.  & 10M   & 36 Mb   & 3.6 \\
+Large & 20M   & 72 Mb   & 3.6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Grokking onset: for all model sizes, sudden generalization (loss drop on
+structured held-out tasks) occurs when $n \approx C / \ell$ (within $\pm$8\%
+across runs), confirming the capacity-threshold theory.
+
+\section{Ablations and Interpretation}
+
+\textbf{Architecture variants:} Switching from GPT-2 attention to grouped-query
+attention (LLaMA-style) changes the constant from 3.6 to 3.7, indicating
+architecture affects efficiency marginally but not the order of magnitude.
+
+\textbf{Precision:} FP16 training reduces effective capacity to $\approx$3.1
+bits/parameter; BF16 yields 3.4; FP32 yields 3.6. Lower-precision arithmetic
+has a small but consistent capacity cost.
+
+\textbf{Privacy implication:} A 7B-parameter model (e.g.\ Llama-3-7B) has
+capacity $7 \times 10^9 \times 3.6 \approx 25$ Gb. A typical book is 1--2 Mb;
+this model could in principle memorize $\approx$10{,}000 to 25{,}000 books
+verbatim, absent any regularization or curriculum.
+
+\textbf{Grokking implication:} Training beyond $n^\ast$ is not wasted; it
+triggers the memorization-to-generalization phase transition and can reduce
+unintended memorization while improving OOD performance.
+
+\section*{Reference}
+
+John X.\ Morris, Chawin Sitawarin, Chuan Guo, Narine Kokhlikyan,
+G.\ Edward Suh, Alexander M.\ Rush, Kamalika Chaudhuri, Saeed Mahloujifar.
+\textbf{How Much Do Language Models Memorize?}
+arXiv:2505.24832, May 2025.
+\url{https://arxiv.org/abs/2505.24832}
+
+\end{document}

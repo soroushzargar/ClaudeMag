@@ -1,0 +1,229 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  data attribution \textbullet{}
+  video generation \textbullet{}
+  optical flow \textbullet{}
+  temporal dynamics}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Motion Attribution for Video Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  MOTIVE Identifies Training Clips That Teach Video
+  Models \emph{How} Things Move}\par\vspace{6pt}
+
+{\small\textbf{By} Xindi Wu, Despoina Paschalidou, Jun Gao, Antonio Torralba,
+  Laura Leal-Taixe, Olga Russakovsky, Sanja Fidler \& Jonathan Lorraine
+  (NVIDIA, MIT, Princeton)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2601.08828 \textbullet{}
+  ICML 2026 Oral}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Data attribution for video generation has focused on visual appearance while
+ignoring the dimension users care about most: motion. MOTIVE (MOTIon attribution
+for Video gEneration) introduces motion-weighted influence functions that isolate
+temporal dynamics from static appearance, identifying which training clips teach
+models how objects and cameras move. Fine-tuning on MOTIVE-selected data achieves
+a \textbf{74.1\%} human preference win rate over the base model and raises
+VBench dynamic degree from 41.3\% to \textbf{47.6\%}.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing video data attribution methods measure influence on
+    per-frame appearance, not temporal dynamics; data curation cannot target
+    motion quality specifically.
+  \item[Why it matters:] Motion realism is the primary dimension separating
+    high-quality from poor video generation; without motion-specific attribution,
+    curation is blind to it.
+  \item[Method:] Motion-weighted optical-flow loss masks focus gradient-based
+    influence computation on dynamic spatial-temporal regions.
+  \item[Result:] 74.1\% human win rate; VBench dynamic degree 47.6\%
+    vs.\ 41.3\% (random) and 43.8\% (whole-video attribution).
+  \item[Evidence:] Evaluated on CogVideoX fine-tuning with three curated
+    datasets; human studies ($n{=}200$); VBench motion metrics.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Video generation has advanced dramatically, but temporal realism---the
+physical plausibility of motion---consistently lags behind per-frame
+visual quality. The gap is a data problem: it is unclear which training
+clips are responsible for teaching a model that objects fall, water flows,
+or cameras pan smoothly.
+
+Data attribution, which quantifies each training example's influence on
+model behavior, is the natural tool for this problem. But existing attribution
+methods compute influence on a generic generation loss, dominated by the
+high-frequency spatial structure of individual frames. Motion signals---which
+are lower-magnitude and distributed across frame pairs---are drowned out.
+
+MOTIVE addresses this by constructing a motion-specific loss function and
+computing influence with respect to it.
+
+\section{Why Existing Approaches Fall Short}
+
+Gradient-based influence functions (TRAK, DataInf, EK-FAC) assign each
+training example a score based on its gradient alignment with a test-set
+loss. For video, the default loss is reconstruction error summed uniformly
+over all pixels and frames.
+
+This aggregation is problematic for motion attribution because:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Static backgrounds contribute most pixels and dominate the loss.
+  \item Motion signals are typically localized to a small fraction of
+    the spatial extent (moving objects, hands, cameras).
+  \item Two clips with identical backgrounds but opposite motion patterns
+    have near-identical influence scores under whole-video attribution.
+\end{itemize}
+
+Empirically, whole-video attribution selects clips that match the test
+sequence's scene composition, not its motion patterns, yielding only
+marginal improvements in dynamic degree (43.8\% vs.\ 41.3\% random).
+
+\section{Core Mechanism}
+
+MOTIVE constructs a \textbf{motion-weighted loss mask} from optical flow:
+pixels with high inter-frame displacement receive high weight, static
+pixels receive near-zero weight. Influence computation then operates on
+this masked loss, making gradients sensitive to motion-generating
+patterns rather than static appearance.
+
+The motion mask $M(x,t)$ is derived from the optical flow field
+$f(x,t) \in \mathbb{R}^2$ between frames $t$ and $t{+}1$:
+\[
+M(x,t) = \mathrm{softmax}_\tau\!\left(\|f(x,t)\|_2\right)
+\]
+where the softmax is taken over all spatial positions $x$ and times $t$,
+with temperature $\tau$ controlling mask sharpness. This reweights the
+loss to be high wherever the scene is moving.
+
+\section{Technical Formulation}
+
+The motion-weighted loss for training clip $z_i$ is:
+\[
+\mathcal{L}_M(z_i;\theta) = \sum_{t=1}^{T}\sum_{x \in \Omega}
+  M(x,t)\cdot\ell\!\left(v_\theta(x,t),\,f_t(x)\right)
+\]
+where $v_\theta(x,t)$ is the model's prediction for pixel $x$ at frame $t$
+and $\ell$ is the per-pixel reconstruction loss.
+
+The influence score of training clip $z_i$ on a motion-quality test loss $\mathcal{L}_M(z_\text{test})$ is:
+\[
+\mathcal{I}(z_i) = -\nabla_\theta \mathcal{L}_M(z_\text{test})^\top
+  H_\theta^{-1}\,\nabla_\theta \mathcal{L}_M(z_i)
+\]
+where $H_\theta = \frac{1}{n}\sum_{j=1}^{n}\nabla^2_\theta\mathcal{L}_M(z_j)$
+is the Hessian. The Hessian-vector product $H_\theta^{-1}v$ is approximated
+via 3 iterations of LiSSA (Linear time Stochastic Second-order Algorithm),
+making MOTIVE scalable to models with billions of parameters.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Flow estimation:} compute optical flow $f(x,t)$ for all frames
+    of each candidate training clip using a pre-trained flow network (RAFT).
+  \item \textbf{Mask construction:} compute $M(x,t)$ via spatiotemporal softmax
+    over flow magnitudes.
+  \item \textbf{LiSSA precomputation:} compute $v_\text{test} = H_\theta^{-1}\nabla_\theta\mathcal{L}_M(z_\text{test})$
+    using 3 LiSSA iterations.
+  \item \textbf{Influence scoring:} compute $\mathcal{I}(z_i) = -v_\text{test}^\top\nabla_\theta\mathcal{L}_M(z_i)$
+    for each candidate clip.
+  \item \textbf{Curation:} select top-$k$ clips by influence score for fine-tuning.
+  \item \textbf{Fine-tuning:} standard video diffusion fine-tuning on selected clips.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+MOTIVE provides no formal approximation guarantee on influence estimation,
+but establishes empirically that the LiSSA approximation error is negligible
+relative to the rank-ordering of training clips: Spearman rank correlation
+between 3-iteration and exact influence (computed on small-scale models
+where exact inversion is tractable) is 0.94.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Curation Method} & \textbf{VBench Dyn.} & \textbf{Human Pref.} \\
+\midrule
+Random selection   & 41.3\% & -- \\
+Whole-video attr.  & 43.8\% & 52.1\% \\
+\textbf{MOTIVE}    & \textbf{47.6\%} & \textbf{74.1\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Motion smoothness (VBench) also improves: MOTIVE achieves 96.8\%
+vs.\ 95.2\% for random selection. Physical plausibility (human study
+on gravity and collision realism) improves by 18 percentage points.
+
+\section{Ablations and Interpretation}
+
+\textbf{Flow threshold:} Setting $\tau \to 0$ (binary motion mask at median
+flow magnitude) reduces VBench dynamic degree to 45.1\%; smooth soft masks
+are important.
+
+\textbf{LiSSA steps:} 1 step yields 46.1\% (noisy influence estimates);
+3 steps yields 47.6\%; 10 steps yields 47.7\% (negligible gain).
+
+\textbf{Test set choice:} Influence is computed relative to a motion-diverse
+test set; using a static-scene test set produces data selection equivalent
+to whole-video attribution, confirming the motion mask is the active ingredient.
+
+\textbf{Model agnosticism:} Results replicate on CogVideoX-2B and CogVideoX-5B;
+the framework is model-architecture agnostic.
+
+\section*{Reference}
+
+Xindi Wu, Despoina Paschalidou, Jun Gao, Antonio Torralba, Laura Leal-Taixe,
+Olga Russakovsky, Sanja Fidler, Jonathan Lorraine.
+\textbf{Motion Attribution for Video Generation}.
+arXiv:2601.08828, January 2026.
+\url{https://arxiv.org/abs/2601.08828}
+
+\end{document}

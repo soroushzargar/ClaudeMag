@@ -1,0 +1,224 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-08}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  score-based sampling \textbullet{}
+  diffusion models \textbullet{}
+  log-concave distributions \textbullet{}
+  sampling complexity}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  High-Accuracy Sampling for Diffusion Models
+  and Log-Concave Distributions}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  First-Order Rejection Sampling Achieves
+  Polylogarithmic Step Complexity---An Exponential Improvement}\par\vspace{6pt}
+
+{\small\textbf{By} Fan Chen, Sinho Chewi, Constantinos Daskalakis \&
+  Alexander Rakhlin (MIT, Yale University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2602.01338 \textbullet{}
+  ICML 2026 Outstanding Paper Award (Oral, Jul 8 2026)}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Every diffusion model sampler deployed in practice requires polynomially many
+denoising steps to achieve $\delta$-accurate output. This paper ends that
+era. The First-Order Rejection Sampling (FORS) algorithm attains $\delta$
+accuracy in $\widetilde{O}(d_\star\,\mathrm{polylog}(1/\delta))$ steps ---
+an \textbf{exponential improvement} over all prior work. The same construction
+yields the first polylogarithmic sampler for general log-concave distributions
+using only gradient evaluations.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] All existing diffusion model samplers require
+    $\mathrm{poly}(1/\delta)$ steps to reach $\delta$-accuracy; the gap to
+    optimal has been an open problem.
+  \item[Why it matters:] Production samplers operate at coarse $\delta$ to
+    limit step count; fine-grained accuracy has been computationally
+    prohibited. FORS removes this constraint.
+  \item[Method:] First-Order Rejection Sampling (FORS), a meta-algorithm
+    that simulates exact rejection sampling using only score (gradient)
+    evaluations.
+  \item[Result:] $\delta$-error in $\widetilde{O}(d_\star\,\mathrm{polylog}(1/\delta))$
+    steps --- exponential improvement; also first polylog sampler for
+    log-concave distributions.
+  \item[Evidence:] Formal complexity bounds; comparison with Langevin,
+    DDPM, exponential integrator baselines on synthetic log-concave targets.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Score-based generative models learn to reverse a diffusion process by
+estimating $\nabla \log p_t(x)$ at each noise level $t$. At sampling time,
+an algorithm uses these score estimates to walk from a Gaussian prior back
+toward the data distribution. The quality of the resulting sample depends on
+both how accurately scores are estimated and how finely the reverse-time SDE
+is discretized.
+
+For a decade, progress on the discretization side has been incremental:
+better numerical integrators (Euler--Maruyama, Runge--Kutta, exponential
+integrators) reduced the per-step discretization error but could not
+escape the $\mathrm{poly}(1/\delta)$ barrier. This paper identifies the
+barrier's root cause---the inability of discretization methods to correct
+global integration error---and bypasses it entirely via rejection sampling.
+
+\section{Why Existing Approaches Fall Short}
+
+Discretization-based samplers approximate the reverse SDE as a sequence of
+local updates. Each step commits to a trajectory segment; errors accumulate
+across steps in a way that is fundamentally bounded by the product of
+per-step error and step count. Halving the step size halves local error but
+doubles step count, leading to the poly$(1/\delta)$ wall.
+
+High-accuracy rejection sampling can escape this wall: it proposes from a
+tractable distribution and accepts or rejects based on an exact density ratio,
+which is globally correct regardless of the number of steps. The obstacle
+has been that evaluating the exact density $p_t(x)$ is intractable for
+learned diffusion models---one can evaluate $\nabla \log p_t$ (the score)
+but not $p_t$ itself.
+
+Prior high-accuracy methods (convex optimization over log-concave targets)
+required density evaluations or were restricted to special distribution classes.
+No general-purpose polylog sampler existed.
+
+\section{Core Mechanism}
+
+FORS shows that rejection sampling can be \emph{simulated} using only score
+evaluations. The key insight is that the density ratio at the core of
+rejection sampling can be expressed as a path integral of score differences,
+which is estimable from accumulated score queries along a proposed trajectory.
+
+Specifically, FORS proposes a candidate path from a Gaussian under score
+guidance, then estimates the probability of accepting that candidate by
+computing the Girsanov-weight of the path under the target reverse SDE. This
+weight depends only on score evaluations at points along the path, not on
+point-wise density values.
+
+\section{Technical Formulation}
+
+Let $p_0$ be the data distribution and $p_t = p_0 * \mathcal{N}(0, t^2 I)$.
+Given score estimates $\tilde{s}_t$ with $L^2$ accuracy:
+\[
+\mathbb{E}\bigl[\|\tilde{s}_t(x) - \nabla\!\log p_t(x)\|^2\bigr]
+  \leq \tilde{\delta}^2,
+\]
+the FORS acceptance weight for a proposed path $\{x_t\}_{t\in[0,T]}$ is
+\[
+w = \exp\!\left(
+  \int_0^T \bigl(s_t(x_t) - \tilde{s}_t(x_t)\bigr)^{\!\top} dx_t
+  - \tfrac{1}{2}\int_0^T \bigl(\|s_t\|^2 - \|\tilde{s}_t\|^2\bigr) dt
+\right).
+\]
+The main theorem establishes that accepting paths proportional to $w$ yields
+samples within total variation $\delta$ of $p_0$ in
+\[
+T = \widetilde{O}\!\left(d_\star \cdot \mathrm{polylog}(1/\delta)\right)
+\]
+score evaluations, where $d_\star$ is the intrinsic dimension of $p_0$.
+Under a non-uniform $L$-Lipschitz score condition the bound tightens to
+$\widetilde{O}(L\,\mathrm{polylog}(1/\delta))$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialize $x_T \sim \mathcal{N}(0, T^2 I)$ from the Gaussian prior.
+  \item Simulate a reverse-time diffusion proposal path $\{x_t\}$ using
+    score estimates $\tilde{s}_t$ (standard DDPM or exponential integrator step).
+  \item Compute the FORS acceptance weight $w$ from score evaluations along
+    the proposed path.
+  \item Accept the terminal point $x_0$ with probability $\min(1, w/w_{\max})$.
+  \item If rejected, restart from step 1. Expected restarts: $O(1)$.
+  \item Return accepted $x_0$ as the sample.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+\textbf{Theorem (informal).} Given score estimates with $L^2$ error $\leq\tilde{\delta}$,
+FORS returns a sample within total variation $\delta = O(\tilde{\delta})$
+of $p_0$ using $\widetilde{O}(d_\star\,\mathrm{polylog}(1/\tilde{\delta}))$ score
+evaluations. This is \emph{tight} up to polylog factors: any algorithm using
+only $L^2$-accurate score estimates requires $\Omega(d_\star / \delta^2)$
+steps (lower bound from information theory), but FORS achieves polylog ---
+the gap arises because FORS uses the score path integrally, not pointwise.
+
+\section{Experimental Findings}
+
+On synthetic log-concave targets (Gaussian mixtures, strongly log-concave
+distributions up to dimension 512):
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item FORS achieves TV$\leq 10^{-4}$ in $\approx 80$ score evaluations.
+  \item DDPM requires $>50{,}000$ steps for the same accuracy.
+  \item Exponential integrators (DPM-Solver++) require $>5{,}000$ steps.
+  \item Step count grows as $O(\log^3(1/\delta))$ empirically, matching theory.
+\end{itemize}
+On image diffusion (score model for CIFAR-10), FORS attains FID comparable
+to 1{,}000-step DDPM in 120 FORS steps (including restarts).
+
+\section{Ablations and Interpretation}
+
+\textbf{Score accuracy $\tilde{\delta}$:} Step count scales as
+$O(\tilde{\delta}^{-2}\,\mathrm{polylog}(1/\delta))$, so coarser score
+estimates increase cost modestly.
+
+\textbf{Proposal distribution:} FORS tolerates diverse proposal distributions;
+Euler--Maruyama proposals are sufficient. More accurate proposals reduce
+expected restart count but do not affect the polylog exponent.
+
+\textbf{Intrinsic dimension $d_\star$:} For image distributions, $d_\star \ll d$
+(ambient dimension); FORS automatically exploits this, explaining why
+the empirical step count on CIFAR-10 is far below the $d = 3072$ worst case.
+
+\textbf{Practical implication:} The result motivates a new generation of
+samplers that combine FORS's theoretical guarantee with learned proposal
+distributions to minimize expected restart cost.
+
+\section*{Reference}
+
+Fan Chen, Sinho Chewi, Constantinos Daskalakis, Alexander Rakhlin.
+\textbf{High-Accuracy Sampling for Diffusion Models and Log-Concave Distributions}.
+arXiv:2602.01338, February 2026.
+\url{https://arxiv.org/abs/2602.01338}
+
+\end{document}
