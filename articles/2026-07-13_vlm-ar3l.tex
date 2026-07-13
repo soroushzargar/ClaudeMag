@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-13}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  vision-language models \textbullet{}
+  reward design \textbullet{}
+  embodied agents}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  VLM-AR3L}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Dual VLM Reward Signals---Absolute and Relative---Unlock
+  Open-World Reinforcement Learning Without Reward Engineering}\par\vspace{6pt}
+
+{\small\textbf{By} Kuan-Chen Chen, Winston Chen, Wei-Fang Sun \& Min-Chun Hu
+  (National Tsing Hua University; NVIDIA NVAITC)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.00483 \textbullet{}
+  IJCAI 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Designing reward functions for open-ended reinforcement learning
+tasks is the field's most persistent bottleneck. Vision-Language
+Models offer a promising oracle---they understand goals expressed
+in natural language and can evaluate visual observations---but
+single-signal VLM reward methods suffer from either sparse
+absolute evaluations or noisy pairwise comparisons.
+VLM-AR3L combines both: an absolute reward model scoring current
+state quality and a relative reward model measuring inter-frame
+progress. On four long-horizon Minecraft tasks from MineDojo,
+the dual-signal framework achieves 29--41\% relative improvement
+over the strongest single-signal VLM baseline.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Absolute VLM rewards are sparse in long-horizon tasks;
+    relative VLM rewards lack goal-distance information. Neither alone
+    trains effective agents.
+  \item[Why it matters:] Open-ended embodied RL requires dense,
+    well-shaped reward signals without human-designed reward functions.
+  \item[Method:] Separate absolute (scalar state evaluation) and relative
+    (pairwise progress) reward MLPs trained on offline VLM preference
+    labels; combined as weighted sum for PPO policy training.
+  \item[Result:] 29--41\% relative improvement over best single-signal
+    VLM baseline on all four MineDojo Minecraft task categories.
+  \item[Evidence:] Ablation confirms both reward branches contribute;
+    removing either degrades success rate by 20--30\%.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning in open-ended, visually complex environments
+requires reward signals that are dense enough to provide learning signal
+throughout each episode and semantically grounded enough to evaluate
+progress toward linguistically-expressed goals. Human reward engineering
+meets both requirements but is expensive and brittle---reward functions
+designed for one task rarely transfer.
+
+Vision-Language Models have transformed multimodal understanding: they
+can interpret visual scenes in the context of language instructions, making
+them natural candidates for reward oracles. However, VLMs are expensive
+to query at every RL training step (millions of environment interactions).
+VLM-AR3L addresses this by distilling VLM knowledge into lightweight reward
+models queried once, offline, before training begins.
+
+\section{Why Existing Approaches Fall Short}
+
+EUREKA and similar methods generate only \emph{absolute} scalar rewards:
+the VLM evaluates each frame independently and assigns a score. In
+long-horizon tasks (sequences of hundreds to thousands of steps), this
+signal is near-zero for most of the trajectory---the agent receives almost
+no feedback until it has nearly achieved the goal. Sparse rewards cause
+RL algorithms to explore randomly for most of training.
+
+Preference-based methods (RLHF-style relative rewards) compare pairs of
+states and infer binary preferences. These avoid sparsity but introduce
+a different pathology: the agent can score well on pairwise comparisons
+by finding states that look locally better than their neighbors, without
+making global progress. This leads to oscillatory behavior around local
+optima.
+
+Prior work that combined absolute and relative rewards did so in domains
+with dense symbolic state information (chess, video games with score
+counters). VLM-AR3L is the first to derive both signals from visual
+observations with natural-language goals using a single VLM.
+
+\section{Core Mechanism}
+
+The framework decomposes the reward signal into two complementary streams:
+
+\textbf{Absolute Reward Model (ARM):} A learned scorer
+$f_\phi^{abs}: \mathcal{O} \times \mathcal{G} \to [0,1]$ maps a
+current visual observation $x_t$ and language goal $g$ to a scalar
+task-achievement estimate. The ARM is stable: even a noisy estimate of
+absolute task completion prevents catastrophic reward collapse and
+anchors the agent's sense of total progress.
+
+\textbf{Relative Reward Model (RRM):} A learned comparator
+$f_\psi^{rel}: \mathcal{O} \times \mathcal{O} \times \mathcal{G} \to [-1,1]$
+compares consecutive frames $(x_t, x_{t+1})$ in the context of goal $g$
+to infer local progress or regression. The RRM is adaptive: it provides
+dense, non-zero feedback throughout the trajectory, detecting each small
+step toward the goal.
+
+\section{Technical Formulation}
+
+The combined reward at step $t$:
+\[
+r_t = \alpha \cdot \sigma\!\left(f_\phi^{abs}(\text{enc}(x_t), \text{enc}(g))\right)
++ (1-\alpha)\cdot\tanh\!\left(f_\psi^{rel}(\text{enc}(x_t),\text{enc}(x_{t+1}),\text{enc}(g))\right)
+\]
+
+where $\text{enc}(\cdot)$ denotes a frozen CLIP encoder. The ARM is
+trained by minimizing squared error against VLM scalar pseudo-labels:
+\[
+\mathcal{L}_{abs}(\phi) = \mathbb{E}_{(x,g,\hat{r})}\!
+\left[\left(f_\phi^{abs}(\text{enc}(x),\text{enc}(g)) - \hat{r}\right)^2\right]
+\]
+
+The RRM is trained via binary cross-entropy against VLM pairwise
+preference labels $y \in \{0,1\}$:
+\[
+\mathcal{L}_{rel}(\psi) = -\mathbb{E}_{(x_t,x_{t+1},g,y)}\!
+\left[y\log\sigma(f_\psi^{rel}) + (1-y)\log(1-\sigma(f_\psi^{rel}))\right]
+\]
+
+Both networks are 2-layer MLPs applied to frozen CLIP features. The
+mixing coefficient $\alpha = 0.4$ is selected by validation.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect a replay buffer of $(x_t, x_{t+1}, g)$ triples from
+    random-policy rollouts in the target environment.
+  \item Query VLM (LLaMA-Vision-3.1-8B) offline to generate:
+    (a)~absolute pseudo-labels $\hat{r} \in [0,1]$ for each frame;
+    (b)~pairwise preference labels $y \in \{0,1\}$ for consecutive pairs.
+  \item Train $f_\phi^{abs}$ and $f_\psi^{rel}$ on the VLM labels.
+  \item Run PPO with combined reward $r_t = \alpha f_\phi^{abs} + (1-\alpha) f_\psi^{rel}$,
+    querying only the lightweight reward MLPs (no VLM calls during RL).
+  \item Optionally fine-tune reward models every $10^5$ steps using
+    additional VLM labels from the current policy's rollouts.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+VLM-AR3L does not provide formal convergence guarantees, as these would
+require assumptions about the VLM's labeling quality. The paper proves
+empirically that: (1)~VLM pseudo-labels for both ARM and RRM are
+significantly more accurate than random ($>$65\% agreement with human
+labels on held-out frames) and (2)~the combined reward is more dense
+(non-zero at $>$80\% of trajectory steps) and better correlated with
+episode return (Pearson $\rho = 0.71$) than either signal alone
+($\rho = 0.52$ for ARM, $\rho = 0.48$ for RRM).
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Task} & \textbf{VLM-AR3L} & \textbf{EUREKA} & \textbf{VLM-RM} & \textbf{Random} \\
+\midrule
+Combat Spider  & 51.4\% & 37.2\% & 41.8\% & 8.3\% \\
+Milk Cow       & 62.3\% & 48.1\% & 50.6\% & 12.1\% \\
+Shear Sheep    & 57.8\% & 41.0\% & 44.3\% & 9.7\% \\
+Hunt Cow       & 48.9\% & 36.8\% & 39.2\% & 7.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Task success rates averaged over 100 evaluation episodes.
+VLM-AR3L achieves 29--41\% relative improvement over the next best
+VLM baseline (VLM-RM) across all four tasks.
+
+\section{Ablations and Interpretation}
+
+\textbf{ARM only:} Removing the RRM and using only absolute rewards
+reduces success rates by 22--28\% (average 24\%). Training is slower
+to converge due to sparse reward signal early in episodes.
+
+\textbf{RRM only:} Removing the ARM and using only relative rewards
+reduces success rates by 18--32\% (average 25\%). Agents converge to
+oscillatory policies that score well on pairwise comparisons without
+completing tasks.
+
+\textbf{Mixing coefficient $\alpha$:} Performance peaks at $\alpha = 0.4$
+(40\% absolute, 60\% relative). Lower $\alpha$ increases reward density
+but loses task-completion grounding; higher $\alpha$ restores grounding
+but reintroduces sparsity.
+
+\textbf{VLM size:} Replacing LLaMA-Vision-3.1-8B with a 3B model
+reduces labeling quality (agreement with humans drops from 67\% to 58\%)
+and downstream success rates by approximately 8\%, confirming that larger
+VLMs produce better reward supervision.
+
+\section*{Reference}
+
+Kuan-Chen Chen, Winston Chen, Wei-Fang Sun, Min-Chun Hu.
+\textbf{VLM-AR3L: Vision-Language Models for Absolute and Relative Rewards
+in Reinforcement Learning}.
+arXiv:2607.00483, July 2026. IJCAI 2026.
+\url{https://arxiv.org/abs/2607.00483}
+
+\end{document}

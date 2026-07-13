@@ -1,0 +1,255 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-13}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  random matrix theory \textbullet{}
+  generative models \textbullet{}
+  statistical learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  The Seed Knows the Model}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Random Matrix Theory Reveals Why Diffusion Models
+  Trained on Different Data Produce the Same Images}\par\vspace{6pt}
+
+{\small\textbf{By} Binxu Wang, Jacob A. Zavatone-Veth \& Cengiz Pehlevan
+  (Harvard Kempner Institute; Harvard Society of Fellows; Harvard SEAS)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2602.02908 \textbullet{}
+  ICML 2026 Oral / Honorable Mention}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Train two diffusion models on non-overlapping halves of ImageNet. Give
+both the same noise seed. Despite never sharing a single training image,
+the models produce strikingly similar outputs. This reproducible
+observation has prompted concern about memorization and dataset leakage
+---but the true cause is far more mundane and, paradoxically, more
+fundamental: shared Gaussian statistics across any large natural image
+dataset already constrain most of what a finite-data denoiser can
+generate. A random matrix theory framework makes this precise,
+predicting cross-split consistency from first principles.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Diffusion models trained on disjoint data subsets
+    generate nearly identical images from the same noise seed, raising
+    memorization and reproducibility concerns.
+  \item[Why it matters:] Understanding the source of this consistency
+    is critical for auditing generative models for data privacy, copyright,
+    and reproducibility.
+  \item[Method:] Random matrix theory analysis of the linear diffusion model;
+    exact formulas for the expected denoiser and its cross-split variance.
+  \item[Result:] Consistency traces to shared Gaussian statistics across
+    splits; the effective noise level is renormalized as $\sigma^2 \to \kappa(\sigma^2)$
+    via a self-consistent RMT equation.
+  \item[Evidence:] RMT predictions match empirical cross-split cosine
+    similarity within 2--4\% across all tested dataset sizes and aspect ratios.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Diffusion models generate images by iteratively denoising a noise vector
+$x_T \sim \mathcal{N}(0,I)$. Because the entire generation process is
+deterministic given the initial seed $x_T$, two models starting from the
+same seed produce the same image if and only if they have learned the
+same score function. The observation that models trained on \emph{different}
+data nonetheless produce similar images therefore implies that the learned
+score functions agree --- which in turn implies that the differences in
+training data have largely not been captured.
+
+Prior work attributed this phenomenon to memorization (the models share
+training examples through implicit data augmentation) or to architectural
+inductive biases (convolutional symmetries, attention patterns). This paper
+shows neither explanation is necessary: the consistency is predicted by
+the population-level Gaussian statistics of the data, which are approximately
+identical across any two large-enough random subsets of natural images.
+
+\section{Why Existing Approaches Fall Short}
+
+Memorization-based accounts predict that cross-split consistency should
+decrease as the two data splits become more diverse. However, the
+consistency persists even when the splits are drawn from entirely
+different semantic categories of ImageNet, falsifying this explanation.
+
+Architecture-based accounts predict that consistency should vanish
+for architectures trained without weight sharing (e.g., plain MLPs).
+Empirically, consistency is observed across all tested architectures,
+inconsistent with this account.
+
+Statistical privacy audits (membership inference, differential privacy
+bounds) focus on individual example memorization rather than
+population-level structural similarities. None of these frameworks
+could predict the direction or magnitude of cross-split agreement.
+
+\section{Core Mechanism}
+
+The consistency mechanism operates through the spectral structure of
+the data covariance. In the linear diffusion model, the optimal denoiser
+at noise level $\sigma$ is the Wiener filter:
+\[
+s_\sigma(x_\sigma) = -(\Sigma + \sigma^2 I)^{-1} x_\sigma
+\]
+where $\Sigma$ is the data covariance. Two models trained on different
+splits both estimate $\Sigma$ from their respective finite datasets.
+Their estimates $\hat{\Sigma}^{(1)}$ and $\hat{\Sigma}^{(2)}$ are noisy,
+but their \emph{mean} over random splits converges to the \emph{same}
+population covariance $\Sigma$. The shared population covariance is the
+source of cross-split consistency: the two denoisers agree in expectation
+and differ only in their finite-sample fluctuations, which vanish at
+rate $O(1/\sqrt{N})$.
+
+\section{Technical Formulation}
+
+In the proportional limit $N, d \to \infty$ with $\gamma = d/N$ fixed,
+the sample covariance resolvent $(\hat{\Sigma} + \sigma^2 I)^{-1}$ converges
+to a deterministic function of the population covariance $\Sigma$ via
+the self-consistent equation:
+\[
+\kappa(\sigma^2) = \sigma^2 + \gamma \int \frac{\lambda}{\lambda + \kappa(\sigma^2)}\,d\mu(\lambda)
+\]
+where $\mu$ is the spectral measure of $\Sigma$. This $\kappa(\sigma^2) > \sigma^2$
+is the \emph{effective noise level}: finite-data denoisers experience more
+noise than they receive, explaining the systematic bias toward the dataset
+mean.
+
+The expected cross-split agreement of generated samples is:
+\[
+\mathbb{E}[\langle x^{(1)}, x^{(2)} \rangle]
+= \operatorname{tr}\!\left[\left(\Sigma + \kappa I\right)^{-2} \Sigma^2\right] / d
+\]
+Cross-split variance decomposes into three additive terms:
+\[
+\operatorname{Var}[\hat{s}_\sigma(x)] = V_{\text{aniso}} + V_{\text{inhom}} + V_{\text{size}}
+\]
+where $V_{\text{aniso}}$ captures eigenmode anisotropy, $V_{\text{inhom}}$
+captures per-input inhomogeneity, and $V_{\text{size}} = O(1/N)$ is the
+global $1/N$ scaling.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Draw two independent data splits of size $N$ each from $p(x)$.
+  \item Train a linear diffusion model (Wiener denoiser) on each split,
+    obtaining score functions $\hat{s}_\sigma^{(1)}$ and $\hat{s}_\sigma^{(2)}$.
+  \item Generate images $x^{(1)}$ and $x^{(2)}$ from the same noise seed
+    $x_T$ using Euler--Maruyama sampling.
+  \item Measure cross-split cosine similarity $\langle x^{(1)}, x^{(2)} \rangle
+    / (\|x^{(1)}\|\|x^{(2)}\|)$.
+  \item Compare to the RMT prediction derived from the population covariance
+    $\Sigma$ and $\kappa(\sigma^2)$.
+\end{enumerate}
+
+The RMT prediction requires only $\Sigma$ and $\gamma = d/N$ --- neither
+the specific split realizations nor any model training is needed.
+
+\section{What the Guarantee Says}
+
+The main theorem establishes: as $N, d \to \infty$ with $\gamma = d/N$
+and signal-to-noise ratio bounded away from 0 and $\infty$:
+
+(1)~\emph{Expectation:} $\mathbb{E}[\hat{s}_\sigma(x)]$ converges to
+$-(\Sigma_{\text{eff}} + \kappa I)^{-1} x$ where $\Sigma_{\text{eff}}$
+is a deterministic function of the population covariance.
+
+(2)~\emph{Fluctuations:} $\operatorname{Var}[\hat{s}_\sigma(x)] = O(1/N)$,
+so cross-split agreement is $1 - O(1/N)$ for fixed $d/N$.
+
+(3)~\emph{Bias:} Generated samples are systematically pulled toward
+the dataset mean along low-variance principal components, with magnitude
+$O(\gamma)$ for fixed spectral gap.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Setting} & \textbf{Measured} & \textbf{RMT pred.} \\
+\midrule
+Linear, $N = 500$   & 0.47 & 0.46 \\
+Linear, $N = 2000$  & 0.23 & 0.22 \\
+$\gamma = 2.0$       & 0.61 & 0.60 \\
+ImageNet PCA approx. & 0.38 & 0.36 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All values are cross-split cosine similarity. RMT predictions match
+observations within 2--4\% across all settings. The framework also
+correctly predicts \emph{directional} bias: generated samples shift
+toward the dataset mean along the eigenvectors with smallest
+eigenvalues, which the Wiener filter systematically undershoots.
+
+\section{Ablations and Interpretation}
+
+\textbf{Dataset size:} Cross-split consistency decreases as
+$O(1/\sqrt{N})$, confirming the $1/N$ fluctuation bound. Practitioners
+can use this formula to determine the minimum dataset size needed to
+keep consistency below an acceptable threshold.
+
+\textbf{Aspect ratio $\gamma$:} Higher $\gamma$ (more parameters per
+sample) increases cross-split consistency. Modern large-latent-space
+models effectively operate at high $\gamma$, explaining why they show
+stronger consistency than smaller models.
+
+\textbf{Nonlinear diffusion:} Experiments on DDPM with U-Net score
+models show qualitatively consistent results: cross-split similarity
+decreases with $N$ and increases with $\gamma$, suggesting the linear
+theory captures the dominant statistical effect even in nonlinear models.
+
+\textbf{Semantic consistency:} Cross-split consistency in semantic
+embedding space (CLIP) is 2--3$\times$ larger than in pixel space,
+suggesting the linear mechanism dominates more strongly at the semantic
+level where principal components carry more variance.
+
+\section*{Reference}
+
+Binxu Wang, Jacob A.\ Zavatone-Veth, Cengiz Pehlevan.
+\textbf{A Random Matrix Theory Perspective on the Consistency of
+Diffusion Models}.
+arXiv:2602.02908, February 2026. ICML 2026 Oral / Outstanding Paper Honorable Mention.
+\url{https://arxiv.org/abs/2602.02908}
+
+\end{document}

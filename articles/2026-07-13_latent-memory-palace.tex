@@ -1,0 +1,254 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-13}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  variational inference \textbullet{}
+  continuous control \textbullet{}
+  adaptive computation \textbullet{}
+  reinforcement learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Latent Memory Palace}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Autoregressive Variational Inference Brings
+  Chain-of-Thought Deliberation to Physical Control}\par\vspace{6pt}
+
+{\small\textbf{By} Chuning Zhu, Eva Xu, Jose Barreiros,
+  Krishnan Srinivasan, Paarth Shah \& Abhishek Gupta
+  (Paul G.\ Allen School of CSE, University of Washington)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.08724 \textbullet{}
+  arXiv preprint, July 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Language models reason flexibly by generating variable-length chains
+of thought before producing an answer. Continuous control policies
+cannot: they map observations directly to actions in a fixed-depth
+computation graph, with no mechanism to think longer on harder problems.
+Latent Memory Palace (LMP) closes this gap by formalizing deliberation
+as autoregressive variational inference over a structured latent state
+space, enabling physical agents to allocate more or fewer computation
+steps depending on task complexity---achieving 16--26\% higher success
+rates than fixed-depth recurrent baselines on long-horizon manipulation tasks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Continuous control policies cannot adaptively allocate
+    deliberation time; they use the same computation depth on easy and
+    hard decisions.
+  \item[Why it matters:] Long-horizon manipulation and dexterous tasks
+    require proportionally deeper deliberation than routine motions,
+    yet existing methods offer no mechanism for this.
+  \item[Method:] Hierarchical variational autoencoder with autoregressive
+    latent steps and a learned halting mechanism trained via ELBO
+    maximization.
+  \item[Result:] 47\% higher success rate on long-horizon manipulation
+    versus best recurrent baseline (LSTM); 16--26\% across all tasks.
+  \item[Evidence:] Five-task benchmark spanning stacking, tool use,
+    pick-place, deformable manipulation, and multi-object coordination.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The gap between language model reasoning and physical control is
+not merely architectural --- it is computational. A language model
+generating a plan for a complex task can produce a chain of thought
+of any length: simple tasks get short chains, complex tasks get long
+ones. This adaptive computation is free in the discrete-token generation
+paradigm where each token takes roughly the same wall-clock time.
+
+Continuous control policies lack this flexibility entirely. A recurrent
+policy (LSTM, GRU, S4) updates a fixed-size hidden state once per time
+step. A diffusion policy iterates a fixed number of denoising steps.
+Neither can elect to ``think harder'' about a particularly tricky
+configuration. The result is policies that perform well on routine
+subtasks but fail catastrophically when unexpected complexity arises.
+
+Latent Memory Palace formalizes variable-depth deliberation in the
+continuous domain by casting it as inference in a hierarchical latent
+variable model where the number of latent computation steps is itself
+a learned variable.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Recurrent policies} (LSTM, GRU, S4) maintain a hidden state
+that accumulates information over time but applies the same fixed-depth
+computation at each action step. The hidden state is informative but
+the per-step computation is shallow.
+
+\textbf{Model-based RL} (Dreamer, TDMPC) plans over fixed-depth horizon
+rollouts. The horizon must be pre-specified and cannot adapt to task
+difficulty without expensive online search.
+
+\textbf{Diffusion policies} (Diffuser) perform iterative denoising in
+action space. This iteration serves trajectory optimization, not
+task-level deliberation --- the number of denoising steps is fixed and
+does not correlate with decision complexity.
+
+\textbf{Universal Transformers} adapt computation depth in sequence
+modeling but have not been extended to continuous RL or equipped with
+the variational training objective needed for learning under environment
+uncertainty.
+
+\section{Core Mechanism}
+
+LMP introduces a \emph{latent deliberation sequence}: before producing
+each action $a_t$, the agent runs $K_t$ autoregressive latent computation
+steps $z_t^{(1)}, \ldots, z_t^{(K_t)}$. Each latent step refines the
+agent's internal representation of the task state, analogous to one
+token of chain-of-thought reasoning. The final latent state $z_t^{(K_t)}$
+is then decoded to an action.
+
+The number of steps $K_t$ is itself learned: a halt probability
+$p_h(z_t^{(k)}, o_t) \in [0,1]$ is computed at each step, and the
+agent halts when a Bernoulli sample fires. Harder observations
+(estimated via an auxiliary complexity measure) produce lower halt
+probabilities, naturally inducing more deliberation.
+
+\section{Technical Formulation}
+
+The model defines a hierarchical generative process with autoregressive
+latent prior:
+\[
+p_\theta(z_t^{(1:K)} \mid o_t) = \prod_{k=1}^K
+p_\theta\!\left(z_t^{(k)} \mid z_t^{(1:k-1)}, o_t\right)
+\]
+
+and posterior using retrospective information $h_t^{\text{ret}}$
+(future observations and rewards, available during training):
+\[
+q_\phi(z_t^{(1:K)} \mid o_t, h_t^{\text{ret}}) = \prod_{k=1}^K
+q_\phi\!\left(z_t^{(k)} \mid z_t^{(1:k-1)}, o_t, h_t^{\text{ret}}\right)
+\]
+
+Training maximizes the ELBO plus behavioral cloning on expert actions:
+\[
+\mathcal{L} = \mathbb{E}_{q_\phi}\!\left[
+  \sum_t \log \pi_\psi(a_t \mid z_t^{(K_t)})
+  - \beta \sum_t \mathrm{KL}\!\left(q_\phi \| p_\theta\right)_t
+  - \lambda_c \sum_t K_t
+\right]
+\]
+
+where the $\lambda_c \sum_t K_t$ term penalizes excess computation,
+incentivizing economy in deliberation length.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect offline demonstrations of target tasks.
+  \item Train prior $p_\theta$, posterior $q_\phi$, policy $\pi_\psi$,
+    and halt predictor $p_h$ jointly via ELBO on demonstration trajectories.
+  \item At inference, use the prior $p_\theta$ only (no access to future):
+    sample $z_t^{(k)} \sim p_\theta(\cdot \mid z_t^{(1:k-1)}, o_t)$
+    and halt when $p_h(z_t^{(k)}, o_t) > u$ for $u \sim U[0,1]$.
+  \item Decode the final latent state to action via $\pi_\psi(a_t \mid z_t^{(K_t)})$.
+  \item Fine-tune with online RL (SAC) to improve beyond demonstrations.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+LMP does not provide formal sample-complexity bounds. The paper proves
+empirically that: (1)~The average deliberation depth $\bar{K}$ correlates
+positively with task difficulty (measured by expert-labeled complexity
+scores, Pearson $\rho = 0.73$ across tasks). (2)~Performance improves
+monotonically as the maximum allowed deliberation budget $K_{\max}$
+increases, with diminishing returns above $K_{\max} = 8$ for the tested
+tasks. (3)~The computation overhead of LMP versus a fixed-depth LSTM
+is at most $2\times$ wall-clock time, as deliberation steps are shallow
+and the learned halting mechanism allocates deep deliberation only to a
+minority of high-complexity decisions.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Task} & \textbf{LMP} & \textbf{LSTM} & \textbf{S4} & \textbf{Dreamer} \\
+\midrule
+Stacking (5 obj.)   & 71.3\% & 48.5\% & 52.1\% & 44.2\% \\
+Multi-step tool use & 63.7\% & 41.2\% & 45.6\% & 38.9\% \\
+Long-horizon P\&P   & 78.4\% & 56.8\% & 61.3\% & 52.7\% \\
+Deformable manip.   & 55.1\% & 32.4\% & 37.8\% & 28.6\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Success rates (\%) averaged over 5 seeds and 200 evaluation episodes.
+LMP exceeds the next-best baseline (S4) by 16--26\% across all tasks,
+with the largest gains on deformable manipulation where unexpected
+contact events require the most reactive deliberation.
+
+\section{Ablations and Interpretation}
+
+\textbf{Fixed vs.\ adaptive $K$:} Replacing the learned halting mechanism
+with fixed $K = 4$ (the mean deliberation depth under adaptive halting)
+reduces performance by 11\% on average, confirming that the \emph{alignment}
+of depth with difficulty, not just depth on average, drives the gains.
+
+\textbf{ELBO vs.\ BC-only:} Removing the ELBO training signal and
+using behavioral cloning alone (no latent structure) reduces success
+rates to near-LSTM levels, confirming the structured latent representation
+is essential.
+
+\textbf{Computation cost:} The deliberation overhead is 1.4--1.9$\times$
+LSTM wall-clock time (task-dependent). The halting mechanism allocates
+$K \geq 6$ steps to only 12\% of decisions, keeping average cost low.
+
+\textbf{Transferability:} LMP policies pre-trained on one task set
+transfer to related tasks with 40\% less fine-tuning data than LSTM
+baselines, suggesting the latent memory structure captures more
+transferable task representations.
+
+\section*{Reference}
+
+Chuning Zhu, Eva Xu, Jose Barreiros, Krishnan Srinivasan, Paarth Shah,
+Abhishek Gupta.
+\textbf{Latent Memory Palace: Reasoning for Control as Autoregressive
+Variational Inference}.
+arXiv:2607.08724, July 2026.
+\url{https://arxiv.org/abs/2607.08724}
+
+\end{document}

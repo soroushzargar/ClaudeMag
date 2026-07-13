@@ -1,0 +1,62 @@
+ML Papers List — 2026-07-13
+Generated for ClaudeMag
+
+1. To Grok Grokking: Provable Grokking in Ridge Regression [Honorable Mention — ICML 2026]
+   Authors: Mingyue Xu, Gal Vardi, Itay Safran
+   Affiliation: Hebrew University of Jerusalem; Ben-Gurion University of the Negev
+   Venue/ID: ICML 2026 Honorable Mention | arXiv:2601.19791
+   URL: https://arxiv.org/abs/2601.19791
+   Summary: Provides the first end-to-end mathematical proof of grokking — the phenomenon where
+   a model overfits the training data early in training yet eventually transitions to near-perfect
+   generalization — in the classical ridge regression setting. The authors prove that gradient
+   descent with weight decay necessarily passes through three sequential phases (overfitting,
+   persistent poor generalization, eventual generalization) and derive exact quantitative bounds
+   on the grokking time as a function of every hyperparameter.
+
+2. A Random Matrix Theory Perspective on the Consistency of Diffusion Models [Honorable Mention — ICML 2026]
+   Authors: Binxu Wang, Jacob A. Zavatone-Veth, Cengiz Pehlevan
+   Affiliation: Harvard Kempner Institute; Harvard Society of Fellows; Harvard SEAS
+   Venue/ID: ICML 2026 Oral / Honorable Mention | arXiv:2602.02908
+   URL: https://arxiv.org/abs/2602.02908
+   Summary: Explains why diffusion models trained on different, non-overlapping subsets of a
+   dataset produce strikingly similar images from the same random noise seed. The paper traces
+   the consistency to a simple linear effect — shared Gaussian statistics across data splits
+   already predict most of the generated output — and formalizes this through a random matrix
+   theory (RMT) framework quantifying how finite dataset size reshapes the learned denoiser
+   via a self-consistent noise-level renormalization σ² → κ(σ²).
+
+3. VLM-AR3L: Vision-Language Models for Absolute and Relative Rewards in Reinforcement Learning [IJCAI 2026]
+   Authors: Kuan-Chen Chen, Winston Chen, Wei-Fang Sun, Min-Chun Hu
+   Affiliation: National Tsing Hua University; NVIDIA AI Technology Center (NVAITC)
+   Venue/ID: IJCAI 2026 | arXiv:2607.00483
+   URL: https://arxiv.org/abs/2607.00483
+   Summary: Introduces a framework leveraging Vision-Language Models to provide dual reward
+   signals for reinforcement learning without environment-specific reward engineering. An absolute
+   reward model predicts scalar state-quality evaluations; a relative reward model compares
+   consecutive visual observations to infer task progress or regression. Evaluating on open-world
+   Minecraft tasks from MineDojo (Combat Spider, Milk Cow, Shear Sheep, Hunt Cow), VLM-AR3L
+   consistently outperforms prior VLM-based reward learning baselines.
+
+4. BiSCo-LLM: Lookup-Free Binary Spherical Coding for Extreme Low-Bit Large Language Model Compression [arXiv 2026]
+   Authors: Yuantian Shao, Peisong Wang, Zhilei Liu, Chuangyi Li, Yuanteng Chen,
+   Pengcheng Xie, Yiwu Yao, Zhihui Wei, Jian Cheng
+   Affiliation: Institute of Automation, Chinese Academy of Sciences; University of Chinese Academy of Sciences; Huawei Technologies
+   Venue/ID: arXiv:2607.08643
+   URL: https://arxiv.org/abs/2607.08643
+   Summary: Proposes binary spherical coding (BSCo) — a lookup-table-free quantization scheme
+   for compressing LLM weights to extreme low-bit representations. By mapping weight vectors
+   onto binary codes that lie on the surface of a high-dimensional sphere, the method achieves
+   near-1-bit compression while maintaining competitive perplexity on language benchmarks.
+   The elimination of lookup tables reduces decoding overhead and makes on-device deployment
+   of large models substantially more practical.
+
+5. Latent Memory Palace: Reasoning for Control as Autoregressive Variational Inference [arXiv 2026]
+   Authors: Chuning Zhu, Eva Xu, Jose Barreiros, Krishnan Srinivasan, Paarth Shah, Abhishek Gupta
+   Affiliation: Paul G. Allen School of Computer Science & Engineering, University of Washington
+   Venue/ID: arXiv:2607.08724
+   URL: https://arxiv.org/abs/2607.08724
+   Summary: Transfers adaptive, depth-variable reasoning from language models to continuous
+   control policies by casting deliberation as autoregressive variational inference over a
+   structured latent state space. The agent learns when to think longer (allocating more latent
+   computation steps) versus acting immediately, enabling flexible depth-of-reasoning allocation
+   across physical control tasks without hand-designed planning modules.
