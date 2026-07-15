@@ -1,0 +1,251 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-15}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video generation \textbullet{}
+  visual perception \textbullet{}
+  foundation models \textbullet{}
+  diffusion \textbullet{}
+  ECCV 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Video Generation Models are\\
+  General-Purpose Vision Learners}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Pre-Trained Text-to-Video Diffusion Backbone Achieves
+  State-of-the-Art Across Depth, Pose, Segmentation,
+  and 3D Keypoint Tasks via GenCeption}\par\vspace{6pt}
+
+{\small\textbf{By} Letian Wang, Chuhan Zhang, Rishabh Kabra,
+  Jasper Uijlings, et al.\ (Google DeepMind)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.09024 \textbullet{}
+  ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The shift from task-specific NLP models to powerful generalists began
+when researchers recognized that next-token prediction on large corpora
+incidentally learns representations useful for every downstream task.
+This paper argues that large-scale text-to-video generation plays an
+analogous role for computer vision: the spatiotemporal priors,
+vision-language alignment, and scalability of video generation
+pre-training transfer to a wide range of perception tasks with no
+task-specific architectural changes. GenCeption, the resulting
+framework, achieves state-of-the-art performance on depth estimation,
+surface normal prediction, camera pose estimation, expression-referring
+segmentation, and 3D keypoint detection---from a single frozen backbone.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Computer vision still relies on task-specific
+    architectures; a single backbone that matches specialized models
+    across diverse tasks has not existed.
+  \item[Why it matters:] A single foundation model for vision
+    reduces engineering overhead and may exhibit better cross-task
+    generalization than ensembles of specialists.
+  \item[Method:] Freeze a pre-trained 7B text-to-video diffusion
+    transformer; adapt to perception tasks via lightweight task-head
+    fine-tuning with text-instruction task routing.
+  \item[Result:] State-of-the-art or near-SOTA on 5 of 7 diverse
+    vision benchmarks; 38\% improvement on camera pose over image-only
+    diffusion baselines.
+  \item[Evidence:] ECCV 2026 accepted; evaluated on NYUv2, Taskonomy,
+    CO3D, EmotioNet, Human3.6M, and two more.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Computer vision tasks---depth estimation, surface normal prediction,
+camera pose estimation, semantic segmentation, human pose estimation---
+have traditionally been addressed by specialist architectures trained
+on task-specific datasets. Even with the advent of large vision-language
+models (VLMs), perception tasks requiring geometric 3D understanding
+remain largely the domain of specialized networks.
+
+The analogy with NLP is instructive. Before GPT, the standard recipe
+was: (1)~design an architecture for the task, (2)~train on labeled
+data, (3)~deploy. Next-token prediction on large corpora replaced
+step (1) and dramatically reduced the labeled data requirement for
+step (2). This paper asks: what is the vision analogue of next-token
+prediction?
+
+The authors argue it is text-to-video generation. Generating realistic
+video requires the model to understand depth, 3D geometry, object
+motion, and scene layout---exactly the representations needed for
+downstream vision tasks. Large-scale video generation pre-training on
+hundreds of millions of clips thus incidentally instills the priors
+that specialist architectures must acquire from task-specific labels.
+
+\section{Why Existing Approaches Fall Short}
+
+Image diffusion models (Stable Diffusion, DALL-E 3) have been adapted
+for perception tasks by treating the output domain (depth maps, surface
+normals) as structured pseudo-images. But image-only pre-training
+lacks temporal information, producing representations that are weaker
+on 3D-geometric tasks: camera pose estimation (which requires
+cross-view geometric consistency) and 3D keypoint detection (which
+requires depth understanding) degrade by 38\% and 12\% respectively
+when using an image backbone instead of a video backbone.
+
+Specialist models (Depth Anything v2, ViTPose) achieve strong results
+on their respective tasks but require separate architectures, training
+pipelines, and deployment instances. GenCeption replaces them with
+a single checkpoint---though specialists retain a slight advantage
+on tasks where large task-specific datasets are available.
+
+\section{Core Mechanism}
+
+GenCeption treats every perception task as a conditional generation
+problem. The input is an image (or video frame); the output is a
+structured target (depth map, surface normal map, pose heatmap, etc.)
+encoded as a pseudo-image in the same pixel space.
+
+A text instruction (e.g., ``produce a metric depth map of this scene'')
+routes the backbone to the appropriate output distribution. The
+diffusion backbone generates the target pseudo-image in the usual
+denoising loop. A lightweight 3-layer MLP head applied to the final
+denoised latent maps it to the task-specific output format (metric
+depth values, unit normal vectors, etc.).
+
+The key insight is that the backbone, pre-trained to generate any
+video frame conditioned on text, can generate any structured
+pseudo-image conditioned on a perception-task instruction---without
+any change to its weights.
+
+\section{Technical Formulation}
+
+Let $I$ be the input image, $\tau$ the text task instruction, and
+$\hat{Y}$ the target structured output (a depth map, pose heatmap,
+etc.). GenCeption models:
+\[
+p(\hat{Y} \mid I, \tau) = \int p(\hat{Y} \mid z_T, \tau)
+  \prod_{t=1}^{T} p(z_{t-1} \mid z_t, I, \tau)\, dz_{1:T}
+\]
+via DDIM sampling with $T = 50$ steps, where the backbone's attention
+cross-attends to both the image $I$ (via image conditioning) and the
+instruction $\tau$ (via CLIP text encoding). The MLP task head $g_\phi$
+then maps the final latent $z_0$ to the task output:
+$Y = g_\phi(z_0)$.
+
+Only $\phi$ (the MLP head, approximately 2M parameters) is fine-tuned
+on task-specific data; the backbone's 7B parameters remain frozen.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-train the text-to-video diffusion backbone on 500M
+    video-text pairs at resolutions up to 1080p (not part of this
+    paper; uses an existing backbone).
+  \item For each perception task, collect task-specific labeled data
+    (e.g., NYUv2 for depth, Human3.6M for 3D keypoints).
+  \item Fine-tune the MLP task head for 10K steps with learning rate
+    1e-4; backbone frozen throughout.
+  \item At inference, run DDIM with 50 steps to denoise the target
+    pseudo-image; apply the task head to the final latent.
+  \item Optionally, condition on a sequence of frames for tasks
+    requiring temporal consistency (e.g., video depth estimation).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The paper does not provide formal guarantees, but the empirical
+evidence supports two strong claims: (1)~video pre-training provides
+richer priors than image pre-training for 3D-geometric tasks (camera
+pose: 38\% improvement; 3D keypoints: 12\%); and (2)~task-instruction
+text conditioning is a necessary component---removing it degrades
+performance by 8.3\% on average, confirming it serves as a task router
+rather than mere noise.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Task (dataset) & GenCep. & Prior SOTA & $\Delta$ \\
+\midrule
+Depth (NYUv2) & 0.081 & 0.089 & $+9.0\%$ \\
+Normals (Taskonomy) & $11.2^{\circ}$ & $12.8^{\circ}$ & $+12.5\%$ \\
+Camera pose (CO3D) & $2.1^{\circ}$ & $3.4^{\circ}$ & $+38.2\%$ \\
+Expr.\ seg.\ (EmotioNet) & 71.3 mAP & 68.1 & $+4.7\%$ \\
+3D keypts.\ (H3.6M) & 38.2 mm & 41.3 mm & $+7.5\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+GenCeption is competitive or superior in all five categories.
+The largest gains appear on 3D-geometric tasks (pose, depth), consistent
+with the hypothesis that video pre-training instills strong geometric
+spatial priors absent from image-only baselines.
+
+\section{Ablations and Interpretation}
+
+\textbf{Video vs.\ image backbone:} Replacing the video backbone with
+Stable Diffusion 3.5 (image-only, comparable size) degrades camera
+pose estimation by 38\% and 3D keypoints by 12\%, confirming
+temporal pre-training as the source of 3D geometric priors.
+
+\textbf{Pre-training data scale:} Halving the pre-training video volume
+degrades downstream AUC by 6.2\% on average; doubling improves by
+4.1\%, confirming a log-linear scaling law between video volume and
+downstream perception quality.
+
+\textbf{Frozen vs.\ fine-tuned backbone:} Full backbone fine-tuning
+improves depth estimation by 1.8\% but degrades surface normals by
+1.2\%, suggesting dataset-specific overfitting; the frozen-backbone
+default balances cross-task generalization.
+
+\textbf{Text conditioning ablation:} Removing the task-instruction
+prefix and using image-only conditioning degrades performance by 8.3\%
+on average---the largest single ablation---confirming text as the
+task-routing mechanism rather than an incidental input.
+
+\section*{Reference}
+
+Letian Wang et al.\
+\textbf{Video Generation Models are General-Purpose Vision Learners}.
+ECCV 2026. arXiv:2607.09024. Google DeepMind.
+\url{https://arxiv.org/abs/2607.09024}
+
+\end{document}

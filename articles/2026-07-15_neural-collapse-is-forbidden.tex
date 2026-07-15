@@ -1,0 +1,254 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-15}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  neural collapse \textbullet{}
+  representation learning \textbullet{}
+  information theory \textbullet{}
+  language models}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Neural Collapse Is Forbidden}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  An Information Floor Theorem Shows That Within-Class Variance
+  in Language Models Is Obligatory, Not a Training Artifact}\par\vspace{6pt}
+
+{\small\textbf{By} Bruno Abrahao
+  (NYU Shanghai)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.09487 \textbullet{}
+  July 10, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Neural collapse---the phenomenon where final-layer representations
+within each class converge to a single point during training---has been
+hailed as evidence that deep networks find elegant, maximally-separated
+class geometries. But for language models, this paper proves that
+neural collapse is theoretically impossible: within-class variance
+cannot shrink below a positive lower bound determined by how much
+contextual information each token carries beyond its category label.
+The paper terms this limit the \textbf{information floor}, derives it
+analytically, and confirms it empirically across 14 models spanning
+a 100$\times$ parameter range.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Within-class variance in LM representations is
+    commonly attributed to incomplete training or suboptimal
+    regularization.
+  \item[Why it matters:] If within-class variance is obligatory, attempts
+    to reduce it via regularization or architecture choices will hurt
+    model performance.
+  \item[Method:] Probing study across 14 models; theoretical proof of
+    an information floor on within-class variance; k-NN mutual information
+    estimator to compute the bound empirically.
+  \item[Result:] Within-class variance accounts for 79--91\% of total
+    representational variance; the theoretical floor covers 71--79\%.
+  \item[Evidence:] 26-page paper with 3 figures and 19 tables across
+    five text domains and five model families.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Neural collapse was first described in classification networks: as
+training progresses, the penultimate-layer representations of samples
+within each class collapse to a single class mean, and the class means
+arrange themselves in a maximally-equidistant ``simplex ETF'' geometry.
+The phenomenon has been viewed as a signature of an ideal training
+outcome---a fully collapsed network is maximally linear-separable and
+robust to perturbations.
+
+For language models, the analogue of a ``class'' is ambiguous. Prior
+work has used token categories (part of speech, semantic class, domain
+label) as the class variable and found that within-category variance
+is large---sometimes 80--90\% of total variance---and interpreted this
+as evidence that language models fail to achieve neural collapse.
+
+This paper argues the interpretation is exactly backwards: large
+within-class variance is not a failure but a necessity. Language models
+must encode token-specific contextual information within each category
+because two tokens of the same category (e.g., both nouns) carry
+different next-token distributions depending on their context.
+Collapsing representations within a category would destroy this
+information and increase prediction loss---so the training objective
+itself prevents neural collapse.
+
+\section{Why Existing Approaches Fall Short}
+
+The neural collapse literature for classification assumes a fixed
+label space where two samples of the same class carry identical
+distributional targets. This assumption fails for language models:
+the distribution over next tokens for ``bank'' depends on whether
+the preceding context is financial or geographic, even though ``bank''
+is in the same syntactic/semantic category in both cases.
+
+Attempts to fine-tune language models toward neural collapse (via
+additional regularization or loss terms) have been tried in the
+context of classification fine-tuning. The paper's theoretical result
+explains why these attempts always succeed in reducing within-class
+variance on the fine-tuning data but increase perplexity on
+held-out data: they destroy the contextual information encoded in
+the within-class variance.
+
+\section{Core Mechanism}
+
+The information floor arises from the structure of next-token
+prediction. For a token $X$ with category label $C$ and context $Z$,
+the model must compute $p(X_{\text{next}} \mid X, Z)$, which depends
+on both the category and the specific context. Two tokens of the same
+category in different contexts have different conditional next-token
+distributions, and these differences must be encoded in the
+representation.
+
+The conditional mutual information $I(X; Z \mid C)$ quantifies exactly
+how much contextual information is necessary beyond the category label.
+The paper proves that the within-class variance $\sigma^2_W$ in any
+representation that achieves training loss below the theoretical
+minimum must satisfy $\sigma^2_W \geq c \cdot I(X; Z \mid C)$.
+
+\section{Technical Formulation}
+
+Let $X$ be the token, $C$ its macro-category, $Z$ the context window,
+and $h(X, Z) \in \mathbb{R}^d$ the final-layer representation. Define
+the within-class variance as:
+\[
+\sigma^2_W = \mathbb{E}_C \bigl[
+  \mathrm{Var}(h(X, Z) \mid C)
+\bigr]
+\]
+
+\textbf{Theorem (Information Floor):}
+For any model that achieves cross-entropy loss
+$\mathcal{L} \leq H(X_{\text{next}} \mid C, Z)$ on the training
+distribution:
+\[
+\sigma^2_W \;\geq\; c \cdot I(X;\, Z \mid C)
+\]
+where $c > 0$ depends only on the loss function curvature and
+projection constants of the final linear layer.
+
+The proof proceeds by lower-bounding the Fisher information of the
+output distribution as a function of $\sigma^2_W$, and showing that
+$\sigma^2_W < c \cdot I(X; Z \mid C)$ implies the Fisher information
+is insufficient to support the observed training loss.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item For each of the 14 models, collect final-layer representations
+    on 50,000 tokens from five text domains.
+  \item Assign 32-category macro-category labels using WordNet +
+    POS tagging.
+  \item Compute within-class and between-class variance in the
+    top-$k$ principal subspace of the full covariance matrix.
+  \item Estimate $I(X; Z \mid C)$ using a k-NN mutual information
+    estimator (Kozachenko-Leonenko calibrated).
+  \item Compare observed $\sigma^2_W / (\sigma^2_B + \sigma^2_W)$
+    against the theoretical lower bound derived from $I(X; Z \mid C)$.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The information floor theorem provides a constructive lower bound:
+given an estimate of $I(X; Z \mid C)$ from data, the bound predicts
+the minimum observable within-class variance share. Across five
+domains and 14 models, the theoretical floor covers 71--79\% of
+total variance, and the observed share is 79--91\%---consistently
+above the floor by a margin of 8--12 percentage points, consistent
+with the floor being a lower bound rather than an equality.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Model family & $\sigma^2_W / \sigma^2_{\text{total}}$ & Floor \\
+\midrule
+GPT series & $82.4\% \pm 3.1\%$ & 73.1\% \\
+LLaMA series & $84.7\% \pm 2.4\%$ & 75.8\% \\
+Mistral & $83.9\% \pm 2.8\%$ & 74.2\% \\
+Claude family & $79.3\% \pm 4.2\%$ & 71.0\% \\
+Gemma & $85.2\% \pm 1.9\%$ & 76.3\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The variance share is insensitive to scale within each family
+(max 2\% change over 10$\times$ parameter increase) and insensitive
+to tokenization (BPE vs.\ SentencePiece: 0.8\% difference).
+All observations lie above the predicted floor.
+
+\section{Ablations and Interpretation}
+
+\textbf{Random-label control:} Replacing token category labels with
+random assignments increases $\sigma^2_B$ by 18\% and $\sigma^2_W$
+by 22\%, confirming the variance decomposition is meaningful.
+
+\textbf{Layer depth:} Within-class variance share increases from 55\%
+at layer 1 to 84\% at the final layer, suggesting the model
+progressively specializes representations toward context-specific
+rather than category-level structure.
+
+\textbf{Fine-tuning toward collapse:} Fine-tuning on sentiment
+classification with an additional within-class variance penalty reduces
+$\sigma^2_W$ on the fine-tuning domain by 12\% but increases
+perplexity by 8\%, directly confirming that forcing collapse destroys
+necessary contextual information.
+
+\textbf{Rare tokens:} The information floor is higher for rare tokens
+(those with unique distributional contexts), consistent with the
+finding that rare tokens are disproportionately memorized---they
+carry more $I(X; Z \mid C)$ and therefore require more within-class
+dispersion to represent correctly.
+
+\section*{Reference}
+
+Bruno Abrahao.
+\textbf{Neural Collapse Is Forbidden: Information Floors in
+Language Models}.
+arXiv:2607.09487, July 10, 2026. NYU Shanghai.
+\url{https://arxiv.org/abs/2607.09487}
+
+\end{document}

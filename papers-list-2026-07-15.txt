@@ -1,0 +1,66 @@
+ML Papers List — 2026-07-15
+Generated for ClaudeMag
+
+1. Nemotron-Labs-Diffusion: A Tri-Mode Language Model Unifying Autoregressive, Diffusion, and Self-Speculation Decoding [arXiv 2026]
+   Authors: Yonggan Fu, Lexington Whalen, Abhinav Garg, Chengyue Wu, Maksim Khadkevich, Nicolai Oswald, Enze Xie, Daniel Egert, Sharath Turuvekere Sreenivas, Shizhe Diao, Chenhan Yu, Ye Yu, Weijia Chen, Sajad Norouzi, Jingyu Liu, Shiyi Lan, Ligeng Zhu, Jin Wang, Jindong Jiang, Morteza Mardani, Mehran Maghoumi, Song Han, Ante Jukić, Nima Tajbakhsh, Jan Kautz, Pavlo Molchanov
+   Affiliation: NVIDIA Research
+   Venue/ID: arXiv:2607.05722
+   URL: https://arxiv.org/abs/2607.05722
+   Summary: Introduces a single language model that operates in three modes — autoregressive (AR),
+   parallel diffusion, and self-speculation — trained jointly with a combined AR-diffusion objective.
+   In self-speculation mode, the diffusion head drafts candidate tokens while the AR head verifies
+   them, eliminating the need for a separate draft model and achieving 6.82 accepted tokens per step
+   versus Eagle3's 2.75. On SPEED-Bench with SGLang on a GB200 GPU, Nemotron-Labs-Diffusion-8B
+   delivers 4x higher throughput than Qwen3-8B at comparable accuracy.
+
+2. Latent Programming Horizons in Coding Agents [arXiv 2026]
+   Authors: André Silva, Han Tu, Martin Monperrus
+   Affiliation: KTH Royal Institute of Technology, Stockholm, Sweden
+   Venue/ID: arXiv:2607.05188
+   URL: https://arxiv.org/abs/2607.05188
+   Summary: Probes the residual streams of language models acting as coding agents and finds that
+   internal representations linearly encode properties of the evolving program — such as whether
+   the code parses, passes its test suite, or introduces regressions — with AUC up to 0.83. More
+   strikingly, these representations run ahead of the agent's own edits: probes can predict the
+   outcome of future edits up to 25 steps before they are materialized. The authors term this the
+   agent's "latent programming horizon," opening new avenues for mechanistic interpretability of
+   software engineering agents.
+
+3. Long-Horizon-Terminal-Bench: Testing the Limits of Agents on Long-Horizon Terminal Tasks with Dense Reward-Based Grading [arXiv 2026]
+   Authors: Zongxia Li, Zhongzhi Li, Yucheng Shi, Ruhan Wang, Junyao Yang, Zhichao Liu, Xiyang Wu, Anhao Li, Yue Yu, Ninghao Liu, Lichao Sun, Haotao Mi, Leowei Liang
+   Affiliation: Tencent HY LLM Frontier; University of Maryland College Park; University of Georgia; University of Minnesota Twin Cities; Indiana University; Lehigh University; National University of Singapore; The Hong Kong Polytechnic University
+   Venue/ID: arXiv:2607.08964
+   URL: https://arxiv.org/abs/2607.08964
+   Summary: Presents a 46-task terminal benchmark spanning nine categories — experiment reproduction,
+   software engineering, multimodal analysis, interactive games, and scientific computing — designed
+   to test how well LLM agents sustain useful work in a containerized terminal over hundreds of steps.
+   Unlike binary pass/fail benchmarks, LHTB decomposes each task into fine-grained subtasks with
+   dense intermediate rewards and partial credit, enabling fairer comparison of agents on complex
+   open-ended workflows. Grades are produced by hidden, rebuild-from-artifact verifiers to prevent
+   self-reported progress gaming.
+
+4. Neural Collapse Is Forbidden: Information Floors in Language Models [arXiv 2026]
+   Authors: Bruno Abrahao
+   Affiliation: NYU Shanghai
+   Venue/ID: arXiv:2607.09487
+   URL: https://arxiv.org/abs/2607.09487
+   Summary: Argues that within-class variance in language-model representations — commonly viewed
+   as incomplete neural collapse — is actually obligatory information storage governed by a
+   provable lower bound. Across 14 models spanning a 100x parameter range, macro-category structure
+   accounts for only 4–12% of representational variance while within-token context carries 79–91%.
+   The paper proves a converse information floor showing that within-category dispersion must be at
+   least proportional to the conditional mutual information between tokens and context given the
+   category, making full neural collapse information-theoretically impossible in next-token prediction.
+
+5. Video Generation Models are General-Purpose Vision Learners [ECCV 2026]
+   Authors: Letian Wang, Chuhan Zhang, Rishabh Kabra, Jasper Uijlings, Steven Waslander, Andrew Zisserman, Joao Carreira, Kaiming He, Misha Andriluka, Eduard Gabriel Bazavan, Andrei Zanfir, Cristian Sminchisescu
+   Affiliation: Google DeepMind
+   Venue/ID: ECCV 2026 | arXiv:2607.09024
+   URL: https://arxiv.org/abs/2607.09024
+   Summary: Proposes GenCeption, which repurposes a pre-trained text-to-video diffusion backbone
+   as a general-purpose, feed-forward perception model steered by text instructions. By analogy
+   with how next-token prediction produced generalist NLP models, the authors argue that large-scale
+   video generation pre-training provides the spatiotemporal priors, vision-language alignment, and
+   scalability required for general visual intelligence. GenCeption achieves state-of-the-art
+   performance on a diverse suite of tasks including depth and surface normal estimation, camera
+   pose estimation, expression-referring segmentation, and 3D keypoint prediction.

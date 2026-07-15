@@ -1,0 +1,252 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-15}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  efficient inference \textbullet{}
+  diffusion language models \textbullet{}
+  speculative decoding \textbullet{}
+  throughput}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Nemotron-Labs-Diffusion}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  NVIDIA Unifies Autoregressive and Diffusion Language Modeling
+  Into a Single Self-Speculating Architecture That Eliminates the
+  Need for a Separate Draft Model}\par\vspace{6pt}
+
+{\small\textbf{By} Yonggan Fu, Lexington Whalen, Abhinav Garg,
+  Chengyue Wu, et al.\ (NVIDIA Research)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.05722 \textbullet{}
+  July 7, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Modern speculative decoding relies on a separate draft model to propose
+candidate tokens that a larger verifier model then accepts or rejects.
+Maintaining two models doubles deployment cost and complicates serving
+infrastructure. Nemotron-Labs-Diffusion eliminates the draft model
+entirely by training a single set of weights to operate in three modes:
+standard autoregressive (AR) decoding, parallel diffusion decoding, and
+self-speculation, where the diffusion head drafts while the AR head
+verifies---from the same checkpoint, with no weight switching.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Speculative decoding requires a separate draft model,
+    doubling parameter budget and serving complexity.
+  \item[Why it matters:] Throughput is the primary cost driver for
+    large-scale LLM deployment; a 4--6$\times$ improvement directly
+    reduces inference cost.
+  \item[Method:] Joint AR-diffusion training objective; at inference,
+    the diffusion head proposes draft token blocks and the AR head
+    verifies, all within one set of weights.
+  \item[Result:] 6.82 accepted tokens per step (vs.\ Eagle3's 2.75);
+    4$\times$ higher throughput than Qwen3-8B on SPEED-Bench.
+  \item[Evidence:] Evaluated on SPEED-Bench, MT-Bench, MMLU, and
+    HumanEval across 3B, 8B, and 14B model sizes.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The dominant paradigm for efficient large language model inference is
+speculative decoding: a small, cheap draft model proposes a block of
+candidate tokens, and the large model verifies the entire block in a
+single forward pass. When the acceptance rate is high, this delivers
+near-linear speedups. The problem is that the draft model is a
+separate artifact that must be trained, maintained, and co-deployed
+with the verifier, doubling operational complexity.
+
+Multi-token prediction (MTP) sidesteps the separate model by training
+the main model to predict multiple future tokens simultaneously using
+auxiliary heads. But MTP heads predict tokens autoregressively from
+a fixed left-to-right prior, limiting their ability to propose coherent
+multi-token continuations.
+
+Nemotron-Labs-Diffusion observes that the diffusion training objective
+---which reconstructs any masked subset of tokens conditioned on
+unmasked context---is exactly the capability needed for a
+high-quality internal drafter. A model trained jointly with AR and
+diffusion objectives learns to both predict the next token from the left
+and fill any arbitrary masked block, making its diffusion head a natural
+draft model and its AR head a natural verifier.
+
+\section{Why Existing Approaches Fall Short}
+
+Eagle3, the leading separate-draft speculative decoding system, achieves
+2.75 accepted tokens per step. Its primary weakness is that the draft
+model must be trained separately and kept synchronized with the verifier
+model through costly co-training or periodic retraining. Every new
+verifier checkpoint requires a corresponding draft model update.
+
+MTP-based approaches (as used in DeepSeek-V3) train auxiliary prediction
+heads on the verifier model itself but restrict each head to predicting
+a single additional token conditioned on prior outputs. The heads predict
+tokens serially rather than in parallel, and their training signal is
+weaker because they never reconstruct arbitrary masked subsets---they
+only predict a fixed number of positions ahead.
+
+Standard diffusion LMs (as in MDLM and Plaid) have high generation
+quality in parallel mode but suffer from a quality-speed tradeoff:
+fewer diffusion steps produce lower quality, while more steps reduce
+the throughput advantage over AR models.
+
+\section{Core Mechanism}
+
+Nemotron-Labs-Diffusion resolves these tensions by exploiting the
+complementarity between AR and diffusion objectives. The AR objective
+provides strong left-to-right linguistic priors that make verification
+reliable; the diffusion objective provides parallel reconstruction
+capability that makes drafting both fast and coherent.
+
+In self-speculation mode, the model executes a draft-verify cycle.
+The diffusion head, given the current context, denoises a block of
+$B$ masked positions in parallel using one or two diffusion steps.
+The AR head then scores each proposed token in a single forward pass
+(matching the cost of verifying $B$ tokens in standard speculative
+decoding). Tokens above the acceptance threshold are committed; the
+rest trigger a fresh diffusion draft.
+
+\section{Technical Formulation}
+
+The joint training loss is:
+\[
+\mathcal{L} = \alpha\,\mathcal{L}_{\text{AR}} +
+  (1-\alpha)\,\mathcal{L}_{\text{diff}}
+\]
+where $\mathcal{L}_{\text{AR}}$ is the standard cross-entropy on
+the next token and $\mathcal{L}_{\text{diff}}$ is the masked token
+reconstruction loss at variable mask rates
+$\rho \sim \text{Beta}(a, b)$:
+\[
+\mathcal{L}_{\text{diff}} = -\mathbb{E}_{\rho, \mathcal{M}}
+  \sum_{i \in \mathcal{M}} \log p_\theta(x_i \mid x_{\backslash\mathcal{M}})
+\]
+with $\mathcal{M}$ the random mask set of expected size $\rho n$.
+At $\alpha = 0.5$, both objectives contribute equally; ablations
+confirm this is the Pareto-optimal balance.
+
+Token acceptance in self-speculation mode follows the standard
+speculative decoding criterion: draft token $x_d$ is accepted with
+probability $\min(1,\, p_{\text{AR}}(x_d) / p_D(x_d))$, preserving
+the AR distribution exactly.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train with joint AR+diffusion loss using standard next-token
+    and masked-span reconstruction objectives.
+  \item Fine-tune an additional lightweight MLP sampler on diffusion
+    sampling trajectories to reduce required denoising steps to 1--2.
+  \item At inference, select mode based on deployment constraints:
+    AR mode for minimum per-token latency; diffusion mode for maximum
+    throughput at batch size 1; self-speculation for the best
+    throughput-quality tradeoff at any batch size.
+  \item Self-speculation loop: draft $B=8$ tokens via 1-step diffusion;
+    score with AR head; commit accepted tokens; redraft rejected suffix.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The acceptance-based guarantee from standard speculative decoding
+carries over: accepted tokens are drawn exactly from the AR model's
+distribution, so Nemotron-Labs-Diffusion-self-speculation produces
+outputs statistically identical to pure AR sampling. No quality
+degradation is introduced by the self-speculation mechanism.
+
+The throughput guarantee is empirical: on SPEED-Bench with SGLang on
+NVIDIA GB200, Nemotron-Labs-Diffusion-8B achieves 4$\times$ higher
+throughput than Qwen3-8B at equivalent quality (within 1\% on MT-Bench,
+MMLU, and HumanEval).
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+System & Accepted toks/step & Throughput \\
+\midrule
+Qwen3-8B (AR only) & 1.00 & $1.0\times$ \\
+DeepSeek-V3 MTP & 2.11 & $1.9\times$ \\
+Eagle3 (separate draft) & 2.75 & $2.6\times$ \\
+\textbf{Nemotron-8B (ours)} & \textbf{6.82} & \textbf{4.0$\times$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Quality scores (MT-Bench / MMLU / HumanEval) for Nemotron-8B are
+within 1\% of Qwen3-8B AR baseline across all benchmarks. The 3B
+model variant outperforms the 7B Eagle3 draft+8B verifier pair on
+throughput while using 5B fewer total parameters.
+
+\section{Ablations and Interpretation}
+
+\textbf{Removing diffusion training} drops accepted tokens per step
+from 6.82 to 4.1, confirming the diffusion head's centrality to
+draft quality. This is the most significant ablation result.
+
+\textbf{$\alpha$ sweep:} Higher $\alpha$ (more AR weight) improves
+text quality metrics by up to 0.3\% but reduces acceptance rate by
+up to 1.4 tokens per step. $\alpha = 0.5$ is the Pareto-optimal
+balance.
+
+\textbf{Mask rate schedule:} Fixed mask rate $\rho = 0.15$ (like
+BERT) reduces accepted tokens per step by 1.2 relative to the
+$\text{Beta}(1, 5)$ schedule, which samples mask rates across the
+full $[0, 1]$ range and builds more versatile reconstruction capability.
+
+\textbf{Self-speculation vs.\ MTP:} At equal parameter budgets,
+self-speculation accepts 6.82 tokens per step versus MTP's 2.11,
+because MTP heads can only predict a fixed number of positions while
+the diffusion head can fill any masked block with a single forward pass.
+
+\section*{Reference}
+
+Yonggan Fu et al.\
+\textbf{Nemotron-Labs-Diffusion: A Tri-Mode Language Model Unifying
+Autoregressive, Diffusion, and Self-Speculation Decoding}.
+arXiv:2607.05722, July 2026.
+\url{https://arxiv.org/abs/2607.05722}
+
+\end{document}

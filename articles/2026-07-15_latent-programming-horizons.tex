@@ -1,0 +1,238 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-15}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mechanistic interpretability \textbullet{}
+  coding agents \textbullet{}
+  probing \textbullet{}
+  latent representations}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Latent Programming Horizons}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Coding Agents Know the Outcome of Their Edits
+  Up to 25 Steps Before They Make Them}\par\vspace{6pt}
+
+{\small\textbf{By} Andr\'e Silva, Han Tu \& Martin Monperrus
+  (KTH Royal Institute of Technology, Stockholm)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.05188 \textbullet{}
+  July 6, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+When a language model acts as a coding agent, it spends dozens of
+steps reading files, reasoning about bugs, writing patches, and
+running tests---a process that is opaque from the outside. This paper
+opens that black box. Using logistic-regression probes on the residual
+streams of GPT-4o and Claude 3.7 Sonnet, the authors show that the
+model's internal representations linearly encode the correctness of
+the program being edited with AUC up to 0.83---and that these
+representations run up to 25 steps \emph{ahead} of the agent's
+own actions, constituting what the authors call a \textbf{latent
+programming horizon}.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The internal states of coding agents during multi-step
+    repair episodes are not understood; it is unknown whether models
+    plan ahead or react greedily.
+  \item[Why it matters:] A latent horizon implies agents have exploitable
+    internal signals for early stopping, intervention, and lookahead
+    guidance without external execution.
+  \item[Method:] Logistic-regression probes on final-layer hidden states
+    recorded at each step of coding-agent episodes; future probes
+    predict outcomes $k$ steps ahead.
+  \item[Result:] AUC 0.83 for correctness at step $t$; horizon $k^*$
+    up to 25 steps on SWE-bench Verified.
+  \item[Evidence:] Two models (GPT-4o, Claude 3.7), two benchmarks
+    (SWE-bench Verified, HumanEval-Pro); cross-benchmark transfer
+    retains AUC $>$ 0.70.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models acting as software engineering agents can resolve
+real GitHub issues, pass coding interviews, and complete complex
+multi-file refactors---but the mechanism by which they succeed or fail
+across a long episode remains opaque. Mechanistic interpretability
+research has largely focused on single forward passes or small
+fixed-context tasks.
+
+Coding-agent episodes are different: the model sees an evolving
+repository state, modifies files, receives test outputs, and makes
+new decisions over potentially hundreds of steps. Understanding what
+the model ``knows'' at each step has direct practical value---if the
+model's internal state already encodes the likely outcome of the episode,
+that signal could be used to guide, interrupt, or improve the agent
+without waiting for external test execution.
+
+This paper introduces the first systematic mechanistic interpretability
+study of coding agents over full multi-step episodes.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior mechanistic interpretability work probes fixed-context forward
+passes (e.g., factual recall, in-context learning, arithmetic). These
+methods cannot be applied directly to coding-agent episodes because
+(1)~the context evolves across steps as files are modified, (2)~ground
+truth labels depend on external execution of the evolving codebase, and
+(3)~the episode length (up to 200 steps) is far longer than tasks
+previously studied.
+
+Behavioral analysis of coding agents (e.g., measuring pass@k or
+success rate) describes what agents do but not what they represent.
+Existing evaluation frameworks do not distinguish between agents that
+reason correctly but act incorrectly and agents that reason incorrectly
+and happen to succeed by luck---a distinction this paper makes tractable
+via probing.
+
+\section{Core Mechanism}
+
+The latent programming horizon arises because the model processes
+the full current repository state and reasoning history at each step,
+and its internal representations must encode relevant aspects of the
+program's state to generate useful next-action tokens.
+
+The key empirical finding is that correctness-relevant features are
+not just encoded in the final step before an edit---they are
+stably encoded up to 25 steps earlier in the episode. This suggests
+the model is tracking a ``mental model'' of the program's correctness
+that is both accurate and temporally extended.
+
+\section{Technical Formulation}
+
+At each step $t$ of an episode, the last-position final-layer residual
+stream vector $h_t \in \mathbb{R}^{4096}$ is recorded. Binary labels
+$y_t \in \{0, 1\}$ are obtained by running pytest on the repository
+state after each agent edit (parsed: 1/0; test-pass: 1/0; etc.).
+
+For immediate probes, a logistic regression $f_\theta(h_t) \to \hat{y}_t$
+is trained on $(h_t, y_t)$ pairs.
+
+For future probes at horizon $k$, the same probe structure predicts
+$y_{t+k}$ from $h_t$. The latent programming horizon is:
+\[
+k^* = \max\bigl\{k\;:\;
+  \mathrm{AUC}(f_{t \to t+k}) \geq 0.55,\;p < 0.05\bigr\}
+\]
+where significance is assessed by paired permutation test over episodes.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run coding agents on SWE-bench Verified (300 issues) and
+    HumanEval-Pro (150 problems) with step-by-step residual stream
+    logging enabled via API hooks.
+  \item After each edit, execute sandboxed pytest and record binary
+    labels for four tasks (parses, passes tests, reduces failures,
+    introduces regression).
+  \item Train logistic-regression probes on 80\% of episodes;
+    evaluate on 20\% held-out episodes.
+  \item Sweep horizon $k$ from 0 to 40; measure AUC and $p$-value
+    at each horizon to determine $k^*$.
+  \item Perform cross-benchmark transfer: train on SWE-bench,
+    evaluate on HumanEval-Pro without retraining.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The core finding is not a guarantee in the theoretical sense, but a
+robust empirical regularity: across two models and two benchmarks,
+the latent programming horizon $k^*$ is consistently 20--28 steps
+for ``passes tests'' and 12--16 steps for ``introduces regression.''
+Probes trained on one model do not transfer to the other, indicating
+the representations are model-specific even if the phenomenon is
+model-agnostic. Cross-benchmark transfer holds above AUC 0.70 for all
+tasks, confirming the probe captures generic code-quality structure.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{llcc}
+\toprule
+Task & Model & AUC ($k{=}0$) & Horizon $k^*$ \\
+\midrule
+Parses & GPT-4o & 0.81 & 28 \\
+Passes tests & GPT-4o & 0.78 & 22 \\
+Reduces fails & Claude 3.7 & 0.83 & 25 \\
+Introduces reg. & Claude 3.7 & 0.71 & 14 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Cross-benchmark transfer (SWE-bench $\to$ HumanEval-Pro) retains
+AUC above 0.70 for all tasks. Middle-layer probes (layer 24/48)
+achieve only AUC 0.63, indicating the relevant representations are
+built through the full network depth. Non-linear probes improve
+AUC by only 0.02, confirming approximate linear decodability.
+
+\section{Ablations and Interpretation}
+
+\textbf{Layer depth:} Probing earlier layers degrades AUC monotonically
+from 0.83 (final layer) to 0.51 (first layer), suggesting correctness
+representations are progressively constructed across transformer depth.
+
+\textbf{Non-linearity:} Adding one MLP hidden layer improves AUC by
+0.02 on average. The dominant signal is linear, consistent with the
+probing literature on factual representations.
+
+\textbf{Shuffled-label control:} Probes trained on permuted labels
+achieve AUC $0.50 \pm 0.01$, ruling out statistical artifacts from
+episode length or context size.
+
+\textbf{Practical implication:} The 25-step horizon means an
+external monitor could identify likely-failing episodes 25 steps
+early and redirect the agent---a potential 25-step saving per
+failed episode. On SWE-bench Verified, where 40\% of episodes fail,
+this would reduce total token cost by $\sim$10\%.
+
+\section*{Reference}
+
+Andr\'e Silva, Han Tu, Martin Monperrus.
+\textbf{Latent Programming Horizons in Coding Agents}.
+arXiv:2607.05188, July 2026. KTH Royal Institute of Technology.
+\url{https://arxiv.org/abs/2607.05188}
+
+\end{document}
