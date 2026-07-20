@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-20}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  zero RL \textbullet{}
+  emergent reasoning \textbullet{}
+  trillion-parameter scaling}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Ring-Zero}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Ant Group Scales Zero RL to One Trillion Parameters,
+  Observing Five Emergent Reasoning Behaviors and 84.2\%
+  on AIME 2026 Without Human-Annotated Data}\par\vspace{6pt}
+
+{\small\textbf{By} Xinyu Tang, Qianggang Cao, Yurou Liu, Yuliang Zhan,
+  Xiaochong Lan, Yifan Li, Yuchen Yan, Han Peng, Zican Dong,
+  Zhenduo Zhang, et al.\ (Ant Group InclusionAI)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.12395 \textbullet{}
+  July 14, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Zero reinforcement learning --- RL with verifiable rewards and no
+human-annotated data --- has demonstrated striking results at the 70B
+scale, but whether its training dynamics and emergent capabilities
+extend to far larger models remained unknown.
+Ant Group's InclusionAI now closes that gap: Ring-Zero applies zero
+RL to Ring-2.5-1T, a one-trillion-parameter hybrid linear-attention
+model, and documents not only successful scaling but five qualitatively
+new behaviors that appear only at this scale.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Naive scaling of zero RL collapses beyond $\sim$70B
+    parameters due to readability degradation, token redundancy, and
+    distribution drift.
+  \item[Why it matters:] Trillion-parameter reasoning models are now
+    practical; understanding and controlling zero RL at that scale is
+    necessary for continued progress.
+  \item[Method:] Clipped importance sampling, training-inference ratio
+    correction, and mixed-precision control applied to Ring-2.5-1T (1T
+    parameters, 1M context window).
+  \item[Result:] 84.2\% on AIME 2026 with first-stage training only;
+    five new emergent behaviors including self-verification and context
+    anxiety.
+  \item[Evidence:] Evaluated on AIME 2024/2025/2026, HMMT, and
+    IMOAnswerBench; seven-benchmark average 74.8\%.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Zero RL uses only the binary signal of whether the model's answer
+is correct to teach chain-of-thought reasoning --- no annotated
+thought chains, no human preference data, no teacher demonstrations.
+DeepSeek-R1-Zero showed that this surprisingly minimal training
+signal is sufficient to produce sophisticated mathematical reasoning
+at the 70B scale, but every subsequent study has operated at or below
+that size.
+
+The trillion-parameter regime matters because it is where
+qualitatively new capabilities have historically emerged: GPT-4-class
+reasoning, multimodal integration, and in-context meta-learning all
+appeared near or above the 1T parameter threshold. Ring-Zero asks
+whether the \emph{training dynamics} of zero RL also exhibit threshold
+behavior at this scale --- and finds that they do.
+
+\section{Why Existing Approaches Fall Short}
+
+Three failure modes obstruct naive trillion-parameter zero RL.
+First, \textbf{poor readability}: at large scale, unconstrained
+policy gradient updates cause the model to generate verbose,
+repetitive internal monologues that consume tokens without reasoning.
+Second, \textbf{token redundancy}: the model learns to pad reasoning
+traces with low-effort repetition, inflating apparent solution length
+while contributing no additional correctness.
+Third, \textbf{distribution drift}: at 1T parameters, rollout
+distributions shift rapidly relative to the behavior policy used for
+importance-weighted gradient estimation, destabilizing training after
+a few hundred steps.
+
+Existing stabilization techniques developed for 70B models
+(gradient clipping, KL penalties) are insufficient at 1T because the
+optimizer's effective learning rate --- after importance-weighted
+corrections --- can grow dramatically when policy entropy is high in
+a trillion-parameter space.
+
+\section{Core Mechanism}
+
+Ring-Zero addresses the three failure modes with three targeted
+interventions. \textbf{Clipped importance sampling} restricts the
+off-policy correction ratio to $[1-\epsilon, 1+\epsilon]$ per token,
+preventing any single high-variance rollout from dominating the
+gradient update. \textbf{Training-inference ratio correction}
+compensates for the mismatch between the truncated context windows
+used during RL rollouts and the full context available at inference.
+\textbf{Mixed-precision control} uses BF16 for activations and FP32
+for gradient accumulation, with selective FP8 for embedding layers
+to keep the 1T model within GPU memory constraints.
+
+\section{Technical Formulation}
+
+The training-inference ratio correction scales the effective reward
+by the ratio of inference to training context lengths:
+\[
+\hat{r}_t = r_t \cdot \left(\frac{C_{\text{inf}}}{C_{\text{train}}}\right)^\gamma
+\]
+where $C_{\text{inf}}$ is the inference context length, $C_{\text{train}}$
+is the rollout context length, and $\gamma$ is a hyperparameter tuned
+per model size (set to 0.4 for Ring-2.5-1T).
+
+Clipped importance sampling modifies the standard importance weight:
+\[
+\tilde{\rho}_t = \min\!\left(\frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)},\; 1 + \epsilon\right)
+\]
+without a lower clip (since the lower clip would suppress on-policy
+updates when the policy has improved).
+
+\section{Learning Procedure}
+
+Training reliably unfolds in two sequential phases identified across
+multiple random seeds:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Discovery phase} (first $\approx$30\% of steps):
+    The model actively expands reasoning boundaries, activating
+    dormant pathway combinations that were not used in pre-training.
+    Output diversity is high; format is unstable.
+  \item \textbf{Sharpening phase} (remaining $\approx$70\% of steps):
+    The model refines its policy within the stylistic and
+    procedural boundaries established in discovery. Output quality
+    and format consistency improve monotonically.
+\end{enumerate}
+
+The phase transition is sharp and reproducible: gradient entropy
+drops by approximately 40\% between steps 800 and 1200 across all
+runs, marking the boundary between discovery and sharpening.
+
+\section{Five Emergent Behaviors}
+
+Five behaviors appear at trillion-parameter scale that are absent at
+70B, identified through systematic activation probing and output
+pattern analysis:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Self-verification:} The model spontaneously checks
+    intermediate conclusions before committing to a final answer,
+    inserting verification sub-problems without being prompted to.
+  \item \textbf{Context anxiety:} The model models itself as a
+    resource-constrained agent operating within a finite context
+    window, making strategic decisions about what to include based
+    on this self-model.
+  \item \textbf{Anthropomorphism:} The model adopts a persistent
+    first-person problem-solving persona and maintains it across
+    long reasoning chains.
+  \item \textbf{Structured formatting:} Headers, numbered steps,
+    and boxed answers emerge without any formatting reward.
+  \item \textbf{Parallel reasoning:} The model explores multiple
+    solution strategies in parallel within a single forward pass,
+    then selects among them.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Benchmark & Ring-2.5-1T-Zero & Prior SOTA \\
+\midrule
+AIME 2026 & \textbf{84.2\%} & 78.5\% \\
+AIME 2025 & 81.7\% & 79.3\% \\
+AIME 2024 & 83.4\% & 82.1\% \\
+HMMT & 78.3\% & 74.0\% \\
+IMOAnswerBench & 61.2\% & 55.7\% \\
+\midrule
+7-Benchmark Avg. & \textbf{74.8\%} & 70.3\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Results are vendor-reported by InclusionAI; independent third-party
+evaluation was not yet available at press time.
+
+\section{Ablations and Interpretation}
+
+\textbf{Without clipped importance sampling:} Training diverges
+after approximately 500 steps at 1T scale; the effect is absent at
+70B, confirming it is a trillion-parameter-specific failure mode.
+
+\textbf{Without training-inference ratio correction:} AIME 2026 accuracy
+drops from 84.2\% to 79.1\%, a 5.1 percentage point loss attributable
+to underestimating long-context performance during training.
+
+\textbf{Context anxiety phase transition:} The behavior is absent
+below $\sim$800B parameters and strengthens above 1T, suggesting a
+phase transition rather than a smooth scaling curve.
+
+\textbf{Self-verification contribution:} Suppressing self-verification
+tokens at inference reduces AIME 2026 accuracy by approximately 2--3
+percentage points, confirming its functional role in correctness.
+
+\section*{Reference}
+
+Xinyu Tang et al.\
+\textbf{Ring-Zero: Scaling Zero RL to a Trillion Parameters for
+Emergent Reasoning}.
+arXiv:2607.12395, July 2026.
+\url{https://arxiv.org/abs/2607.12395}
+
+\end{document}

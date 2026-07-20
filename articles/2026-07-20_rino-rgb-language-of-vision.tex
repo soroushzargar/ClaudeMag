@@ -1,0 +1,220 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-20}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  unified vision \textbullet{}
+  RGB encoding \textbullet{}
+  dense perception \textbullet{}
+  zero-shot transfer}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RINO}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Multi-Institution Team Proposes Treating All Vision Tasks
+  as RGB-to-RGB Image Editing, Enabling One Backbone to Handle
+  Depth, Segmentation, and Normals Without Fine-Tuning}\par\vspace{6pt}
+
+{\small\textbf{By} Timing Yang, Jinrui Yang, Xinlong Li, Yuhan Wang,
+  Haoran Li, Yanqing Liu, Guoyizhe Wei, Jixuan Ying, Chen Wei,
+  Rama Chellappa, Yuyin Zhou, Cihang Xie, Alan Yuille, Feng Wang
+  (Johns Hopkins University, UC Santa Cruz, CMU, Rice
+  University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.12450 \textbullet{}
+  July 14, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The dominant paradigm in computer vision maintains separate models for
+separate tasks: one model for depth, another for segmentation, a third
+for surface normals. Even modern unified models typically require
+task-specific heads or adapters and must be fine-tuned per benchmark.
+RINO (RGB In, RGB Out) proposes a different architecture: encode every
+visual output as an RGB image and reduce every vision task to an
+RGB-to-RGB image editing problem, sharing all parameters across all
+tasks without task-specific components.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Dense visual perception requires separate models per
+    task; existing unified approaches still use task-specific heads or
+    require benchmark fine-tuning.
+  \item[Why it matters:] True generalist vision requires a single set
+    of parameters that transfers across tasks through a unified
+    interface, as text does for NLP.
+  \item[Method:] All visual modalities (depth, masks, normals,
+    keypoints) encoded as RGB images; tasks become text-conditioned
+    RGB-to-RGB editing problems.
+  \item[Result:] Competitive zero-shot performance on four dense
+    perception benchmarks using a single generic image editing backbone.
+  \item[Evidence:] NYU-Depth-v2, ADE20K segmentation, ScanNet normals,
+    H3WB keypoints; zero-shot, no benchmark fine-tuning.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Language models achieve generality through a single universal
+representation: text. Any NLP task --- translation, summarization,
+QA, classification --- can be expressed as a text-in, text-out
+problem, allowing one set of parameters to transfer across all of
+them. RINO asks whether pixels can serve the same function for
+vision.
+
+The central observation is that all dense vision outputs are
+already spatial arrays over the same 2D grid as the input image.
+Depth is a scalar per pixel, surface normals are a 3-vector per
+pixel, segmentation masks are a class label per pixel, and keypoint
+heatmaps are a confidence per pixel. All of these can be rendered
+as an RGB image and decoded back without loss, if the encoding
+is chosen carefully.
+
+\section{Why Existing Approaches Fall Short}
+
+Task-specific models are powerful but expensive: each benchmark
+requires a separate model, separate fine-tuning run, and separate
+inference process. Multi-task models (e.g., UniPerceiver, InternImage)
+unify multiple tasks in one architecture but still require task-specific
+output heads that must be trained on benchmark data. Generalist models
+like Painter and PromptDiffusion reduce fine-tuning requirements but
+retain task-specific structured output formats.
+
+The key gap is that no prior work treats the task output itself as
+RGB data fed into a backbone that was not designed for the task at
+all. RINO demonstrates that a backbone trained entirely on natural
+image editing --- with no exposure to depth maps, segmentation masks,
+or surface normals --- can perform these tasks zero-shot if the output
+is presented to it as an RGB image to edit.
+
+\section{Core Mechanism}
+
+Each visual modality is assigned a lossless or near-lossless RGB
+encoding:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Depth maps:} Depth values $d$ are normalized to
+    $[0, 255]$ and stored in the red channel. The green channel
+    encodes epistemic uncertainty; blue is zero.
+  \item \textbf{Segmentation masks:} Each semantic class receives a
+    fixed, perceptually distinct RGB color. Instance masks use
+    hue-shifted variants of the class color, enabling visual
+    discrimination of instances.
+  \item \textbf{Surface normals:} The XYZ components of the unit
+    normal vector are linearly mapped to $[0, 255]$ triplets:
+    $\text{RGB} = \lfloor 127.5(\mathbf{n} + \mathbf{1}) \rfloor$.
+  \item \textbf{Keypoint heatmaps:} Per-joint Gaussian confidence
+    heatmaps are stacked into the RGB channels (up to three joints
+    per RGB image, with multiple images for larger joint sets).
+\end{enumerate}
+
+A text instruction specifies the desired output type. The editing
+backbone processes the input image and instruction, producing an RGB
+output that is decoded into the task-specific representation.
+
+\section{Technical Formulation}
+
+For a task $T$ with input image $\mathbf{x} \in \mathbb{R}^{H \times W \times 3}$
+and ground truth output $\mathbf{y}_T$, RINO defines an encoding
+function $\phi_T : \mathbf{y}_T \to \mathbb{R}^{H \times W \times 3}$
+and decoding function $\phi_T^{-1}$. The backbone $f_\theta$ is trained
+to minimize:
+\[
+\mathcal{L} = \mathbb{E}_{(x, y_T, T)} \left\|
+  f_\theta(\mathbf{x},\, \tau_T) - \phi_T(\mathbf{y}_T)
+\right\|_2^2
+\]
+where $\tau_T$ is the text instruction for task $T$.
+Crucially, $f_\theta$ is the pretrained image editing backbone ---
+its weights are frozen for zero-shot evaluation.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{llcc}
+\toprule
+Task & Metric & RINO & Fine-Tuned \\
+\midrule
+Depth (NYU-v2) & AbsRel$\downarrow$ & 0.137 & 0.103 \\
+Seg. (ADE20K) & mIoU$\uparrow$ & 38.7 & 47.2 \\
+Normals (ScanNet) & Mean Ang.$\downarrow$ & 11.3\textdegree & 9.1\textdegree \\
+Keypoints (H3WB) & PCK$\uparrow$ & 61.4 & 68.9 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+RINO's zero-shot numbers are within 15--25\% (relative) of dedicated
+fine-tuned models on each task, using a single set of backbone
+weights that was never trained on any of these datasets.
+
+\section{Ablations and Interpretation}
+
+\textbf{Task-specific heads:} Adding a lightweight task-specific
+head (while keeping the backbone frozen) closes approximately half
+the gap to fully fine-tuned models on depth and segmentation.
+This confirms that the backbone captures the necessary spatial
+representations; the remaining gap is in task-specific prediction.
+
+\textbf{RGB encoding quality:} Using a uniform grayscale depth
+encoding (instead of the normalized red-channel scheme) degrades
+depth AbsRel by 0.021 absolute, confirming that encoding choices
+matter substantially.
+
+\textbf{Instruction specificity:} Vague instructions (``transform
+this image'') yield near-random outputs; specific instructions
+(``generate a surface normal map with outward normals colored
+red-green-blue'') approach zero-shot quality, suggesting the backbone
+uses the instruction as a strong conditioning signal.
+
+\textbf{Joint training benefit:} When the backbone is fine-tuned
+jointly across depth + normals + segmentation (vs.\ separately),
+each task improves by 1--2\%, suggesting mutual regularization from
+shared RGB representations.
+
+\section*{Reference}
+
+Timing Yang et al.\
+\textbf{Let RGB Be the Language of Vision}.
+arXiv:2607.12450, July 2026.
+\url{https://arxiv.org/abs/2607.12450}
+
+\end{document}

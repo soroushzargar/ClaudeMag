@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-20}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion language models \textbullet{}
+  policy gradient \textbullet{}
+  masked diffusion \textbullet{}
+  RLHF}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Mask-Aware Policy Gradients}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  UT Austin Corrects a Fundamental Bias in RL Training for
+  Masked Diffusion Language Models by Properly Accounting
+  for Both Token and Masking Decisions}\par\vspace{6pt}
+
+{\small\textbf{By} Haran Raajesh, Kulin Shah, Adam Klivans,
+  Philipp Kr\"{a}henb\"{u}hl (University of Texas at
+  Austin)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.15200 \textbullet{}
+  COLM 2026 \textbullet{} July 17, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Masked Diffusion Language Models (MDLMs) generate text by iteratively
+unmasking tokens over multiple steps. Applying reinforcement learning
+to MDLMs --- to improve performance on math reasoning, code generation,
+or instruction following --- requires a valid policy gradient. But all
+existing RL approaches for MDLMs compute a policy gradient that ignores
+one of the model's two fundamental decisions: not just which tokens
+to predict, but which positions to remask at each step. TRACE-MDLM
+corrects this omission with a two-stage action MDP formulation, raising
+GSM8K accuracy from 79.3\% to 87.1\% and MBPP from 41.2\% to 53.4\%.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RL for MDLMs ignores the masking schedule decision
+    in the policy gradient, producing a biased update that
+    misattributes credit to token choices.
+  \item[Why it matters:] MDLMs are an increasingly competitive
+    alternative to autoregressive LMs; reliable RL is necessary
+    for closing the remaining gap to AR models on reasoning tasks.
+  \item[Method:] Two-stage action MDP: the policy gradient decomposes
+    into a token term and a masking term; a lightweight MLP head
+    is trained to parameterize the masking policy.
+  \item[Result:] 87.1\% on GSM8K (+7.8 pp over token-only baseline);
+    53.4\% on MBPP (+12.2 pp); 40\% lower gradient variance.
+  \item[Evidence:] Evaluated on GSM8K and MBPP; ablations on 3B-scale
+    MDLM; accepted at COLM 2026.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Masked Diffusion Language Models are a promising alternative to
+autoregressive (AR) LMs: they are intrinsically parallelizable
+across token positions, support flexible bidirectional context, and
+can be sampled at adjustable quality-speed tradeoffs by varying the
+number of denoising steps. MDLMs have closed much of the gap to
+AR models on language modeling benchmarks, but lag behind on
+structured reasoning tasks like mathematics and code.
+
+Reinforcement learning from verifiable rewards --- the technique
+that drove major gains for AR reasoning models via GRPO, PPO, and
+similar methods --- is the natural next step for MDLMs. The obstacle
+is that naive application of AR policy gradient methods to MDLMs
+produces a biased estimator, because it ignores a decision that
+is structurally part of the MDLM generation process: the masking
+schedule.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard RL for AR models computes the log-probability of each
+generated token and uses these log-probabilities directly in the
+policy gradient. For MDLMs, the analogous computation scores each
+predicted token at each unmasked position --- ignoring that the
+model also decided which positions to keep unmasked (and which to
+remask) at each step.
+
+The masking schedule is not a fixed algorithmic artifact: it is
+a learned policy decision. A given sequence of $T$ denoising steps
+involves $T$ masking decisions, each dependent on the model's output
+and the task. Ignoring these decisions is equivalent to computing
+the policy gradient for an AR model while ignoring every other
+token in the generation --- the gradient is biased and the resulting
+training signal miscredits token choices for outcomes that were
+actually driven by masking decisions.
+
+Prior approaches including SPG and GRPO-for-MDLMs apply variance
+reduction techniques to the token gradient without addressing this
+structural bias.
+
+\section{Core Mechanism}
+
+The paper formalizes MDLM generation as a two-stage MDP per
+denoising step. At step $t$, the model observes a partially masked
+sequence $\mathbf{x}_t$ and takes two sequential actions:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Token action $a^{\text{tok}}_t$:} For each masked
+    position $i \in \mathcal{M}_t$, predict the unmasked token
+    $x_i$ from the MDLM network. This recovers a fully unmasked
+    intermediate sequence $\hat{\mathbf{x}}_t$.
+  \item \textbf{Masking action $a^{\text{mask}}_t$:} Select a
+    subset of positions in $\hat{\mathbf{x}}_t$ to remask,
+    producing $\mathbf{x}_{t+1}$ for the next step. This is
+    parameterized by a lightweight MLP over the MDLM hidden
+    states.
+\end{enumerate}
+
+The full policy gradient decomposes as:
+\[
+\nabla_\theta J = \mathbb{E}_\pi \left[ \hat{A}_t \!\left(
+  \nabla_\theta \log \pi_\theta(a^{\text{tok}}_t \mid \mathbf{x}_t)
+  + \nabla_\theta \log \pi_\theta(a^{\text{mask}}_t \mid \hat{\mathbf{x}}_t)
+\right) \right]
+\]
+where $\hat{A}_t$ is the advantage estimate at step $t$.
+
+\section{Technical Formulation}
+
+The masking policy $\pi_\theta(a^{\text{mask}}_t \mid \hat{\mathbf{x}}_t)$
+is a factored Bernoulli over positions:
+\[
+\pi_\theta(a^{\text{mask}}_t \mid \hat{\mathbf{x}}_t)
+= \prod_{i=1}^{L} \text{Bernoulli}\!\left(m_i;\; \sigma(\mathbf{W}
+  \mathbf{h}_i + b)\right)
+\]
+where $\mathbf{h}_i$ is the MDLM hidden state at position $i$ after
+the token action, $\mathbf{W} \in \mathbb{R}^{1 \times d}$ and
+$b \in \mathbb{R}$ are the MLP parameters, and $m_i \in \{0, 1\}$
+is the masking decision. The MLP is trained jointly with the
+denoising network.
+
+The advantage $\hat{A}_t$ is estimated using Generalized Advantage
+Estimation (GAE) with $\lambda = 0.95$ and a value function head
+trained on the MDLM encoder representations.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Method & GSM8K & MBPP \\
+\midrule
+MDLM-3B (no RL) & 52.1\% & 28.7\% \\
+Token-only REINFORCE & 79.3\% & 41.2\% \\
+SPG & 81.4\% & 44.7\% \\
+\textbf{Mask-Aware PG (ours)} & \textbf{87.1\%} & \textbf{53.4\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The masking term alone contributes approximately 3--4 percentage
+points; jointly optimizing both token and masking gradients
+provides the full 7--12 percentage point improvement over
+token-only methods.
+
+Gradient norm variance is 40\% lower with Mask-Aware PG,
+explaining the smoother training curves and reduced need for
+gradient clipping.
+
+\section{Ablations and Interpretation}
+
+\textbf{Token gradient only:} Removing the masking term
+reproduces the SPG/REINFORCE baseline, confirming the masking
+term as the source of improvement.
+
+\textbf{Masking term only:} Training with only the masking
+gradient (no token gradient) fails to converge, confirming
+both terms are jointly necessary.
+
+\textbf{Masking schedule analysis:} Models trained with
+Mask-Aware PG learn to unmask tokens in a semantically
+coherent order: in math problems, nouns and verbs are
+unmasked first, modifiers last. This learned curriculum
+differs qualitatively from the uniform-random schedule used
+at initialization.
+
+\textbf{Scaling:} The advantage grows with problem difficulty.
+For easy single-step GSM8K problems the gap is $<$3 percentage
+points; for multi-step problems requiring 4+ intermediate
+computations the gap is 8+ percentage points, consistent
+with the masking schedule being most important when sequential
+reasoning structure matters.
+
+\section*{Reference}
+
+Haran Raajesh, Kulin Shah, Adam Klivans, Philipp Kr\"{a}henb\"{u}hl.
+\textbf{Mask-Aware Policy Gradients for Diffusion Language Models}.
+COLM 2026 / arXiv:2607.15200, July 2026.
+\url{https://arxiv.org/abs/2607.15200}
+
+\end{document}

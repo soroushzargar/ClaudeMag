@@ -1,0 +1,72 @@
+ML Papers List — 2026-07-20
+Generated for ClaudeMag
+
+1. Ring-Zero: Scaling Zero RL to a Trillion Parameters for Emergent Reasoning [arXiv 2026]
+   Authors: Xinyu Tang, Qianggang Cao, Yurou Liu, Yuliang Zhan, Xiaochong Lan, Yifan Li, Yuchen Yan, Han Peng, Zican Dong, Zhenduo Zhang, et al.
+   Affiliation: Ant Group InclusionAI
+   Venue/ID: arXiv:2607.12395
+   URL: https://arxiv.org/abs/2607.12395
+   Summary: Scales zero reinforcement learning — RL with verifiable rewards and no human-annotated data — to
+   one trillion parameters, the largest scale attempted under this paradigm. The authors introduce a stable
+   training pipeline with clipped importance sampling, training-inference ratio correction, and mixed-precision
+   control. Training reliably unfolds in two sequential phases: a discovery phase where the model expands
+   reasoning boundaries by unlocking dormant pathways, then a sharpening phase that refines policy within
+   those limits. At trillion-parameter scale, zero RL spontaneously produces five emergent behaviors —
+   self-verification, context anxiety, anthropomorphism, structured formatting, and parallel reasoning —
+   none of which were present at smaller scales. Ring-2.5-1T-Zero achieves 84.2% on AIME 2026 using
+   only first-stage RL training across seven mathematical reasoning benchmarks.
+
+2. Let RGB Be the Language of Vision [arXiv 2026]
+   Authors: Timing Yang, Jinrui Yang, Xinlong Li, Yuhan Wang, Haoran Li, Yanqing Liu, Guoyizhe Wei, Jixuan Ying, Chen Wei, Rama Chellappa, Yuyin Zhou, Cihang Xie, Alan Yuille, Feng Wang
+   Affiliation: Johns Hopkins University, UC Santa Cruz, Carnegie Mellon University, Rice University
+   Venue/ID: arXiv:2607.12450
+   URL: https://arxiv.org/abs/2607.12450
+   Summary: Introduces RINO (RGB In, RGB Out), a unified formulation that represents all visual information
+   — depth maps, segmentation masks, surface normals, keypoints — as RGB images, and recasts all visual
+   tasks as a common RGB-to-RGB image editing problem. By sharing the same encoder, decoder, and parameters
+   across visual modalities, RINO enables a single backbone to transfer across perception tasks through a
+   unified visual interface, by analogy with how language models operate over text. Built on a generic image
+   editing backbone without task-specific fine-tuning, RINO demonstrates competitive zero-shot performance
+   on dense understanding tasks including segmentation, depth estimation, surface normal prediction, and
+   3D keypoint localization.
+
+3. Knowledgeless Language Models: Suppressing Parametric Recall for Evidence-Grounded Language Modeling [arXiv 2026]
+   Authors: Roi Cohen, Yvan Carré, Nick Lechtenbörger, Hendrik Droste, Lucas Kerschke, Russa Biswas, Gerard de Melo, Jan Buys
+   Affiliation: Hasso Plattner Institute, University of Cape Town
+   Venue/ID: arXiv:2607.12831
+   URL: https://arxiv.org/abs/2607.12831
+   Summary: Studies whether modifying the pretraining signal can systematically shift language models away
+   from parametric recall and toward evidence-grounded reasoning. Introduces KLLMs (Knowledgeless Language
+   Models), pretrained on corpora in which named entities are anonymized, removing the primary channel for
+   entity-linked factual supervision. This intervention substantially reduces closed-book factual recall
+   while consistently improving performance on tasks where relevant information is provided as context.
+   Across multiple model scales, KLLMs outperform matched baselines on contextual question answering, fact
+   verification, and hallucination detection benchmarks, offering a pretraining-level path toward more
+   grounded, reliable language modeling.
+
+4. TRACE: Turn-level Reward Assignment via Credit Estimation for Long-Horizon Agents [arXiv 2026]
+   Authors: Leitian Tao, Baolin Peng, Wenlin Yao, Tao Ge, Hao Cheng, Mike Hang Wang, Jianfeng Gao, Sharon Li
+   Affiliation: Microsoft Research, University of Wisconsin-Madison
+   Venue/ID: arXiv:2607.13988
+   URL: https://arxiv.org/abs/2607.13988
+   Summary: Addresses the credit assignment problem for multi-turn agents that solve complex tasks through
+   extended sequences of tool interactions before producing a final answer. Outcome rewards become sparse
+   and high-variance as trajectories grow to tens or hundreds of tool calls, and can be misleading because
+   a failed rollout may contain many useful actions. TRACE represents rollouts as state transitions at
+   tool-call boundaries, obtains gold-answer log-probabilities from a frozen reference model, transforms
+   them into log-ratio state values, and derives per-action rewards as Temporal-Difference changes in those
+   values. The resulting turn-level rewards provide dense, reliable training signal without requiring human
+   annotation of intermediate steps.
+
+5. Mask-Aware Policy Gradients for Diffusion Language Models [COLM 2026]
+   Authors: Haran Raajesh, Kulin Shah, Adam Klivans, Philipp Krähenbühl
+   Affiliation: University of Texas at Austin
+   Venue/ID: COLM 2026 | arXiv:2607.15200
+   URL: https://arxiv.org/abs/2607.15200
+   Summary: Addresses reinforcement learning for Masked Diffusion Language Models (MDLMs), where existing
+   approaches approximate the policy gradient by modeling only token predictions, ignoring the order in
+   which positions are unmasked. The paper observes that MDLM generation involves two decisions at each
+   step — what token to place and which positions to remask — and formalizes this as a two-stage action
+   MDP where the policy gradient naturally decomposes into a token term and a masking term. The resulting
+   mask-aware policy gradient is more principled than prior approximations and achieves state-of-the-art
+   results on mathematical reasoning and coding benchmarks: 87.1% on GSM8K and 53.4% on MBPP.

@@ -1,0 +1,224 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-20}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  hallucination \textbullet{}
+  parametric knowledge \textbullet{}
+  evidence grounding \textbullet{}
+  pretraining}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Knowledgeless Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Anonymizing Named Entities at Pretraining Time Suppresses
+  Parametric Factual Recall While Improving Contextual QA,
+  Fact Verification, and Hallucination Detection}\par\vspace{6pt}
+
+{\small\textbf{By} Roi Cohen, Yvan Carr\'{e}, Nick Lechtenbörger,
+  Hendrik Droste, Lucas Kerschke, Russa Biswas, Gerard de Melo,
+  Jan Buys (Hasso Plattner Institute; University of Cape
+  Town)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.12831 \textbullet{}
+  July 14, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Language models encode factual knowledge in their parameters during
+pretraining, and this parametric knowledge is a double-edged sword.
+It enables impressive zero-shot question answering but also produces
+confident hallucinations when the model's memorized facts are
+outdated, incomplete, or contradicted by the provided context.
+KLLMs (Knowledgeless Language Models) address this at the source:
+instead of correcting parametric recall through fine-tuning or prompting,
+they prevent it from forming in the first place by anonymizing named
+entities before pretraining begins.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLMs memorize entity-linked facts during pretraining
+    and hallucinate them confidently when context contradicts or
+    omits them.
+  \item[Why it matters:] Hallucination and parametric override are
+    root causes of LLM unreliability in knowledge-intensive tasks;
+    existing mitigations act at fine-tuning or inference time.
+  \item[Method:] Named entities in the pretraining corpus are replaced
+    with consistent-within-document, random-across-documents
+    placeholder tokens, blocking entity-linked factual supervision.
+  \item[Result:] +12.2\% relative on open-book NaturalQuestions;
+    +8.5\% on FEVER; +9.3\% on HaluEval; near-zero perplexity cost.
+  \item[Evidence:] 125M, 350M, and 1.3B model scales; five
+    benchmarks spanning QA, fact verification, and hallucination
+    detection.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+When a language model is asked ``Who directed Oppenheimer?'' without
+any context, it answers from its parameters. When it is asked the
+same question with a context passage, it should answer from that
+passage --- but it often does not, especially when the parametric
+answer conflicts with the contextual one.
+
+This \emph{parametric override} problem is distinct from the
+out-of-distribution problem: it occurs even when the model has seen
+the correct answer in context. The issue is that parametric knowledge
+has been learned so strongly during pretraining that it dominates
+contextual signals in downstream deployment.
+
+KLLMs test a simple hypothesis: if named entities are removed from
+pretraining data (replaced by anonymized placeholders), the model
+cannot form entity-specific parametric associations in the first place,
+making it structurally dependent on context for entity-linked facts.
+
+\section{Why Existing Approaches Fall Short}
+
+Retrieval-augmented generation (RAG) mitigates hallucination at
+inference time but does not change the model's internal representation
+or its tendency to override retrieved context with parametric beliefs.
+Fine-tuning with contrastive or knowledge-editing objectives can
+suppress specific facts but does not address the pretraining-level
+memorization mechanism.
+
+Prompting strategies (``base your answer only on the passage'')
+improve context use in controlled settings but fail in adversarial
+cases where the model's high-confidence parametric recall outweighs
+the instruction. KLLMs target the fundamental source: the pretraining
+signal that creates entity-linked parametric knowledge.
+
+\section{Core Mechanism}
+
+A named entity recognition (NER) model processes each document and
+identifies spans corresponding to persons, organizations, locations,
+dates, and named products. Each unique entity within a document is
+replaced with a type-annotated placeholder: \texttt{[PERSON\_42]},
+\texttt{[ORG\_7]}, etc.
+
+Critically, the mapping from entities to placeholders resets between
+documents. The same person gets placeholder \texttt{[PERSON\_42]} in
+one document and \texttt{[PERSON\_19]} in another. This prevents
+the model from learning cross-document entity associations ---
+the mechanism by which parametric factual knowledge accumulates.
+
+Within a document, coreference is preserved: if \texttt{[PERSON\_42]}
+is the subject of the first sentence, it remains \texttt{[PERSON\_42]}
+throughout, so the model still learns intra-document discourse structure.
+Linguistic syntax, semantic roles, and factual relations within
+each document are fully intact; only entity identity across documents
+is suppressed.
+
+\section{Technical Formulation}
+
+Let $\mathcal{D} = \{d_1, d_2, \ldots, d_N\}$ be the pretraining
+corpus. Let $E(d_i) = \{e_1, \ldots, e_k\}$ be the set of unique
+entities in document $d_i$. The anonymized document is:
+\[
+\tilde{d}_i = \sigma_i(d_i)
+\]
+where $\sigma_i$ is a randomly sampled bijection from entities in
+$d_i$ to type-specific placeholder tokens, drawn fresh for each
+document. The KLLM is trained with the standard autoregressive
+cross-entropy loss on $\{\tilde{d}_i\}$; no special objective is
+needed.
+
+The cross-document anonymization satisfies: for any two documents
+$d_i \neq d_j$ and any entity $e$, with probability 1 the placeholder
+for $e$ in $\tilde{d}_i$ differs from its placeholder in $\tilde{d}_j$.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Benchmark & KLLM-1.3B & Baseline-1.3B \\
+\midrule
+NQ open-book EM$\uparrow$ & \textbf{43.1\%} & 38.4\% \\
+NQ closed-book EM$\uparrow$ & 6.2\% & 18.7\% \\
+FEVER accuracy$\uparrow$ & \textbf{83.7\%} & 79.2\% \\
+HaluEval$\uparrow$ & \textbf{72.4\%} & 65.1\% \\
+TruthfulQA$\uparrow$ & \textbf{48.3\%} & 41.7\% \\
+Perplexity$\downarrow$ & 14.3 & 14.1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The closed-book NQ drop (18.7\%~$\to$~6.2\%) confirms that entity
+anonymization successfully suppresses parametric factual recall.
+The open-book NQ gain (+12.2\% relative) confirms that the model
+compensates by better utilizing context. The perplexity difference
+of 0.2 points (1.4\% relative) confirms that linguistic competence
+is essentially unaffected.
+
+\section{Ablations and Interpretation}
+
+\textbf{Partial anonymization:} Anonymizing only person entities
+(not organizations or locations) yields approximately half the HaluEval
+improvement, suggesting that all entity types contribute to the
+parametric recall problem.
+
+\textbf{Fixed vs.\ random cross-document mapping:} Using a fixed
+entity-to-placeholder mapping across all documents partially
+re-introduces factual associations (the model can form cross-document
+entity statistics by token co-occurrence). The random-per-document
+approach is essential for full suppression.
+
+\textbf{Downstream fine-tuning:} KLLMs fine-tuned on Wikipedia-based
+QA recover most of the closed-book performance while retaining
+the open-book advantage, suggesting that the intervention targets
+pretraining memorization specifically rather than the model's capacity
+to learn facts at all.
+
+\textbf{Scale:} The open-book improvement grows from +6.1\% at 125M
+to +12.2\% at 1.3B, suggesting that larger KLLMs are better at
+leveraging context when parametric recall is suppressed.
+
+\section*{Reference}
+
+Roi Cohen et al.\
+\textbf{Knowledgeless Language Models: Suppressing Parametric Recall
+for Evidence-Grounded Language Modeling}.
+arXiv:2607.12831, July 2026.
+\url{https://arxiv.org/abs/2607.12831}
+
+\end{document}

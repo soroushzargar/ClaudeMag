@@ -1,0 +1,226 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-20}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  credit assignment \textbullet{}
+  long-horizon agents \textbullet{}
+  reinforcement learning \textbullet{}
+  tool use}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  TRACE}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Microsoft Research Derives Dense Turn-Level Rewards for
+  Long-Horizon Agents from Temporal-Difference Changes in
+  Frozen Reference Model Log-Probabilities}\par\vspace{6pt}
+
+{\small\textbf{By} Leitian Tao, Baolin Peng, Wenlin Yao, Tao Ge,
+  Hao Cheng, Mike Hang Wang, Jianfeng Gao, Sharon Li
+  (Microsoft Research; University of Wisconsin-Madison)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.13988 \textbullet{}
+  July 15, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multi-turn tool-use agents have emerged as a dominant paradigm for
+complex task completion: the agent writes and executes code, calls
+APIs, browses the web, edits files, and iterates over dozens to
+hundreds of steps before producing a final answer. Outcome-only
+reinforcement learning provides a single binary signal at the end of
+this trajectory. TRACE (Turn-level Reward Assignment via Credit
+Estimation) replaces this single sparse signal with dense,
+turn-by-turn rewards derived from how each tool call changes the
+model's probability of reaching the correct answer --- without any
+human annotation of intermediate steps.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Outcome rewards become sparse, high-variance, and
+    misleading for agents operating over 20--100 tool-call trajectories.
+  \item[Why it matters:] Long-horizon agents are increasingly deployed
+    for software engineering, scientific computing, and complex
+    information retrieval; outcome-only RL trains them poorly.
+  \item[Method:] State values estimated as log-ratio of gold-answer
+    log-probabilities (current vs.\ frozen reference); turn-level
+    rewards are TD differences between consecutive state values.
+  \item[Result:] ToolBench task completion: 41.3\%~$\to$~58.7\%;
+    WebArena: 19.4\%~$\to$~28.1\%; long-horizon code repair: 31.6\%~$\to$~47.2\%.
+  \item[Evidence:] ToolBench, WebArena, and a 20-step code repair
+    benchmark; no intermediate human annotations used.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning for single-turn tasks is straightforward:
+an answer is either right or wrong, and the reward is binary.
+For multi-turn agents, the binary outcome arrives only at the
+end of a trajectory that may span dozens of tool calls and
+intermediate reasoning steps. Any single turn --- a web search,
+a code edit, a database query --- affects the probability of
+the final correct answer, but outcome-only RL provides no
+per-turn signal about which turns were helpful.
+
+The credit assignment problem is further complicated by
+the misleading nature of failed trajectories: a sequence of
+mostly correct intermediate steps followed by a single error
+at the last step receives the same negative reward as a
+trajectory that was wrong from the start, even though the
+former's intermediate actions should be reinforced.
+
+\section{Why Existing Approaches Fall Short}
+
+Monte Carlo rollout-based credit assigns turn-level rewards
+by averaging outcomes over multiple rollouts starting from
+each intermediate state. This is statistically sound but
+computationally prohibitive for long trajectories: estimating
+a reliable MC signal for each of 50 turns in a trajectory
+requires $50 \times K$ rollouts per training example.
+
+Process reward models (PRMs) learn to score intermediate
+steps, but require human annotation of intermediate step
+quality, which is expensive and does not scale to the diverse
+tool-use environments where agents are deployed.
+
+Hindsight relabeling and advantage-based credit methods
+improve over uniform assignment but remain high-variance for
+very long trajectories because the value function must
+extrapolate many steps into the future.
+
+\section{Core Mechanism}
+
+TRACE introduces a principled value function for multi-turn
+trajectories that requires no additional training: the
+log-ratio of the gold-answer log-probability under the
+current policy versus a frozen reference model.
+
+At each state $s_t$ (the trajectory prefix through turn $t$),
+the state value is:
+\[
+V(s_t) = \log \frac{p_\theta(y^* \mid s_t)}{p_{\text{ref}}(y^* \mid s_t)}
+\]
+where $y^*$ is the known gold answer. This quantity has a natural
+interpretation: it measures how much more likely the current
+policy is (relative to the frozen reference) to produce the
+correct answer given the information available at turn $t$.
+
+The turn-level reward is the Temporal-Difference change:
+\[
+r_t = V(s_t) - V(s_{t-1})
+\]
+
+\section{Technical Formulation}
+
+A trajectory of $T$ turns decomposes into state transitions:
+$(s_0, a_1, s_1, a_2, \ldots, a_T, s_T)$, where each action $a_t$
+is a tool call and $s_t$ is the trajectory prefix after the tool
+result. The policy $\pi_\theta$ maps from $s_{t-1}$ to $a_t$; the
+tool environment is deterministic.
+
+The TRACE reward satisfies a telescoping property:
+\[
+\sum_{t=1}^{T} r_t = V(s_T) - V(s_0)
+\]
+where $V(s_T)$ approximates the outcome reward and $V(s_0)$ is a
+constant baseline. Thus TRACE distributes the outcome signal across
+turns in a way that is globally consistent: turns that increase
+$V$ receive positive rewards, turns that decrease it receive negative
+rewards, and the sum equals the net outcome advantage.
+
+Log-probabilities $p_\theta(y^* \mid s_t)$ are computed by
+teacher-forcing the gold answer given the trajectory prefix, a
+standard operation for autoregressive models that requires one
+forward pass per turn.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Benchmark & Outcome RL & TRACE RL \\
+\midrule
+ToolBench & 41.3\% & \textbf{58.7\%} \\
+WebArena & 19.4\% & \textbf{28.1\%} \\
+Code Repair ($>$20 steps) & 31.6\% & \textbf{47.2\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Credit quality measured against human annotations (Pearson $r$):
+TRACE achieves $r = 0.61$ vs.\ $r = 0.22$ for MC rollout-based
+credit and $r = 0.09$ for uniform assignment.
+
+\section{Ablations and Interpretation}
+
+\textbf{Uniform credit (assigning $V(s_T)/T$ to each turn):}
+Performance degrades by 8--12\% across benchmarks, confirming
+that the temporal structure of the TD signal is informative ---
+not just the magnitude of the outcome.
+
+\textbf{Reference model choice:} Using a weaker (smaller) reference
+model degrades credit quality, suggesting the value of a calibrated
+log-probability baseline. Using the same model checkpoint before RL
+(as TRACE prescribes) consistently outperforms alternatives.
+
+\textbf{Trajectory length:} The TRACE advantage grows with
+trajectory length. For tasks with fewer than 5 tool calls,
+the improvement over outcome-only RL is $<$2 percentage points.
+For tasks with 20+ tool calls, the gap is 15+ percentage points,
+consistent with the hypothesis that credit assignment difficulty
+scales with trajectory length.
+
+\textbf{Negative turn identification:} TRACE correctly assigns
+negative rewards to turns that move the agent away from the goal
+--- detectable as a decrease in state value --- enabling the
+policy to specifically learn to avoid those actions.
+
+\section*{Reference}
+
+Leitian Tao et al.\
+\textbf{TRACE: Turn-level Reward Assignment via Credit Estimation
+for Long-Horizon Agents}.
+arXiv:2607.13988, July 2026.
+\url{https://arxiv.org/abs/2607.13988}
+
+\end{document}
