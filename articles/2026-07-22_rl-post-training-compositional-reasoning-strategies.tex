@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-22}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  compositional reasoning \textbullet{}
+  post-training \textbullet{}
+  skill composition \textbullet{}
+  rewrite grammars}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RL Post-Training Builds Compositional Reasoning Strategies}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  UCL Gatsby Researchers Demonstrate That RL with Only Binary Reward Can
+  Compose Pretrained Primitive Skills Into New Higher-Level Strategies
+  That Rejection Fine-Tuning Cannot Reach}\par\vspace{6pt}
+
+{\small\textbf{By} Azwar Abdulsalam, Nishil Patel, Andrew Saxe
+  (UCL Gatsby Computational Neuroscience Unit)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.07646 \textbullet{}
+  July 8, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A central question in post-training research is whether reinforcement
+learning merely amplifies skills already latent in a pretrained base
+model, or whether it can build genuinely new capabilities by composing
+those primitives in ways the model has never seen.
+Researchers at UCL's Gatsby Computational Neuroscience Unit now
+answer this question decisively using a controlled symbol-rewrite
+grammar environment: RL with binary final-answer reward not only
+outperforms rejection fine-tuning on composite tasks, it produces
+a new compositional mechanism that emerges in two identifiable phases.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] It is unknown whether RL post-training amplifies
+    existing skills or composes them into genuinely new strategies
+    unavailable to the base model.
+  \item[Why it matters:] If RL can only amplify, it is bounded by
+    pretraining; if it can compose, it can transcend pretraining
+    data in principled ways.
+  \item[Method:] Controlled rewrite-grammar environment where
+    primitives and compositions are known; Transformer pretrained
+    on primitives, RL post-trained on composite tasks with binary reward.
+  \item[Result:] RL reaches 78\% on composite problems vs.\ 40\% for
+    RFT plateau; compositional strategies emerge in two phases.
+  \item[Evidence:] Phase transition at step $\sim$600; sequential
+    compositions emerge first, then parallel compositions.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The dominant post-training recipe for reasoning models involves
+either rejection fine-tuning (RFT) --- filtering model rollouts for
+correct answers and training on them --- or reinforcement learning
+(RL) with verifiable reward.
+These two approaches are widely believed to have different capability
+profiles: RFT is seen as a data-efficient curriculum tool that
+stays within the distribution of the base model, while RL is
+believed to discover new strategies through trial and error.
+But the evidence for this distinction has been largely anecdotal.
+
+The Gatsby team designs a setting where ground truth is available
+for exactly which strategies the model uses at each step, making it
+possible to verify mechanistically whether RL produces new
+compositional behavior or merely amplifies existing primitives.
+
+\section{Why Existing Approaches Fall Short}
+
+Both existing post-training approaches have limitations that are
+difficult to diagnose on open-ended language tasks.
+RFT cannot improve beyond the base model's rollout distribution:
+if the base model rarely produces composite solutions, RFT has
+no signal to amplify.
+RL can in principle explore beyond the base distribution, but
+it is unclear whether the gradient signal from binary reward is
+sufficient to wire together primitive capabilities into structured
+compositions, or whether it simply boosts the probability of
+already-composite rollouts that happen to appear at low frequency.
+
+In language settings, these mechanisms are entangled with content
+and fluency; the rewrite-grammar setting surgically isolates
+the compositional question from all other confounds.
+
+\section{Core Mechanism}
+
+EcoSpec's RL training is shown to operate through a two-phase
+compositional mechanism.
+In \textbf{Phase 1}, RL sharpens the model's execution of individual
+primitive rules: the probability of applying the correct primitive
+to the correct symbol increases, reducing errors in primitive steps.
+In \textbf{Phase 2}, the model begins chaining these primitive
+applications --- first sequentially (applying rule $r_i$ then $r_j$
+in a coordinated trace), then in parallel (applying $r_i$ and $r_j$
+to independent subterms simultaneously within a single generation).
+The transition between phases is sharp and reproducible across seeds.
+
+\section{Technical Formulation}
+
+The rewrite grammar defines a set of primitive rules
+$\mathcal{R} = \{r_1, \ldots, r_K\}$.
+Each primitive $r_i$ rewrites a specific input symbol pattern
+$s_{\text{in}}^{(i)}$ to $s_{\text{out}}^{(i)}$.
+A composite problem of arity 2 requires applying rules
+$r_i$ and $r_j$ either sequentially or in parallel:
+\[
+\text{Sequential:}\quad r_j(r_i(x)) = y
+\quad
+\text{Parallel:}\quad (r_i \!\parallel\! r_j)(x_1, x_2) = (y_1, y_2)
+\]
+The Transformer is pretrained only on single-rule traces (input, output
+pairs with $r_i$ applied once). At post-training, it receives composite
+problem inputs and binary reward for producing the correct final output.
+
+The policy gradient update under REINFORCE takes the form:
+\[
+\nabla_\theta \mathcal{J}(\theta)
+= \mathbb{E}_{\tau \sim \pi_\theta}
+  \left[ R(\tau) \sum_{t=1}^{T} \nabla_\theta \log \pi_\theta(a_t \mid s_t) \right]
+\]
+where $R(\tau) \in \{0,1\}$ is the binary correctness reward for
+the full trace $\tau$ and the sum is over all generation steps.
+
+\section{Learning Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Pretraining:} The Transformer is trained on a corpus
+    of single-rule rewrite traces covering all $K$ primitives uniformly.
+    After pretraining, the model reliably applies any single primitive
+    but has near-zero accuracy on composite tasks.
+  \item \textbf{RL post-training:} REINFORCE with binary reward is
+    applied to composite tasks.
+    No intermediate-step reward, no step annotations.
+    Training runs for 2000 gradient steps across all conditions.
+  \item \textbf{RFT baseline:} Rollouts from the pretrained model on
+    composite tasks are filtered for correctness; the model is fine-tuned
+    on the filtered set.
+    RFT training uses the same FLOPs as RL where possible.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Method & Accuracy & Plateau \\
+\midrule
+Base model (pass@1) & 4.3\% & --- \\
+Base model (pass@100) & 19.1\% & --- \\
+RFT & 40.2\% & Step 400 \\
+RL (this work) & \textbf{78.3\%} & Step 2000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The phase transition is visible in trace analysis: the rate of
+sequential compositions rises from near-zero to $\sim$30\% by
+step 600, then stabilizes while parallel compositions rise from
+near-zero to $\sim$45\% by step 2000.
+
+The base model's pass@100 rate (19.1\%) establishes a ceiling for
+RFT: RFT cannot learn from solutions the model never produces under
+any sampling strategy, yet RFT still substantially surpasses this
+baseline --- suggesting that rare composite rollouts provide
+sufficient training signal when filtered correctly.
+
+\section{Ablations and Interpretation}
+
+\textbf{Sequential before parallel:} Parallel compositions never
+emerge before sequential ones across any random seed or grammar
+instantiation.
+The authors interpret this as a task-induced curriculum:
+sequential composition is a prerequisite for parallel composition
+because it requires the model to coordinate rule application across
+a linear chain before coordinating across independent subterms.
+
+\textbf{Binary vs.\ step-level reward:} Providing step-level
+intermediate reward speeds up phase 1 (primitive sharpening)
+but does not accelerate phase 2 (compositional emergence),
+suggesting that compositional emergence is driven by global
+reward signal optimizing the full trace rather than local
+per-step feedback.
+
+\textbf{RFT saturation:} RFT saturates because the base model's
+composite-solution rollout rate is low, providing a thin training
+signal.
+Once that signal is exhausted, gradient updates from the sparse
+correct rollouts no longer produce the global policy restructuring
+that RL achieves through exploration.
+
+\textbf{Implications:} These results support a view of RL as a
+\emph{composer} rather than merely an \emph{amplifier}: given
+primitives in pretraining and composition problems at post-training,
+RL can discover how to chain those primitives into strategies
+that the base model has never executed.
+
+\section*{Reference}
+
+Azwar Abdulsalam, Nishil Patel, Andrew Saxe.\
+\textbf{RL Post-Training Builds Compositional Reasoning Strategies}.
+arXiv:2607.07646, July 2026.
+\url{https://arxiv.org/abs/2607.07646}
+
+\end{document}

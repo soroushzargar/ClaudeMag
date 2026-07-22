@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-22}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video generation \textbullet{}
+  visual pretraining \textbullet{}
+  diffusion models \textbullet{}
+  perception \textbullet{}
+  general-purpose vision}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  GenCeption}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Google DeepMind Repurposes a Video Generative Diffusion Backbone
+  as a Unified Perception Model, Achieving State-of-the-Art Across
+  Five Vision Tasks with 7--500$\times$ Less Training Data}\par\vspace{6pt}
+
+{\small\textbf{By} Letian Wang et al.\
+  (Google DeepMind)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.09024 \textbullet{}
+  July 13, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Computer vision has long operated on a modular paradigm: a separate
+specialist model for each perception task, each pretrained on its
+own curated dataset.
+Google DeepMind's GenCeption challenges this architecture at its root,
+demonstrating that the spatiotemporal priors baked into a large-scale
+text-to-video generative model transfer so effectively to perception
+that a single adapted backbone matches or exceeds task-specific
+specialists across depth, normals, pose, segmentation, and
+keypoint prediction --- while requiring a small fraction of their
+training data.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Vision perception requires separate specialist models
+    per task; no single backbone generalizes across modalities with
+    competitive performance.
+  \item[Why it matters:] A unified perception backbone would reduce
+    maintenance overhead and could exploit shared geometric priors
+    across all tasks simultaneously.
+  \item[Method:] Pre-trained text-to-video diffusion encoder adapted
+    as a feed-forward perception model; task routing via text instructions;
+    lightweight convolutional decoder per task.
+  \item[Result:] State-of-the-art on depth, surface normals, camera
+    pose, segmentation (AP@50 = 61.3), and 3D keypoints (PCK@0.1
+    = 78.9\%).
+  \item[Evidence:] 7--500$\times$ data efficiency vs.\ DepthAnything3,
+    SAM3, VGGT-Omega, Sapiens; emergent synthetic-to-real
+    generalization.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The dominant paradigm in computer vision treats each perception task
+as an independent problem: depth estimation, surface normal prediction,
+camera pose estimation, segmentation, and keypoint prediction each
+receive a specialist model pretrained on large task-specific datasets.
+While effective, this paradigm is expensive to maintain and forecloses
+the possibility of cross-task transfer of geometric knowledge.
+
+GenCeption proposes a radical simplification: the rich spatiotemporal
+representations learned by a large-scale video generation model ---
+including implicit 3D structure, motion physics, and visual semantics
+--- are precisely the priors that perception tasks require, and can
+be transferred through minimal adaptation.
+The key insight is that video generation, to be accurate, must
+encode depth, surface orientation, object boundaries, and keypoint
+identity --- all the outputs that perception specialists predict
+--- as implicit intermediate representations.
+
+\section{Why Existing Approaches Fall Short}
+
+Specialist models excel within their training distribution but fail
+to leverage shared geometric structure across tasks.
+A model trained on depth estimation does not automatically learn better
+surface normal prediction, even though normals and depth are
+geometrically coupled.
+
+Alternative general-purpose pretraining paradigms --- including
+Video MAE, V-JEPA, and image diffusion models --- provide weaker
+spatial and geometric priors than video generation because they
+either lack the generative objective (masking-based methods) or
+operate in 2D rather than the spatiotemporal domain (image diffusion).
+Video generation requires the model to implicitly solve geometry,
+physics, and scene understanding at every frame and across temporal
+transitions, encoding a uniquely rich inductive bias for perception.
+
+\section{Core Mechanism}
+
+GenCeption extracts the denoising encoder of a pre-trained video
+diffusion model and adapts it to feed-forward perception through
+three modifications.
+First, a \textbf{patchification adapter} converts a single image
+into a sequence of spatial tokens compatible with the video backbone's
+temporal token representation.
+Second, \textbf{text-steered task routing} injects a task-description
+embedding via cross-attention at each backbone layer, directing
+the backbone's feature extraction toward the relevant geometric cues
+for the requested output.
+Third, a \textbf{lightweight convolutional decoder} maps backbone
+features to the target output resolution and format (depth map,
+normal map, segmentation mask, or keypoint heatmap) without
+adding significant parameter count.
+
+\section{Technical Formulation}
+
+Let $x \in \mathbb{R}^{H \times W \times 3}$ be an input image
+and $t$ a natural-language task description.
+The video backbone $f_\theta$ (frozen then fine-tuned) maps
+$(x, t)$ to a feature map:
+\[
+F = f_\theta(\text{Patch}(x),\, \text{Enc}(t))
+\]
+where $\text{Patch}(\cdot)$ is the patchification adapter and
+$\text{Enc}(\cdot)$ is a frozen text encoder.
+The task decoder $g_\phi$ then produces output $\hat{y}$:
+\[
+\hat{y} = g_\phi(F)
+\]
+Training minimizes a task-specific loss $\mathcal{L}(\hat{y}, y)$
+(scale-invariant depth loss, angular loss for normals,
+binary cross-entropy for segmentation, heatmap MSE for keypoints)
+while the backbone and decoder are jointly fine-tuned.
+The patchification adapter is initialized from the video model's
+frame embedding layer and fine-tuned to handle single-image input
+without temporal context.
+
+\section{Learning Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Backbone source:} A large-scale text-to-video diffusion
+    model pre-trained at Google DeepMind on diverse video corpora
+    is used as the backbone.
+  \item \textbf{Patchification adapter fine-tuning:} Only the adapter
+    is updated for the first 1000 steps to align single-image
+    tokens with the backbone's temporal token distribution.
+  \item \textbf{Joint fine-tuning:} Backbone and decoder are jointly
+    fine-tuned on small per-task labeled datasets (ranging from
+    1K to 50K examples per task, depending on the task).
+  \item \textbf{Task-unified training:} All tasks are trained jointly
+    with shared backbone weights, with task identity carried
+    entirely by the text prompt.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Task (metric) & GenCeption & Specialist SOTA \\
+\midrule
+Depth (AbsRel $\downarrow$) & \textbf{0.038} & 0.041 \\
+Normals (mean angle $\downarrow$) & \textbf{5.2$^\circ$} & 5.8$^\circ$ \\
+Pose (RRA@15 $\uparrow$) & \textbf{82.4\%} & 80.1\% \\
+Seg.\ (AP@50 $\uparrow$) & \textbf{61.3} & 59.7 \\
+Keypoints (PCK@0.1 $\uparrow$) & \textbf{78.9\%} & 76.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Specialist comparisons: depth vs.\ DepthAnything3; normals vs.\
+Lotus-2; pose vs.\ VGGT-Omega; segmentation vs.\ SAM3;
+keypoints vs.\ Sapiens.
+Data efficiency is 50$\times$ for depth, 100$\times$ for normals,
+200$\times$ for pose, 7$\times$ for segmentation, and
+500$\times$ for keypoints.
+
+\section{Ablations and Interpretation}
+
+\textbf{Backbone type:} Replacing the video diffusion backbone with
+an image diffusion backbone trained on comparable data degrades
+performance on all tasks by 3--8 points, confirming that spatiotemporal
+video pretraining --- not generative pretraining per se --- is the
+source of the perceptual advantage.
+
+\textbf{Text routing vs.\ fixed heads:} Ablating text-steered routing
+(replacing it with fixed task heads) reduces performance by 2--4
+points on depth and normals and eliminates zero-shot generalization
+to task variants described in novel language.
+
+\textbf{Emergent synthetic-to-real transfer:} A model trained
+exclusively on synthetic human videos achieves competitive
+performance on real-world footage and on animals --- categories
+entirely absent from training.
+This behavior is absent when training with image-only or
+image-diffusion backbones, implicating spatiotemporal video priors
+as the source of the generalization.
+
+\textbf{Frozen vs.\ fine-tuned backbone:} Freezing the backbone
+and adapting only the decoder reduces performance by 8--12 points
+across all tasks, indicating that the backbone features must be
+reshuffled to serve the regression objective, not just linearly
+decoded.
+
+\section*{Reference}
+
+Letian Wang et al.\
+\textbf{Video Generation Models are General-Purpose Vision Learners}.
+arXiv:2607.09024, July 2026.
+\url{https://arxiv.org/abs/2607.09024}
+
+\end{document}

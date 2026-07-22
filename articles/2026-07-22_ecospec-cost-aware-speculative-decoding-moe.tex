@@ -1,0 +1,255 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-22}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  speculative decoding \textbullet{}
+  mixture-of-experts \textbullet{}
+  inference efficiency \textbullet{}
+  expert routing \textbullet{}
+  LLM serving}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  EcoSpec}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Beijing Institute of Technology Identifies Expert Scattering as a
+  Fundamental Barrier to Speculative Decoding in MoE Models and Achieves
+  Up to 1.62$\times$ Speedup Through Cost-Aware Draft Selection}\par\vspace{6pt}
+
+{\small\textbf{By} Jincheng Xie, Runheng Liu, Heyan Huang, Yawen Ling,
+  Hanbin Dai, Yu Zheng, Wen Hu
+  (Beijing Institute of Technology)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.12696 \textbullet{}
+  July 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Speculative decoding accelerates autoregressive generation by drafting
+multiple tokens quickly and verifying them in a single forward pass
+through the large target model.
+For dense models this works cleanly: the verification pass has
+a fixed memory footprint.
+But for Mixture-of-Experts models --- which power all current
+frontier open-source systems including DeepSeek-V3.1 and Qwen3 ---
+researchers from Beijing Institute of Technology have identified
+a previously uncharacterized failure mode: \emph{expert scattering}.
+Their remedy, EcoSpec, jointly optimizes acceptance likelihood and
+expert reuse, delivering up to 1.62$\times$ end-to-end speedup
+over standard speculative decoding at no quality cost.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Confidence-driven draft selection in MoE models routes
+    high-probability tokens to disjoint expert sets, increasing
+    expert-weight memory traffic and eliminating the speedup from
+    speculation.
+  \item[Why it matters:] All major frontier open-source models
+    (DeepSeek-V3.1, Qwen3-235B) use MoE; speculative decoding must
+    account for expert memory locality to be effective at scale.
+  \item[Method:] EcoSpec: lightweight expert predictor + dynamic expert
+    buffer; composite draft scoring balancing acceptance likelihood
+    and expert reuse fraction.
+  \item[Result:] Up to 1.62$\times$ end-to-end speedup on DeepSeek-V3.1
+    (671B) across reasoning, coding, QA, and dialogue benchmarks.
+  \item[Evidence:] Standard speculative decoding achieves negative
+    speedup at draft length $\geq$8 on DeepSeek-V3.1; EcoSpec
+    reaches 1.62$\times$ at the same draft length.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Speculative decoding has become the standard technique for accelerating
+large language model inference: a small draft model generates a sequence
+of candidate tokens at low cost, and the large target model verifies
+the entire sequence in a single forward pass, accepting tokens that
+agree with its own distribution and rejecting the rest.
+For dense models, each forward pass has a fixed compute and memory
+cost, and the speedup is determined solely by the acceptance rate
+of the draft tokens.
+
+MoE models break this assumption.
+In an MoE model, each token is routed to a small subset of experts
+(typically 2 out of 64), and the memory footprint of a forward pass
+is proportional to the number of \emph{unique} experts activated
+across all tokens in the batch.
+When draft tokens are selected to maximize acceptance likelihood
+alone, those tokens may route to many different expert sets ---
+forcing the serving system to load additional expert weight matrices
+into GPU high-bandwidth memory for each verification step.
+This expert scattering can make speculative decoding slower than
+standard autoregressive generation.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior speculative decoding methods for MoE models adopt the same
+draft selection criterion as for dense models: the draft token with
+highest likelihood under the draft model is selected at each position.
+This ignores the routing structure of the target model entirely.
+
+Two prior attempts at MoE-aware speculative decoding --- MoESD
+and Utility-Driven Speculative Decoding --- optimize the expert
+activation pattern for the draft model but not for the target model,
+leaving the expert scattering problem at the target verification
+pass unresolved.
+
+\section{Core Mechanism}
+
+EcoSpec modifies draft selection by introducing two components.
+The \textbf{expert predictor} is a lightweight auxiliary network
+that, given the draft model's hidden state for a candidate token,
+forecasts which of the target model's 64 experts that token will
+activate.
+The \textbf{dynamic expert buffer} tracks which expert weights are
+currently cached in GPU high-bandwidth memory for the active
+verification batch.
+Draft selection then uses a composite score that balances the
+probability of token acceptance with the fraction of required
+experts already in the buffer, so the verification step can
+proceed with minimal additional expert loading.
+
+\section{Technical Formulation}
+
+Let $c_i$ be a candidate token at draft position $i$ and let
+$p_{\text{accept},i}$ be its acceptance probability under the target
+model.
+The expert predictor $h_\psi$ maps the draft hidden state to a
+binary vector over the expert set:
+\[
+\hat{e}_i = h_\psi\bigl(d_i\bigr) \in \{0,1\}^E
+\]
+where $d_i$ is the draft model's hidden state at position $i$
+and $E$ is the total number of experts.
+The expert reuse fraction is:
+\[
+f_{\text{reuse},i}
+  = \frac{\lvert \hat{e}_i \cap \mathcal{B} \rvert}{\lvert \hat{e}_i \rvert}
+\]
+where $\mathcal{B}$ is the current expert buffer (the set of
+experts in GPU HBM).
+The composite draft score is:
+\[
+s_i = p_{\text{accept},i} \cdot \bigl(1 + \lambda \cdot f_{\text{reuse},i}\bigr)
+\]
+with $\lambda = 0.4$ chosen by grid search.
+After each verification step, $\mathcal{B}$ is updated to include
+the experts activated by the accepted tokens.
+
+\section{Learning Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Expert predictor training:} $h_\psi$ is trained
+    offline on a 10K-sample calibration corpus to minimize
+    prediction error for target expert activation patterns.
+    Training takes approximately 30 minutes on a single GPU and
+    adds $<$0.3\% latency to each draft step.
+  \item \textbf{Draft model selection:} Any standard speculative
+    decoding draft model can be used; EcoSpec modifies only the
+    token selection step, not the draft model itself.
+  \item \textbf{Buffer initialization:} At the start of each
+    generation, the buffer $\mathcal{B}$ is initialized with
+    the experts activated by the prompt tokens' verification pass.
+  \item \textbf{No target model modification:} EcoSpec requires
+    no changes to target model weights, architecture, or serving
+    infrastructure beyond the expert predictor and buffer tracking.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{llcc}
+\toprule
+Model & Task & Std.\ SD & EcoSpec \\
+\midrule
+DeepSeek-V3.1 & Reasoning & 1.00$\times$ & \textbf{1.62}$\times$ \\
+DeepSeek-V3.1 & Coding & 1.00$\times$ & \textbf{1.51}$\times$ \\
+Qwen3-235B-A22B & QA & 1.00$\times$ & \textbf{1.44}$\times$ \\
+GPT-OSS-120B & Dialogue & 1.00$\times$ & \textbf{1.38}$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Standard speculative decoding achieves negative speedup (slower than
+autoregressive) on DeepSeek-V3.1 at draft lengths of 8 or more
+tokens, confirming expert scattering as a practical barrier.
+EcoSpec reduces the active expert footprint by 18--35\% relative to
+confidence-only draft selection while maintaining or improving
+token acceptance rates.
+
+\section{Ablations and Interpretation}
+
+\textbf{Expert predictor quality:} Using a perfect oracle predictor
+improves speedup to 1.81$\times$ on DeepSeek-V3.1, indicating that
+the expert predictor is the current bottleneck and that improving
+its accuracy is the most promising direction for future gains.
+
+\textbf{Dynamic vs.\ static buffer:} A static expert buffer (fixed
+set, not updated per step) achieves only 1.22$\times$ speedup ---
+less than half the gain of the dynamic variant --- confirming
+that tracking live HBM state is essential for effective cost-aware
+draft selection.
+
+\textbf{Lambda sensitivity:} Speedup on DeepSeek-V3.1 varies from
+1.41$\times$ ($\lambda = 0$, pure confidence) to 1.62$\times$
+($\lambda = 0.4$) to 1.48$\times$ ($\lambda = 1.0$, pure reuse).
+The optimal $\lambda$ is consistent across models and tasks,
+suggesting that a moderate balance between confidence and
+reuse is universally beneficial.
+
+\textbf{Acceptance rate:} EcoSpec's composite scoring reduces the
+acceptance rate by at most 1.2 percentage points relative to
+confidence-only selection on any tested benchmark, confirming
+that the speedup comes from reduced expert loading rather than
+a higher acceptance rate --- and that the quality of generated
+text is unchanged.
+
+\section*{Reference}
+
+Jincheng Xie, Runheng Liu, Heyan Huang, Yawen Ling,
+Hanbin Dai, Yu Zheng, Wen Hu.\
+\textbf{Less Experts, Faster Decoding: Cost-Aware Speculative
+Decoding for Mixture-of-Experts}.
+arXiv:2607.12696, July 2026.
+\url{https://arxiv.org/abs/2607.12696}
+
+\end{document}

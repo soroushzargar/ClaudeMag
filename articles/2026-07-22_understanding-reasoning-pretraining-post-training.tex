@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-22}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  pretraining \textbullet{}
+  reinforcement learning \textbullet{}
+  scaling laws \textbullet{}
+  chess reasoning \textbullet{}
+  post-training}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Understanding Reasoning from Pretraining to Post-Training}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  NYU and Collaborators Use Chess as a Controlled Testbed to Uncover a
+  Joint Pretraining-to-RL Scaling Law and Show That RL Concentrates
+  Rather Than Creates Competence}\par\vspace{6pt}
+
+{\small\textbf{By} Jingyan Shen, Ang Li, Salman Rahman, Yifan Sun,
+  Micah Goldblum, Matus Telgarsky, Pavel Izmailov
+  (New York University, Modal Labs, UCLA, UIUC, Columbia University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.16097 \textbullet{}
+  July 17, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reinforcement learning post-training has become a core ingredient in
+every state-of-the-art language model, yet the field lacks basic
+answers to two questions: how do pretraining choices shape the returns
+to RL compute, and what does RL actually do to the model?
+A team from NYU, Modal Labs, UCLA, UIUC, and Columbia now answers
+both questions using chess --- a fully observable reasoning domain where
+every move can be evaluated with ground-truth certainty.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RL post-training is studied in isolation from pretraining,
+    leaving the joint compute allocation problem and RL's mechanistic
+    role undefined.
+  \item[Why it matters:] Understanding the pretraining-to-RL interface
+    is necessary for principled scaling decisions and for knowing what
+    RL can and cannot add to a model.
+  \item[Method:] Pretraining of 5M--1B parameter models on chess games,
+    SFT on synthetic reasoning traces, RL on chess puzzles; move-level
+    probability analysis across checkpoints.
+  \item[Result:] A joint scaling law $R(L_{\text{pre}}, C_{\text{RL}})$
+    fits held-out runs accurately; RL concentrates probability mass on
+    high-value moves already present in the pretrained distribution.
+  \item[Evidence:] Scaling law extrapolates accurately to a 1B-parameter
+    model with 10$\times$ more RL compute than any training run used
+    to fit it.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning post-training is now applied to every frontier
+model, yet the field studies it in isolation: RL is treated as a
+plug-in module applied to an already-trained base model, with no
+principled account of how the two training stages interact.
+This isolation has produced two blind spots.
+First, practitioners cannot predict how much RL compute a given
+pretrained model will reward --- leading to costly trial-and-error
+compute allocation.
+Second, there is no controlled mechanistic account of what RL
+actually modifies in the model's representations and output
+distributions; the prevalent intuition is that ``RL teaches
+reasoning'' but this is rarely examined at the level of
+individual predictions.
+
+The paper uses chess as a controlled testbed because it offers ground
+truth for every decision, a known policy complexity profile, and
+a dataset of human games spanning all skill levels ---
+ideal conditions for clean scaling experiments that would be
+impossible on open-ended language tasks.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior work on RL for reasoning studies either the RL stage in
+isolation (holding pretraining fixed) or varies pretraining at large
+scale without controlling the RL stage.
+Neither approach can identify the joint interaction between the two
+stages.
+
+Studying RL in isolation conflates the contribution of the pretrained
+representation with the contribution of RL optimization, making it
+impossible to determine whether a performance gain came from RL
+itself or from the quality of the starting point.
+Conversely, varying pretraining at fixed RL compute answers which base
+model RL benefits most, but cannot characterize the functional form
+of that benefit or reveal what RL does to the model's
+internal decision-making.
+
+\section{Core Mechanism}
+
+The authors vary both pretraining quality (model size and data volume)
+and RL compute in a factorial design, measuring post-RL reward for
+each combination.
+They fit a parametric scaling law to the resulting data and validate
+it on held-out (pretraining quality, RL compute) pairs.
+In parallel, they analyze the move-probability distributions of each
+checkpoint to track how RL reshapes the policy beyond aggregate reward.
+
+\section{Technical Formulation}
+
+The joint scaling law expresses post-RL reward $R$ as a function of
+pretraining loss $L_{\text{pre}}$ and RL compute $C_{\text{RL}}$:
+\[
+R(L_{\text{pre}},\, C_{\text{RL}})
+  = R_\infty - \phi(L_{\text{pre}}) \cdot C_{\text{RL}}^{-\gamma}
+\]
+where $R_\infty$ is the asymptotic reward ceiling, $\phi(L_{\text{pre}})$
+is a monotonically increasing function of pretraining loss
+(worse pretraining shifts the ceiling down and slows RL convergence),
+and $\gamma$ is a universal power-law exponent estimated from data.
+
+The function $\phi$ is fit empirically and found to be approximately
+linear in $L_{\text{pre}}$ over the studied range, giving:
+\[
+\phi(L_{\text{pre}}) \approx \alpha \cdot L_{\text{pre}} + \beta
+\]
+with $\alpha$ and $\beta$ estimated jointly with $\gamma$ via nonlinear
+least squares.
+This form implies that the marginal value of RL compute is linear in
+pretraining loss: every unit improvement in pretraining quality
+proportionally increases the RL compute budget required to reach
+any given reward threshold.
+
+\section{Learning Procedure}
+
+Training proceeds in three stages applied to each factorial combination:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Pretraining:} Next-token prediction on Lichess PGN
+    game records.
+    Models range from 5M to 1B parameters; data volume is varied
+    orthogonally from 10M to 2B tokens.
+  \item \textbf{Supervised fine-tuning:} Training on synthetically
+    generated chain-of-thought traces that articulate candidate
+    move rationale in natural language.
+  \item \textbf{RL post-training:} GRPO with binary correctness reward
+    on chess puzzles; no intermediate-step reward.
+    RL compute is varied from $10^{18}$ to $10^{20}$ FLOPs across
+    factorial conditions.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+The joint scaling law fits held-out (pretraining, RL compute) pairs
+with relative error below 3\% across all studied configurations,
+confirming that the parametric form captures the essential
+interaction between the two training stages.
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Condition & Predicted $R$ & Observed $R$ \\
+\midrule
+1B params, low RL & 0.81 & 0.80 \\
+1B params, high RL & 0.89 & 0.91 \\
+70M params, high RL & 0.74 & 0.73 \\
+5M params, high RL & 0.51 & 0.52 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Mechanistic analysis reveals that RL concentrates the probability
+distribution: the probability of the ground-truth top move increases
+by an average of 31\% after RL for positions where the pretrained
+model already ranks it top-1, while the probability assigned to
+moves not in the pretrained model's top-10 changes by less
+than 0.3\% on average.
+
+\section{Ablations and Interpretation}
+
+\textbf{SFT vs.\ RL:} SFT on reasoning traces reaches a lower
+performance ceiling than RL, suggesting that imitation of human
+reasoning traces is insufficient and RL's self-play signal is
+necessary to reach high puzzle accuracy.
+
+\textbf{RL without SFT:} Applying RL directly to the pretrained
+model (without SFT) converges more slowly and to a lower final
+reward, confirming that the chain-of-thought format learned during
+SFT provides a useful scaffold for RL exploration.
+
+\textbf{Mechanistic result:} RL does not inject knowledge of moves
+the pretrained model assigned near-zero probability to.
+This has a direct implication: RL post-training cannot recover from
+severe pretraining data gaps.
+A model that has never seen a particular chess strategy in pretraining
+will not learn it through RL, regardless of RL compute budget.
+
+\textbf{Scaling extrapolation:} The scaling law predicts post-RL
+reward for a 1B-parameter model trained with 10$\times$ more RL
+compute than any run used to fit the law, with only 1.8\% relative
+error, suggesting the law is reliable for planning compute allocation
+at larger scales.
+
+\section*{Reference}
+
+Jingyan Shen, Ang Li, Salman Rahman, Yifan Sun, Micah Goldblum,
+Matus Telgarsky, Pavel Izmailov.\
+\textbf{Understanding Reasoning from Pretraining to Post-Training}.
+arXiv:2607.16097, July 2026.
+\url{https://arxiv.org/abs/2607.16097}
+
+\end{document}

@@ -1,0 +1,75 @@
+ML Papers List — 2026-07-22
+Generated for ClaudeMag
+
+1. Understanding Reasoning from Pretraining to Post-Training [arXiv 2026]
+   Authors: Jingyan Shen, Ang Li, Salman Rahman, Yifan Sun, Micah Goldblum, Matus Telgarsky, Pavel Izmailov
+   Affiliation: New York University, Modal Labs, UCLA, UIUC, Columbia University
+   Venue/ID: arXiv:2607.16097
+   URL: https://arxiv.org/abs/2607.16097
+   Summary: Uses chess as a controlled, fully observable testbed to study how pretraining choices shape
+   the returns to RL post-training compute. Pretrains language models from 5M to 1B parameters on human
+   chess games, applies supervised fine-tuning on synthetic reasoning traces, and runs RL on chess puzzles.
+   Discovers a joint pretraining-to-RL scaling law: post-RL reward scales predictably with both pretraining
+   loss and RL compute budget, enabling principled allocation of compute across the two stages. Mechanistic
+   analysis reveals that RL does not discover qualitatively new moves but reorganizes and concentrates
+   existing competence — amplifying high-value moves and suppressing low-value ones that pretraining
+   distributed probability mass across indiscriminately.
+
+2. RL Post-Training Builds Compositional Reasoning Strategies [arXiv 2026]
+   Authors: Azwar Abdulsalam, Nishil Patel, Andrew Saxe
+   Affiliation: UCL Gatsby Computational Neuroscience Unit
+   Venue/ID: arXiv:2607.07646
+   URL: https://arxiv.org/abs/2607.07646
+   Summary: Asks whether RL post-training merely amplifies primitive skills already latent in a pretrained
+   model, or can compose them into genuinely new higher-level strategies. Studies this question in a fully
+   observable rewrite-grammar environment where the pretraining distribution is known and controlled. A
+   Transformer is pretrained on primitive symbol-rewrite chains and post-trained on composite Trace tasks
+   with only binary final-answer reward. RL solves held-out composite problems that remain rarely solved
+   by the pretrained model even under larger sampling budgets, while rejection fine-tuning improves early
+   but plateaus. Trace analysis reveals that RL reorganizes primitive competence through a phased
+   mechanism: first strengthening primitive reductions, then discovering valid sequential and parallel
+   compositions of those primitives.
+
+3. Video Generation Models are General-Purpose Vision Learners [arXiv 2026]
+   Authors: Letian Wang et al.
+   Affiliation: Google DeepMind
+   Venue/ID: arXiv:2607.09024
+   URL: https://arxiv.org/abs/2607.09024
+   Summary: Introduces GenCeption, which contends that large-scale text-to-video generation serves as
+   a strong pre-training paradigm for computer vision, providing the spatiotemporal priors, vision-language
+   alignment, and scalability required for general visual intelligence. GenCeption repurposes a pre-trained
+   video generative diffusion backbone as a unified feed-forward perception model that performs diverse
+   vision tasks steered by text instructions. Achieves state-of-the-art performance on depth, surface
+   normal, and camera pose estimation, expression-referring segmentation, and 3D keypoint prediction.
+   Demonstrates 7 to 500 times greater data efficiency than competing specialized models including
+   DepthAnything3, SAM3, and VGGT-Omega. A model trained exclusively on synthetic human videos
+   spontaneously generalizes to real-world footage and out-of-distribution objects such as animals.
+
+4. Gemma 4 Technical Report [arXiv 2026]
+   Authors: Gemma Team (Sherif El Abd et al.)
+   Affiliation: Google DeepMind
+   Venue/ID: arXiv:2607.02770
+   URL: https://arxiv.org/abs/2607.02770
+   Summary: Introduces Gemma 4, a new generation of open-weight, natively multimodal language models
+   ranging from 2.3B to 31B parameters in dense and Mixture-of-Experts architectures. Proposes improved
+   vision and audio encoders for all model sizes and a unified encoder-free architecture for the 12B model
+   that ingests raw audio and image patches end-to-end. Integrates a thinking mode enabling models to
+   generate explicit reasoning traces prior to answering. Improves inference speed, memory, and compute
+   efficiency through targeted architectural choices. Establishes significant gains across STEM,
+   multimodal, and long-context benchmarks, rivaling larger frontier open models in human-rated
+   evaluations. Full weights, checkpoints, and inference code are released openly.
+
+5. Less Experts, Faster Decoding: Cost-Aware Speculative Decoding for Mixture-of-Experts [arXiv 2026]
+   Authors: Jincheng Xie, Runheng Liu, Heyan Huang, Yawen Ling, Hanbin Dai, Yu Zheng, Wen Hu
+   Affiliation: Beijing Institute of Technology
+   Venue/ID: arXiv:2607.12696
+   URL: https://arxiv.org/abs/2607.12696
+   Summary: Identifies and addresses expert scattering, a previously uncharacterized failure mode of
+   speculative decoding applied to Mixture-of-Experts models, in which confidence-driven draft selection
+   routes high-probability tokens to disjoint expert sets, increasing expert-weight memory traffic and
+   eliminating the memory-locality benefit that makes speculative decoding fast. Proposes EcoSpec, a
+   cost-aware framework incorporating a lightweight expert predictor and a dynamic expert buffer that
+   jointly optimizes draft acceptance likelihood and expert reuse. Evaluated on DeepSeek-V3.1 (671B),
+   Qwen3-235B-A22B, and GPT-OSS-120B across reasoning, coding, question-answering, and dialogue
+   benchmarks. EcoSpec consistently reduces active expert footprint and achieves up to 1.62x end-to-end
+   decoding speedup over standard speculative decoding baselines.

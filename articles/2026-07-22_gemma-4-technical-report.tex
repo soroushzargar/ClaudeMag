@@ -1,0 +1,243 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-22}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal LLM \textbullet{}
+  open weights \textbullet{}
+  mixture-of-experts \textbullet{}
+  encoder-free \textbullet{}
+  thinking mode}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Gemma 4 Technical Report}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Google DeepMind Releases Open-Weight Natively Multimodal Models
+  from 2.3B to 31B Parameters, Including an Encoder-Free 12B
+  Architecture Ingesting Raw Audio and Image Patches}\par\vspace{6pt}
+
+{\small\textbf{By} Gemma Team (Sherif El Abd et al.)\
+  (Google DeepMind)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.02770 \textbullet{}
+  July 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Google DeepMind's Gemma 4 marks a substantial advance in open-weight
+multimodal language models, introducing a family spanning 2.3B to 31B
+parameters across dense and Mixture-of-Experts architectures.
+The flagship innovation is an encoder-free 12B model that ingests
+raw image patches and audio frames through the same token embedding
+space as text --- eliminating the modality-specific encoder modules
+that have been a fixture of multimodal systems since their inception.
+All models include a built-in thinking mode and are released with
+full weights, quantized variants, and inference code.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Open-weight multimodal models lag frontier closed
+    models on STEM, long-context, and audio-visual tasks; separate
+    encoder modules add architectural complexity and maintenance burden.
+  \item[Why it matters:] Open-weight multimodal models are essential
+    for research reproducibility and on-device deployment; removing
+    encoder modules simplifies the architecture fundamentally.
+  \item[Method:] Dense (2.3B, 9B), MoE (26B-A4B), and encoder-free
+    (12B) architectures; thinking mode trained via SFT + RL; 4-bit QAT
+    variants for on-device deployment.
+  \item[Result:] Gemma 4 12B (thinking) reaches 72.1\% MMLU-Pro and
+    91.4\% MATH-500; preferred over models 2--3$\times$ larger in
+    human-rated evaluations.
+  \item[Evidence:] Evaluated on MMLU-Pro, MATH-500, MMBench, RULER
+    (256K), and speech/audio captioning benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Open-weight language models have narrowed the gap with frontier closed
+models substantially over the past two years, but multimodal open-weight
+models have lagged: handling audio natively, processing very long
+contexts, and generating reasoning traces have each required
+separate architectural components with separate training pipelines.
+
+Gemma 4 unifies these capabilities into a single model family with
+a consistent architecture and training procedure.
+The encoder-free 12B model is the most architecturally novel member:
+by treating image patches and audio frames as tokens in the same
+embedding space as text, it eliminates the need for a separately
+pretrained and maintained vision encoder and audio encoder,
+while retaining competitive performance on both modalities.
+
+\section{Why Existing Approaches Fall Short}
+
+Encoder-based multimodal models couple a visual or audio encoder
+(pretrained independently on large corpora) to a language model
+through a projection layer.
+This approach requires maintaining two (or three) separate model
+components with different training schedules, different fine-tuning
+protocols, and different quantization sensitivities.
+Performance is also bounded by the encoder's representational
+quality: if the encoder is undertrained on certain input types
+(e.g., audio-visual correspondence), no amount of language model
+fine-tuning can recover the missing information.
+
+Thinking modes in prior open-weight models have typically been
+implemented via supervised fine-tuning alone, without RL stabilization,
+leading to trace inflation --- models generating arbitrarily long
+reasoning traces that do not improve answer quality.
+Gemma 4 addresses this with a constrained RL stage that optimizes
+final-answer correctness under a trace-length penalty.
+
+\section{Core Mechanism}
+
+The encoder-free architecture tokenizes image patches and audio
+frames using a learned patchification layer that maps each patch
+directly to the model's embedding dimension:
+\[
+\mathbf{e}_i = W_p \cdot \text{vec}(p_i) + \mathbf{b}_p
+\]
+where $p_i$ is the $i$-th patch (image or audio), $W_p$ is the
+patchification weight matrix, and $\mathbf{b}_p$ is a bias.
+The resulting token sequence is concatenated with text tokens and
+processed by a standard causal Transformer, enabling end-to-end
+attention across all modalities.
+
+\section{Technical Formulation}
+
+The MoE model (26B-A4B) uses top-$k$ expert routing with $k=2$
+across $E=64$ experts.
+For a given hidden state $\mathbf{h}$, routing scores are computed as:
+\[
+\mathbf{g}(\mathbf{h}) = \text{softmax}\!\left(\mathbf{h} W_g\right)
+\in \mathbb{R}^E
+\]
+and the top-2 experts are selected and combined:
+\[
+\text{MoE}(\mathbf{h}) = \sum_{i \in \text{top-2}(\mathbf{g})}
+  g_i(\mathbf{h}) \cdot E_i(\mathbf{h})
+\]
+Load balancing is enforced via an auxiliary loss:
+\[
+\mathcal{L}_{\text{aux}} = \alpha \sum_{i=1}^{E} f_i \cdot P_i
+\]
+where $f_i$ is the fraction of tokens routed to expert $i$
+and $P_i$ is the mean routing probability to expert $i$.
+The thinking mode RL stage applies correctness reward only to
+final-answer tokens:
+\[
+\mathcal{L}_{\text{RL}} = -\mathbb{E}\!\left[R_{\text{correct}} \cdot
+  \log \pi_\theta(a_{\text{answer}} \mid c, \tau)\right]
++ \beta \cdot \mathbb{E}[|\tau|]
+\]
+where $\tau$ is the reasoning trace, $|\tau|$ is trace length,
+and $\beta$ is the trace-length penalty.
+
+\section{Learning Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Pretraining:} All models are pretrained on diverse
+    multimodal corpora including web text, code, image-caption pairs,
+    and audio-speech pairs.
+  \item \textbf{SFT:} Models are fine-tuned on instruction-following
+    datasets and on synthetically generated reasoning traces for
+    thinking mode initialization.
+  \item \textbf{RL:} RLHF with correctness reward for factual and
+    mathematical tasks, combined with the trace-length penalty to
+    prevent trace inflation.
+  \item \textbf{QAT:} Quantization-aware training at 4-bit to
+    produce on-device variants with minimal quality loss.
+\end{enumerate}
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Benchmark & Gemma 4 12B & Previous best \\
+\midrule
+MMLU-Pro & \textbf{72.1\%} & 68.4\% \\
+MATH-500 (thinking) & \textbf{91.4\%} & 88.7\% \\
+MMBench & \textbf{81.6} & 79.1 \\
+RULER 128K & \textbf{97.2\%} & 94.8\% \\
+RULER 256K & 87.1\% & --- \\
+Speech recog.\ (WER) & \textbf{4.3\%} & 4.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 4-bit QAT variants retain 97--99\% of full-precision benchmark
+scores.
+Human-rated evaluations prefer Gemma 4 9B and 12B over models with
+2--3$\times$ more parameters in head-to-head blind comparisons
+on open-ended generation tasks.
+
+\section{Ablations and Interpretation}
+
+\textbf{Encoder-free vs.\ encoder-based:} On standard image
+benchmarks, the encoder-free 12B matches the encoder-based 12B
+within 1--2 points while reducing total parameters and eliminating
+the encoder maintenance burden.
+
+\textbf{Thinking mode cost-benefit:} Enabling thinking mode doubles
+average response latency but improves accuracy by 5--15 points on
+multi-step reasoning tasks.
+It is implemented as an opt-in feature controlled by the user prompt.
+
+\textbf{Trace length penalty:} Without the trace-length penalty in RL,
+models generate traces 3--5$\times$ longer with no improvement in
+final-answer accuracy --- confirming that unconstrained thinking mode
+RL leads to trace inflation rather than deeper reasoning.
+
+\textbf{MoE vs.\ dense at matched active compute:} The 26B-A4B MoE
+model outperforms a 4B dense model by 4--6 points across all
+benchmarks, confirming that total parameter count provides independent
+value beyond active compute.
+
+\section*{Reference}
+
+Gemma Team (Sherif El Abd et al.).\
+\textbf{Gemma 4 Technical Report}.
+arXiv:2607.02770, July 2026.
+\url{https://arxiv.org/abs/2607.02770}
+
+\end{document}
