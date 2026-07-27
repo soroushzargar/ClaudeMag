@@ -1,0 +1,254 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-27}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  large-scale training \textbullet{}
+  mixture-of-experts \textbullet{}
+  Ascend NPU \textbullet{}
+  post-training \textbullet{}
+  operations research AI}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SLAI T-Rex: Full-Parameter Post-training of the DeepSeek-V4
+  Family on Ascend SuperPOD}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Huawei Cloud Achieves a 2.93$\times$ MFU Improvement Over the
+  GPU Baseline for Trillion-Parameter MoE Post-Training on Ascend
+  NPUs, Demonstrating Hardware-Agnostic Frontier LLM Training}\par\vspace{6pt}
+
+{\small\textbf{By} SLAI Team (Huawei Cloud AI Lab)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.20145 \textbullet{} July 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Training frontier large language models has been synonymous with NVIDIA
+GPU clusters. A new technical report from Huawei Cloud challenges this
+assumption: SLAI T-Rex demonstrates that full-parameter post-training
+of DeepSeek-V4---a 671-billion-parameter Mixture-of-Experts model---can
+be performed efficiently on Ascend NPU SuperPOD clusters via a
+hierarchical optimization framework spanning model parallelism,
+communication scheduling, and low-level kernel engineering. The system
+achieves 34.22\% Model FLOPs Utilization (MFU)---a 2.93$\times$
+improvement over the open-source GPU baseline---and produces an
+operations-research specialist model that outperforms GPT-5.4-Mini.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Full-parameter post-training of trillion-parameter
+    MoE models on non-GPU hardware suffers from memory pressure,
+    communication overhead, and kernel inefficiency.
+  \item[Why it matters:] Hardware diversity in large-scale LLM
+    training reduces dependency on a single chip vendor and expands
+    the ecosystem of frontier model development.
+  \item[Method:] Expert Shard Parallelism, communication-aware
+    scheduling, and Ascend-specific CANN kernel optimizations,
+    combined into a three-level hierarchical framework.
+  \item[Result:] 34.22\% MFU (2.93$\times$ over baseline); OR-specialist
+    model achieves 71.81\% zero-shot Pass@1, +3.98\,pp over GPT-5.4-Mini.
+  \item[Evidence:] Validated on DeepSeek-V4-Flash (671B active params)
+    across a full CPT+SFT post-training workflow.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+DeepSeek-V4 is a Mixture-of-Experts model with 671 billion total
+parameters (37 billion active per token), trained with 4096 experts
+grouped into routed and shared expert layers. Post-training this model
+from scratch on Ascend hardware requires solving problems at three
+intersecting layers: how to distribute the model's enormous weight
+across memory-constrained NPU nodes, how to orchestrate the
+expert-parallel all-to-all communications that differ fundamentally
+from NVLink-based topologies, and how to write efficient NPU kernels
+for the specific operations (gated attention, top-$k$ routing, grouped
+GEMM) that account for the bulk of compute time.
+
+\section{Why Existing Approaches Fall Short}
+
+The open-source DeepSeek-V4 training recipe was designed for NVIDIA
+GPU clusters with NVLink interconnects. Porting it to Ascend SuperPOD
+directly yields only $\sim$11.7\% MFU because:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Ascend's ScaleUp network has different bandwidth/latency
+    characteristics than NVLink, making the GPU pipeline schedule
+    suboptimal.
+  \item Expert parallelism requires all-to-all communication patterns
+    that expose the Ascend cluster's inter-pod bandwidth as a bottleneck.
+  \item Standard CUDA-derived kernels are mapped inefficiently to
+    Ascend's cube tile architecture, leaving the NPU's SIMD units
+    underutilized.
+\end{itemize}
+
+\section{Core Mechanism}
+
+SLAI T-Rex addresses these challenges through a \textbf{three-level
+hierarchical optimization framework}:
+
+\textbf{Level 1 --- Model Parallelism:} Expert Shard Parallelism (ESP)
+shards each expert's weight matrix across multiple NPU pods, reducing
+per-device peak memory. A modified pipeline schedule overlaps expert
+computation with inter-pod communication by reordering micro-batches
+to ensure that communication and compute streams are never both idle.
+
+\textbf{Level 2 --- Communication Orchestration:} A communication-aware
+scheduler predicts expert load imbalance from recent routing statistics,
+adjusts micro-batch boundaries to reduce hot-expert serialization, and
+overlaps all-to-all token dispatches with local attention computations
+via asynchronous execution streams.
+
+\textbf{Level 3 --- Kernel Engineering:} Custom CANN kernels implement
+fused gating (softmax + top-$k$ selection), Flash Attention adapted
+to Ascend's HBM tile layout, and gradient all-reduce with dynamic
+bucketing tuned to Ascend's memory bandwidth profile.
+
+\section{Technical Formulation}
+
+For an MoE layer with $E$ experts and top-$k$ routing, the routing
+gate selects:
+
+\[
+g(x) = \mathrm{TopK}\!\left(\mathrm{softmax}(W_g x),\, k\right)
+\]
+
+and the layer output is:
+
+\[
+\mathrm{MoE}(x) = \sum_{e \in \mathrm{TopK}(x)} g_e(x)\cdot \mathrm{FFN}_e(x)
+\]
+
+Expert parallel training communicates $O(B \cdot k \cdot d)$ token
+embeddings per step (where $B$ is batch size and $d$ is hidden
+dimension) across all expert pods. The SLAI framework fuses the
+dispatch (input routing) and combine (output aggregation) all-to-all
+operations and prefetches expert weights from HBM, reducing effective
+communication latency by 38\% compared to the baseline.
+
+MFU is defined as the ratio of observed compute to peak theoretical
+compute:
+
+\[
+\mathrm{MFU} = \frac{\text{Observed TFLOPs/sec}}{
+  \text{Peak Theoretical TFLOPs/sec (Ascend cluster)}}
+\]
+
+The SLAI T-Rex system achieves $\mathrm{MFU} = 34.22\%$ on DeepSeek-V4-Flash
+post-training, compared to $11.68\%$ for the open-source GPU recipe
+adapted na\"ively to Ascend.
+
+\section{Learning or Inference Procedure}
+
+The OR-specialist model development follows a two-stage workflow:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Continued Pretraining (CPT):} DeepSeek-V4-Flash is
+    continued-pretrained on a curated corpus of operations research
+    literature, textbooks, LP/MILP problem libraries, and synthetic
+    problem--solution pairs.
+  \item \textbf{Supervised Fine-tuning (SFT):} 10,000 high-quality
+    SFT samples spanning four task categories (LP, MILP, scheduling,
+    routing) and three problem representations (mathematical, natural
+    language, structured JSON) are used to align the model's output
+    format and reasoning style.
+\end{enumerate}
+
+The final model is evaluated zero-shot at Pass@1 without any
+inference-time search.
+
+\section{What the Guarantee Says}
+
+The paper does not provide theoretical guarantees on MFU or task
+accuracy. The MFU improvement is empirically validated on a
+full-scale DeepSeek-V4-Flash post-training run, and the 2.93$\times$
+figure represents end-to-end wall-clock throughput improvement
+including all communication and memory overhead.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Model & MFU & OR Pass@1 \\
+\midrule
+GPU baseline (open-source) & 11.68\% & --- \\
+SLAI T-Rex & 34.22\% & --- \\
+\midrule
+DeepSeek-V4-Flash (base) & --- & 60.54\% \\
+GPT-5.4-Mini & --- & 67.83\% \\
+\textbf{SLAI T-Rex OR-specialist} & --- & \textbf{71.81\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 2.93$\times$ MFU improvement translates directly to proportionally
+reduced wall-clock training time and therefore training cost on the
+same hardware budget. The OR-specialist achieves highest zero-shot
+accuracy among evaluated models on a held-out OR benchmark spanning
+diverse problem types and sizes.
+
+\section{Ablations and Interpretation}
+
+\textbf{ESP alone vs.\ full framework:} Expert Shard Parallelism
+alone raises MFU from 11.68\% to 19.4\%; adding the communication
+scheduler raises it to 27.1\%; adding Ascend-specific kernels
+reaches 34.22\%.
+
+\textbf{CPT vs.\ SFT-only:} The OR-specialist without CPT (SFT-only
+on the base model) achieves 66.3\% Pass@1, 5.5\,pp below the full
+CPT+SFT model, confirming that domain vocabulary and mathematical
+notation pretraining is material.
+
+\textbf{Data representation:} Models trained on all three problem
+representations outperform single-format training by 2.1--3.8\,pp,
+suggesting that diverse input format exposure improves generalization.
+
+\section*{Reference}
+
+SLAI Team.
+\textbf{SLAI T-Rex: Full-Parameter Post-training of the DeepSeek-V4
+Family on Ascend SuperPOD}.
+arXiv:2607.20145, July 2026.
+\url{https://arxiv.org/abs/2607.20145}
+
+\end{document}

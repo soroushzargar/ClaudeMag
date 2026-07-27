@@ -1,0 +1,267 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-27}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  RLVR \textbullet{}
+  reasoning diversity \textbullet{}
+  pass@k \textbullet{}
+  LLM alignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  When RLVR Shrinks the Reasoning Boundary:
+  Diagnosing Pass@$k$ Inversion}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Reinforcement Learning with Verifiable Rewards Boosts One-Shot Accuracy
+  While Silently Collapsing Sampling Diversity---a Failure Mode Traced
+  to Boundary Prompts Where Rare Correct Trajectories Vanish Before
+  They Can Be Reinforced}\par\vspace{6pt}
+
+{\small\textbf{By} Todd Zhou}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.20543 \textbullet{} July 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reinforcement learning with verifiable rewards (RLVR) has become the
+dominant recipe for training reasoning models, and its track record at
+improving pass@1 is well-documented. A new preprint reveals the other
+side of the ledger: RLVR can simultaneously \emph{decrease} pass@$k$
+for large $k$, meaning the trained model solves fewer distinct problems
+under repeated sampling than the base model it was fine-tuned from.
+The author terms this phenomenon \textbf{pass@$k$ inversion} and
+traces it to a concrete failure mode involving rare correct trajectories.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RLVR is evaluated almost exclusively at pass@1,
+    masking the fact that it can reduce coverage under diverse sampling.
+  \item[Why it matters:] Any system using best-of-$N$, voting, or
+    repeated sampling to boost reliability may be \emph{harmed} by
+    RLVR training on boundary prompts.
+  \item[Method:] Pass@$k$ evaluated pre- and post-RLVR across MATH
+    and GSM8K; boundary prompts identified by base model entropy;
+    causal rollout analysis tracing the loss of rare correct trajectories.
+  \item[Result:] RLVR improves pass@1 by 5--12\,pp while reducing
+    pass@16 by 3--8\,pp on 15--25\% of test problems.
+  \item[Evidence:] Per-Problem Base Anchoring (PBA) recovers 60\%
+    of the pass@$k$ loss while preserving 95\% of the pass@1 gains.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Pass@$k$ is a standard metric for reasoning benchmarks: it asks what
+fraction of problems a model can solve if given $k$ independent
+sampling attempts, and a correct answer in any one attempt counts.
+For a fixed pass@1 score, higher pass@$k$ reflects richer exploration
+of the solution space---a property valuable when models are used
+with sampling-based inference strategies such as best-of-$N$ selection,
+majority voting, or Monte Carlo Tree Search.
+
+The intuition is that if RLVR improves a model, it should improve both
+pass@1 and pass@$k$. This paper shows the intuition is wrong for a
+non-trivial fraction of problems. After RLVR, the policy is sharper---
+it assigns higher probability to a narrower set of trajectories---and
+this sharpening can eliminate rare-but-correct paths that the base
+model would occasionally find at large $k$.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard RLVR training (e.g., GRPO) collects $G$ rollouts per problem,
+assigns binary rewards, and updates the policy to increase the relative
+likelihood of correct rollouts over incorrect ones. This mechanism has
+an implicit vulnerability: if none of the $G$ rollouts for a problem
+are correct, the update treats the problem as definitively unsolvable
+and suppresses all trajectories toward its vicinity in policy space.
+
+For \textbf{boundary prompts}---problems where the base model's
+correct-trajectory probability is, say, 5--15\%---a rollout group of
+size $G = 8$ will observe zero correct rollouts in a large fraction
+of training encounters. Each such encounter applies a gradient that
+reduces the probability of rare correct trajectories, eventually
+driving them to near zero even though they were genuinely present.
+
+\section{Core Mechanism}
+
+The author proposes a \emph{two-mode account} of post-RLVR policy
+distributions:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Safe prompts:} Base model has high enough
+    correct-trajectory probability that at least one correct rollout
+    appears reliably in each group. RLVR reinforces and concentrates
+    this probability. Pass@$k$ improves monotonically with pass@1.
+  \item \textbf{Boundary prompts:} Correct trajectories are too sparse
+    to survive finite rollout groups. RLVR receives an absence-of-evidence
+    signal and drives correct-trajectory probability toward zero.
+    Pass@$k$ \emph{collapses} even as pass@1 may improve on adjacent
+    safe prompts in the same batch.
+\end{itemize}
+
+Formally, for a boundary prompt $x$ with base policy correct
+probability $\pi_\text{base}(x) \in [\epsilon, \delta]$ (small
+$\epsilon, \delta > 0$), the expected number of correct rollouts in a
+group of size $G$ is $G \cdot \pi_\text{base}(x)$. When this falls
+below 1, the probability of observing zero correct rollouts in the
+group is approximately $(1-\pi_\text{base})^G$, which for
+$\pi_\text{base} = 0.08$ and $G = 8$ is 50.6\%.
+
+\section{Technical Formulation}
+
+Define pass@$k$ for a single problem $x$ and policy $\pi$ as:
+
+\[
+\mathrm{pass@}k(x, \pi)
+  = 1 - \bigl(1 - \pi_\mathrm{correct}(x)\bigr)^k
+\]
+
+where $\pi_\mathrm{correct}(x) = \sum_{a \in \mathcal{A}(x)} \pi(a \mid x)$
+is the policy's total mass on correct answers. Pass@$k$ inversion on
+problem $x$ occurs when:
+
+\[
+\pi_\mathrm{RL,correct}(x) < \pi_\mathrm{base,correct}(x)
+\]
+
+even if $\pi_\mathrm{RL,correct}(x) > \pi_\mathrm{base,correct}(x)$
+holds \emph{on average} across all problems.
+
+The GRPO update applied to a rollout group $\{r_1, \ldots, r_G\}$
+where all $r_i$ are incorrect is:
+
+\[
+\nabla \mathcal{L}_\mathrm{GRPO}
+  \propto -\sum_{i=1}^G \nabla \log \pi_\theta(r_i \mid x)
+\]
+
+which suppresses the probability of all sampled trajectories. Since
+rare correct trajectories were not sampled, they are inadvertently
+suppressed via policy smoothing.
+
+\section{Learning or Inference Procedure}
+
+The Per-Problem Base Anchoring (PBA) fix proceeds as follows:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Classify each training problem as boundary or safe using the
+    base model's entropy $H(\pi_\mathrm{base}(\cdot \mid x))$;
+    problems above a threshold $H^*$ are classified as boundary.
+  \item For safe problems, apply standard RLVR with no modification.
+  \item For boundary problems, augment the rollout group with
+    forced correct samples from the frozen base model before computing
+    the RLVR gradient.
+  \item Additionally, apply a KL penalty on boundary problems:
+    \[
+    \mathcal{L}_\mathrm{PBA} = \mathcal{L}_\mathrm{RLVR}
+      + \lambda \, D_\mathrm{KL}\!\bigl(\pi_\mathrm{base} \,\|\, \pi_\theta\bigr)
+    \]
+    which anchors the policy toward the base distribution on these inputs.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+PBA does not guarantee recovery of all lost pass@$k$ on boundary prompts.
+Rather, it guarantees that the policy cannot reduce correct-trajectory
+probability below a KL-bounded neighborhood of the base policy. For
+$\lambda > 0$ and $D_\mathrm{KL}(\pi_\mathrm{base} \| \pi_\theta) \leq \epsilon_\lambda$,
+the trained policy satisfies:
+
+\[
+\pi_\mathrm{RL,correct}(x)
+  \geq \pi_\mathrm{base,correct}(x) \cdot e^{-\epsilon_\lambda}
+\]
+
+providing a fractional lower bound on retained diversity.
+
+\section{Experimental Findings}
+
+Experiments use Llama-3 8B and Qwen2.5 7B as base models, with
+GRPO-style RLVR on MATH Level 3--5 and GSM8K problems.
+
+\begin{center}
+\small
+\begin{tabular}{llcc}
+\toprule
+Model & Metric & Base & +RLVR \\
+\midrule
+Qwen2.5-7B & pass@1 & 56.3 & 68.1 \\
+Qwen2.5-7B & pass@16 & 83.2 & 78.4 \\
+Llama-3-8B & pass@1 & 48.9 & 57.3 \\
+Llama-3-8B & pass@16 & 79.1 & 73.6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pass@16 regressions are concentrated on boundary prompts
+(15--25\% of the test set) and are negligible on safe prompts.
+PBA recovers 60\% of the pass@$k$ regression on boundary prompts
+while retaining 95\% of the pass@1 gain.
+
+\section{Ablations and Interpretation}
+
+\textbf{Group size $G$:} Larger rollout groups ($G = 16$ vs.\ $G = 8$)
+reduce but do not eliminate inversion, as boundary prompts can still
+yield zero correct rollouts when $\pi_\mathrm{base,correct}(x) < 1/G$.
+
+\textbf{Problem difficulty:} Pass@$k$ inversion is uncorrelated with
+pass@1 improvement magnitude; problems that yield large pass@1 gains
+may or may not be on boundary prompts.
+
+\textbf{Anchor weight $\lambda$:} Higher $\lambda$ recovers more
+pass@$k$ but reduces pass@1 gains. The optimal $\lambda$ is
+task-dependent.
+
+\textbf{Broader implication:} Evaluating reasoning models solely at
+pass@1 is insufficient for any deployment context using sampling-based
+inference. The community should adopt pass@$k$ evaluation as standard
+alongside pass@1 when reporting RLVR results.
+
+\section*{Reference}
+
+Todd Zhou.
+\textbf{When RLVR Shrinks the Reasoning Boundary: Diagnosing
+Pass@$k$ Inversion}.
+arXiv:2607.20543, July 2026.
+\url{https://arxiv.org/abs/2607.20543}
+
+\end{document}

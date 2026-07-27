@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-27}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language models \textbullet{}
+  3D spatial reasoning \textbullet{}
+  implicit geometry \textbullet{}
+  explicit geometry \textbullet{}
+  ECCV 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  3D-Aware VLMs with Implicit and Explicit Geometries}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  VLM-IE3D Equips Vision-Language Models with Two Complementary
+  Geometric Representations Derived Purely from RGB Video,
+  Setting New State-of-the-Art on Four 3D Spatial Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Wenhao Li, Xueying Jiang, Quanhao Qian, Deli Zhao,
+  Ran Xu, Shijian Lu, Gongjie Zhang
+  (Nanyang Technological University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.21595 \textbullet{}
+  ECCV 2026 \textbullet{} July 23, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-language models have demonstrated impressive language and 2D
+visual understanding but struggle when tasks demand precise 3D spatial
+reasoning. A new ECCV 2026 paper from Nanyang Technological University
+introduces \textbf{VLM-IE3D}, which equips standard VLMs with two
+complementary 3D geometric representations---implicit and explicit---
+derived from RGB video alone, with no depth sensors or 3D supervision.
+The framework achieves state-of-the-art performance on 3D video detection,
+3D visual grounding, 3D dense captioning, and spatial reasoning benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLMs built on 2D visual pretraining lack the
+    fine-grained 3D spatial understanding needed for grounding,
+    detection, and spatial reasoning in 3D scenes.
+  \item[Why it matters:] 3D-capable VLMs are essential for robotics,
+    AR/VR, and embodied AI, yet requiring depth sensors limits real-world
+    deployment.
+  \item[Method:] Implicit Geometry Tokens (coarse global priors) and
+    Explicit Geometry Tokens (fine-grained reconstructed structure)
+    fused with 2D visual tokens via a 3D-aware adapter.
+  \item[Result:] State-of-the-art on ScanQA (+6.4\,pp), ScanRefer
+    (+7.7\,pp), Scan2Cap (+8.5 CIDEr), and EmbodiedScan (+4.7 mAP).
+  \item[Evidence:] RGB-only at inference; ablations confirm both
+    geometry types are necessary and complementary.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Modern VLMs are trained on billions of image-text pairs, giving them
+powerful 2D visual understanding and broad world knowledge. Yet 3D
+spatial tasks---locating objects relative to each other in 3D space,
+predicting 3D bounding boxes, or answering questions about scene
+geometry---remain a persistent weakness. These tasks require a model
+to reason about depth, surface orientation, and object extent that
+is only partially recoverable from 2D images.
+
+Existing solutions typically assume access to depth sensors or
+LiDAR at inference time, which is unrealistic for camera-only
+deployments. VLM-IE3D bridges this gap: starting from ordinary RGB
+video, it derives two complementary geometric representations and
+injects them into the VLM as geometric token streams.
+
+\section{Why Existing Approaches Fall Short}
+
+Three prior strategies have been tried with limited success:
+
+\textbf{Monocular depth augmentation:} Estimated depth maps are fed
+alongside RGB images. Depth estimation errors propagate to downstream
+tasks, and estimated depth lacks surface-normal precision required
+for grounding.
+
+\textbf{Implicit-only geometry:} Some recent VLMs inject geometric
+priors learned from video pretraining via contrastive objectives.
+These provide coarse global layout but lack the local precision needed
+for fine-grained 3D grounding---a deficiency VLM-IE3D directly addresses
+with explicit geometry tokens.
+
+\textbf{Explicit-only geometry:} Sparse point clouds from structure-from-motion
+(SfM) encode precise local structure but lack the holistic scene
+layout captured by implicit priors. Without the global context,
+reasoning about scene-level spatial relationships degrades.
+
+VLM-IE3D combines both: implicit for global layout,
+explicit for local precision.
+
+\section{Core Mechanism}
+
+\textbf{Implicit Geometry Tokens (IGTs)} are produced by a lightweight
+video encoder that processes $T$ frames jointly. The encoder attends
+to temporal motion parallax and relative depth ordering cues to produce
+a compact set of $N_\mathrm{IGT}$ global geometric tokens. These
+encode a coarse ``3D cognitive map'' of the scene: which regions are
+closer, rough surface orientations, and camera motion type.
+
+\textbf{Explicit Geometry Tokens (EGTs)} are produced by running a
+differentiable SfM module on the input frames to recover a sparse
+point cloud $\mathcal{P} = \{(\mathbf{p}_i, \mathbf{n}_i)\}$.
+The point cloud is voxelized into a 3D feature grid and encoded by
+a sparse 3D convolutional encoder into $N_\mathrm{EGT}$ tokens.
+These encode precise object boundaries, surface normals, and
+depth discontinuities.
+
+A \textbf{3D-aware adapter} fuses IGTs and EGTs with the VLM's
+2D visual tokens using cross-attention with geometry-conditioned masks
+that spatially align explicit geometric tokens with their 2D image
+counterparts.
+
+\section{Technical Formulation}
+
+Given video $V = \{f_1, \ldots, f_T\}$, let $Z_\mathrm{2D} \in \mathbb{R}^{N_\mathrm{2D} \times d}$
+be the 2D visual tokens from the VLM's encoder. The IGT and EGT
+encoders produce:
+
+\[
+Z_\mathrm{IGT} = \phi_\mathrm{IG}(V) \in \mathbb{R}^{N_\mathrm{IGT} \times d}
+\]
+\[
+Z_\mathrm{EGT} = \phi_\mathrm{EG}(\mathcal{P}(V)) \in \mathbb{R}^{N_\mathrm{EGT} \times d}
+\]
+
+The 3D-aware adapter computes fused tokens:
+
+\[
+Z_\mathrm{fused} = \mathrm{Attn}\!\left(Q = Z_\mathrm{2D},\;
+  K = V = [Z_\mathrm{IGT};\, Z_\mathrm{EGT};\, Z_\mathrm{2D}]\right) + Z_\mathrm{2D}
+\]
+
+with a geometry-conditioned attention mask $\mathbf{M} \in \{0,-\infty\}^{N_\mathrm{2D} \times (N_\mathrm{IGT}+N_\mathrm{EGT}+N_\mathrm{2D})}$
+where $M_{ij} = 0$ if EGT token $j$ projects within spatial radius $r$
+of 2D token $i$, and $-\infty$ otherwise (no restriction on IGT
+tokens, which are global). The fused representation $Z_\mathrm{fused}$
+concatenated with the text query tokens is passed to the frozen VLM backbone.
+
+\section{Learning or Inference Procedure}
+
+Training proceeds in two stages:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Geometric pretraining:} $\phi_\mathrm{IG}$ and $\phi_\mathrm{EG}$
+    are pretrained on 3D video datasets (ScanNet, ARKitScenes) with
+    reconstruction objectives: IGTs supervised to predict surface
+    orientation distributions, EGTs supervised via point cloud
+    completion loss.
+  \item \textbf{End-to-end instruction tuning:} The full model
+    (adapter $+$ pretrained geometry encoders $+$ frozen VLM) is
+    fine-tuned on 3D instruction-following data with a standard
+    language modeling loss.
+\end{enumerate}
+
+At inference, only the RGB video is required. The SfM module runs
+at inference time using COLMAP, adding a modest overhead.
+
+\section{What the Guarantee Says}
+
+VLM-IE3D provides no formal guarantee on 3D accuracy, but the
+ablation results establish that removing either IGT or EGT degrades
+performance across all benchmarks---confirming that neither geometry
+type subsumes the other, and that the dual-geometry design is
+necessary rather than redundant.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Benchmark (metric) & Best Prior & VLM-IE3D \\
+\midrule
+ScanQA (acc.) & 46.3 & 52.7 \\
+ScanRefer (Acc@0.5) & 41.2 & 48.9 \\
+Scan2Cap (CIDEr@0.5) & 62.8 & 71.3 \\
+EmbodiedScan (mAP@0.25) & 28.4 & 33.1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All results are with RGB-only input; prior state-of-the-art methods
+use ground-truth depth where noted.
+
+\section{Ablations and Interpretation}
+
+\textbf{IGT only:} Removes EGT. ScanRefer (grounding) degrades
+by 6.2\,pp, confirming fine-grained local geometry is necessary
+for precise localization.
+
+\textbf{EGT only:} Removes IGT. ScanQA (spatial reasoning) degrades
+by 4.1\,pp, confirming coarse global layout is necessary for
+scene-level reasoning.
+
+\textbf{Na\"ive concatenation:} Concatenates IGT and EGT without
+the geometry-conditioned mask. Average performance degrades by 3.8\,pp,
+demonstrating that spatial alignment of explicit geometry tokens
+is critical.
+
+\textbf{SfM quality:} Replacing COLMAP with a faster but noisier SfM
+variant reduces EmbodiedScan mAP by 2.3\,pp, confirming a moderate
+sensitivity to point cloud quality.
+
+\section*{Reference}
+
+Wenhao Li, Xueying Jiang, Quanhao Qian, Deli Zhao, Ran Xu,
+Shijian Lu, Gongjie Zhang.
+\textbf{3D-Aware VLMs with Implicit and Explicit Geometries}.
+arXiv:2607.21595, ECCV 2026.
+\url{https://arxiv.org/abs/2607.21595}
+
+\end{document}

@@ -1,0 +1,264 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-27}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video generation \textbullet{}
+  diffusion models \textbullet{}
+  multi-agent simulation \textbullet{}
+  world models \textbullet{}
+  autonomous driving}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Streaming Multi-Agent Autoregressive Diffusion Model
+  with World State Registers}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Shared World State Register Enables Arbitrarily Long, Spatially
+  Consistent Multi-Perspective Video Generation Without Quadratic
+  Context Growth, Advancing Autonomous Driving Simulation}\par\vspace{6pt}
+
+{\small\textbf{By} Sicheng Mo, Yuheng Li, Ziyang Leng, Krishna Kumar
+  Singh, Bolei Zhou (University of California, Los Angeles)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.21594 \textbullet{} July 23, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Autonomous driving simulators, multi-agent games, and embodied AI
+research all require generating photorealistic video from multiple
+agent perspectives that remain mutually consistent over long time
+horizons. Current video diffusion models generate single-agent
+views or suffer from consistency drift when extended across multiple
+agents and timesteps. A new paper from UCLA introduces a
+\textbf{Streaming Multi-Agent Autoregressive Diffusion (SMAD)} framework
+with \textbf{World State Registers (WSR)}---a fixed-size shared
+latent mechanism that aggregates and broadcasts global world state
+to all agents at each step, reducing Fréchet Video Distance by 29\%
+and improving cross-agent consistency by 34\% over strong baselines.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Multi-agent video generation with independent per-agent
+    diffusion models produces mutually contradictory world states that
+    diverge over long rollouts.
+  \item[Why it matters:] Photorealistic, coherent multi-agent simulation
+    is a critical infrastructure component for autonomous driving
+    and embodied AI training at scale.
+  \item[Method:] Streaming autoregressive diffusion per agent,
+    conditioned on a shared World State Register updated each step
+    via a write-then-broadcast mechanism.
+  \item[Result:] FVD of 294 vs.\ 412 (independent baseline) and
+    0.82 vs.\ 0.61 cross-agent consistency score.
+  \item[Evidence:] Evaluated on a 6-camera surround autonomous driving
+    benchmark across 100-step rollouts; ablations confirm WSR update
+    frequency and register size are critical parameters.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Training autonomous vehicles, robots, and embodied agents at scale
+requires generating realistic sensor data---particularly video---from
+multiple co-located agents simultaneously. The gold standard is
+a world model that produces photorealistic, physically plausible
+multi-perspective video for any number of agents over arbitrarily
+long time horizons, with all agent views remaining mutually consistent.
+
+Standard video diffusion models address single-agent scenarios.
+Na\"ive extension to multi-agent settings either (a) generates each
+agent's view independently---producing contradictory depictions of
+shared world elements---or (b) concatenates all agents' contexts
+as conditioning information, incurring memory costs that scale as
+$O(A \cdot T \cdot d)$ (agents $\times$ timesteps $\times$ dimension),
+making long rollouts intractable.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Independent per-agent diffusion:} Without cross-agent coordination,
+two agents viewing the same intersection from different angles may
+generate inconsistent traffic light states, object positions, or
+pedestrian motions. These inconsistencies compound over time.
+
+\textbf{Full history concatenation:} Conditioning each agent's
+diffusion model on all other agents' full history provides consistency
+at the cost of quadratic memory growth. For 6 cameras $\times$ 100
+timesteps, this is computationally prohibitive.
+
+\textbf{Fixed-frame world model:} Existing multi-camera driving world
+models generate fixed-length video clips rather than streaming
+generation, making them unsuitable for online simulation.
+
+SMAD addresses all three limitations through the WSR mechanism.
+
+\section{Core Mechanism}
+
+The \textbf{World State Register} is a compact set of $M$ latent
+vectors $\mathbf{s} \in \mathbb{R}^{M \times d}$ that encodes the
+current global state of the simulated world. At each generation step $t$:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Each of the $A$ agents generates its next frame conditioned on
+    its local sliding window and the current register $\mathbf{s}_t$.
+  \item The register is \textbf{updated} via cross-attention over all
+    agents' newly generated frame encodings.
+  \item The updated register $\mathbf{s}_{t+1}$ is broadcast to all
+    agents for step $t+1$.
+\end{enumerate}
+
+Because the register has fixed size $M$ (independent of $A$ and $T$),
+per-agent memory cost is constant regardless of simulation length or
+the number of agents. The register serves as a sufficient statistic
+for cross-agent coordination: each agent needs only the register,
+not other agents' raw frames.
+
+\section{Technical Formulation}
+
+The joint generative distribution factorizes as:
+
+\[
+p\!\left(x^{(1:A)}_{1:T}\right)
+  = \prod_{t=1}^T
+    p\!\left(\mathbf{s}_t \mid x^{(1:A)}_{<t}, \mathbf{s}_{t-1}\right)
+    \prod_{a=1}^A
+    p_\theta\!\left(x^{(a)}_t \mid x^{(a)}_{t-W:t-1}, \mathbf{s}_t\right)
+\]
+
+where $W$ is the local history window size. Each per-agent model
+$p_\theta$ is a latent diffusion model with the register injected
+as cross-attention conditioning:
+
+\[
+x^{(a)}_t \sim p_\theta\!\left(\cdot \mid x^{(a)}_{t-W:t-1}, \mathbf{s}_t, c^{(a)}\right)
+\]
+
+where $c^{(a)}$ encodes agent-specific conditioning (camera pose,
+trajectory, goal). The register update is:
+
+\[
+\mathbf{s}_{t+1}
+  = \mathrm{Attn}\!\left(Q = \mathbf{s}_t,\;
+  K = V = [\mathbf{s}_t;\, \phi_\mathrm{enc}(x^{(1)}_t);\, \ldots;\,
+  \phi_\mathrm{enc}(x^{(A)}_t)]\right)
+\]
+
+A register compression loss ensures the register faithfully captures
+world state:
+
+\[
+\mathcal{L}_\mathrm{reg}
+  = \mathbb{E}\!\left[\left\|
+    \mathbf{s}_t - \phi_\mathrm{enc}\!\left(x^{(1:A)}_t\right)
+  \right\|^2\right]
+\]
+
+added to the diffusion denoising objective during training.
+
+\section{Learning or Inference Procedure}
+
+Training uses paired multi-agent driving video from the nuScenes-derived
+MultiAgent benchmark (6 surround cameras, synchronized at 12 fps).
+The per-agent diffusion model and register update module are trained
+jointly end-to-end. The register is initialized to a learned null vector
+at the start of each sequence and is updated autoregressively without
+backpropagating through the full rollout history (stopped gradient
+on $\mathbf{s}_{t-1}$ during training).
+
+At inference, generation proceeds streaming: no future frames are
+required, and the register can be updated in real time as frames are
+generated, enabling online simulation.
+
+\section{What the Guarantee Says}
+
+The factorization structure guarantees that the register is the
+\emph{only} information channel between agents at each step.
+This means that any information not captured in the $M$-vector register
+(e.g., fine-grained local details beyond what the update attention
+can aggregate) cannot be communicated across agents. Register size $M$
+thus controls the fidelity--efficiency tradeoff.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Method & FVD\,$\downarrow$ & Consistency\,$\uparrow$ \\
+\midrule
+Independent per-agent & 412 & 0.61 \\
+Shared history concat. & 387 & 0.68 \\
+\textbf{SMAD (WSR)} & \textbf{294} & \textbf{0.82} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Long-horizon stability (normalized score at 100 steps) is 0.74 for
+SMAD vs.\ 0.43 for independent baselines, demonstrating that the
+WSR effectively prevents temporal drift over long rollouts.
+
+\section{Ablations and Interpretation}
+
+\textbf{WSR update frequency:} Updating the register every step
+vs.\ every 4 steps degrades FVD from 294 to 361, confirming that
+frequent synchronization is necessary for maintaining consistency.
+
+\textbf{Register size $M$:} FVD plateaus at $M = 64$ vectors.
+Below $M = 32$, cross-agent consistency collapses; above $M = 128$,
+there is no measurable benefit.
+
+\textbf{Local window $W$:} Replacing the local $W = 8$ frame window
+with global history improves FVD marginally (288 vs.\ 294) but
+increases per-step memory by 12$\times$, confirming the local window
+is an efficient approximation.
+
+\textbf{Register initialization:} Random initialization produces
+$\Delta\text{FVD} = +14$ vs.\ the learned null vector, confirming
+that a well-initialized register provides important context for the
+first few generation steps.
+
+\section*{Reference}
+
+Sicheng Mo, Yuheng Li, Ziyang Leng, Krishna Kumar Singh, Bolei Zhou.
+\textbf{Streaming Multi-Agent Autoregressive Diffusion Model with
+World State Registers}.
+arXiv:2607.21594, July 23, 2026.
+\url{https://arxiv.org/abs/2607.21594}
+
+\end{document}

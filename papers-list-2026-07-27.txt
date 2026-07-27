@@ -1,0 +1,75 @@
+ML Papers List — 2026-07-27
+Generated for ClaudeMag
+
+1. When RLVR Shrinks the Reasoning Boundary: Diagnosing Pass@k Inversion [arXiv 2026]
+   Authors: Todd Zhou
+   Affiliation: Independent
+   Venue/ID: arXiv:2607.20543
+   URL: https://arxiv.org/abs/2607.20543
+   Summary: Reinforcement learning with verifiable rewards (RLVR) can improve one-sample accuracy
+   (pass@1) while making a model worse under repeated sampling (pass@k for large k)—a phenomenon
+   the author terms pass@k inversion. The failure concentrates on boundary prompts where the base
+   model contains rare correct trajectories recoverable by sampling but too sparse to reliably appear
+   in finite RLVR rollout groups. A two-mode account explains this as an absence-of-evidence failure:
+   rare correct trajectories may disappear before RLVR samples and reinforces them often enough.
+   Per-Problem Base Anchoring (PBA), a proof-of-concept fix, sharpens prompts with sufficient
+   frozen-base correct evidence and anchors risky prompts to the base distribution, partially
+   recovering the lost diversity.
+
+2. Progressive Cramming: Reliable Token Compression and What It Reveals [arXiv 2026]
+   Authors: Dmitrii Tarasov, Timofei Lashukov, Elizaveta Goncharova, Andrey Kuznetsov
+   Affiliation: Independent researchers
+   Venue/ID: arXiv:2607.21231
+   URL: https://arxiv.org/abs/2607.21231
+   Summary: Addresses a fundamental question in token compression: does residual reconstruction
+   error after cramming reflect optimization failure or principled limits? Introduces progressive
+   cramming, which grows the target prefix token-by-token and stops only when reconstruction fails
+   within a fixed optimization budget. Progressive trajectories occupy low-dimensional structure in
+   embedding space. Prepending a crammed embedding causes a moderate but consistent accuracy drop on
+   multiple-choice benchmarks even with the original prefix in context, and collapses capability
+   almost entirely under generative evaluation. Causal attention-knockout interventions trace this
+   degradation to early-layer embedding interactions, revealing a fundamental capacity limit rather
+   than optimization shortfall.
+
+3. 3D-Aware VLMs with Implicit and Explicit Geometries [arXiv 2026 / ECCV 2026]
+   Authors: Wenhao Li, Xueying Jiang, Quanhao Qian, Deli Zhao, Ran Xu, Shijian Lu, Gongjie Zhang
+   Affiliation: Nanyang Technological University
+   Venue/ID: arXiv:2607.21595 (ECCV 2026)
+   URL: https://arxiv.org/abs/2607.21595
+   Summary: Introduces VLM-IE3D, a unified framework that enhances the 3D spatial awareness of
+   vision-language models by equipping them with both implicit and explicit 3D geometries learned
+   from RGB videos alone. The framework introduces Implicit Geometry Tokens (IGTs) that capture
+   high-level geometric priors from input videos, and Explicit Geometry Tokens (EGTs) that encode
+   detailed geometric structures from reconstructed 3D attributes. A 3D-aware adapter fuses these
+   two geometric representations with 2D visual cues without requiring any 3D sensor input.
+   Achieves superior performance across 3D video detection, 3D visual grounding, 3D dense
+   captioning, and spatial reasoning benchmarks.
+
+4. SLAI T-Rex: Full-Parameter Post-training of the DeepSeek-V4 Family on Ascend SuperPOD [arXiv 2026]
+   Authors: SLAI Team (Huawei Cloud)
+   Affiliation: Huawei Cloud AI Lab
+   Venue/ID: arXiv:2607.20145
+   URL: https://arxiv.org/abs/2607.20145
+   Summary: Presents an end-to-end optimization system for full-parameter post-training of
+   trillion-parameter-scale MoE models on Ascend NPU SuperPOD clusters rather than traditional GPU
+   hardware. Addresses key challenges including severe memory pressure, non-overlapped communication
+   overhead, and inefficient kernel execution through a hierarchical optimization framework spanning
+   model-level parallelism, computation-communication orchestration, and low-level kernel execution.
+   Achieves 34.22% Model FLOPs Utilization (MFU) with a 2.93x improvement over the open-source
+   baseline recipe. Applies the infrastructure to build OR-specialist models using CPT and SFT on
+   DeepSeek-V4-Flash, reaching 71.81% zero-shot Pass@1 on operations research tasks—outperforming
+   GPT-5.4-Mini by 3.98 points.
+
+5. Streaming Multi-Agent Autoregressive Diffusion Model with World State Registers [arXiv 2026]
+   Authors: Sicheng Mo, Yuheng Li, Ziyang Leng, Krishna Kumar Singh, Bolei Zhou
+   Affiliation: University of California, Los Angeles
+   Venue/ID: arXiv:2607.21594
+   URL: https://arxiv.org/abs/2607.21594
+   Summary: Proposes a streaming autoregressive diffusion framework for multi-agent video generation
+   that maintains coherent world state across arbitrarily long rollouts through a shared World State
+   Register mechanism. Each agent generates its view autoregressively in a diffusion framework, while
+   a centralized state register aggregates and broadcasts global context, enabling consistent
+   multi-perspective scene simulation. Addresses the challenge of temporal and spatial coherence
+   drift that afflicts independent per-agent diffusion models in long-horizon generation. Demonstrates
+   significantly improved consistency in multi-agent driving and autonomous navigation simulations
+   compared to prior streaming video diffusion baselines.
