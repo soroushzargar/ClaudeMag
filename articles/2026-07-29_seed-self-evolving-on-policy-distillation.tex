@@ -1,0 +1,267 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-29}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agentic reinforcement learning \textbullet{}
+  hindsight distillation \textbullet{}
+  LLM agents \textbullet{}
+  on-policy learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SEED: Self-Evolving On-Policy Distillation
+  for Agentic Reinforcement Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Converting On-Policy Trajectories into Hindsight Skills and
+  Distilling Them Back into the Policy Closes the Credit
+  Assignment Gap in Long-Horizon Agentic Tasks}\par\vspace{6pt}
+
+{\small\textbf{By} Jinyang Wu, Shuo Yang, Zhengxi Lu, Fan Zhang,
+  Yuhao Shen, Lang Feng, Haoran Luo, Zheng Lian, Shuai Zhang,
+  Zhengqi Wen, Jianhua Tao
+  (University of Science and Technology of China)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.14777 \textbullet{} July 16, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Outcome-based reinforcement learning for long-horizon agentic tasks
+provides only a single reward signal at the end of trajectories spanning
+20--50 decision steps, leaving a large credit assignment gap at the
+token level. SEED fills this gap by converting completed on-policy
+trajectories into natural-language hindsight skills---reusable
+workflows, decisive observations, failure-avoidance rules---and
+distilling them back into the same policy that generated the trajectories.
+The policy and its hindsight supervisor co-evolve across rounds,
+outperforming both pure RL and static distillation baselines on AlfWorld
+and WebArena.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Sparse outcome rewards in long-horizon agentic RL
+    provide insufficient token-level supervision, leaving the policy
+    to learn intermediate decision quality from a single scalar.
+  \item[Why it matters:] Better intermediate supervision enables
+    smaller models to learn complex agentic tasks---SEED yields the
+    largest gains at 3B parameters.
+  \item[Method:] The policy analyzes its own completed trajectories
+    into hindsight skills, then is distilled on $(x, \text{skill}, a)$
+    triplets; the loop repeats as the policy evolves.
+  \item[Result:] AlfWorld success rate 74.2\% (7B) vs.\ 72.8\%
+    GRPO-only; WebArena 26.3\% vs.\ 18.4\% GRPO-only.
+  \item[Evidence:] Fixed analyzer loses 5.1pp; scrambled skills
+    fall below GRPO-only, confirming hindsight content drives gains.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Training LLMs to act as autonomous agents---navigating web UIs,
+executing shell commands, managing files across multi-step workflows---
+requires learning from environmental feedback over trajectories that
+may span dozens of decisions. GRPO and similar outcome-based RL methods
+assign the same reward to every token in the trajectory based on the
+final outcome, providing no signal about which intermediate actions
+were decisive.
+
+SEED treats the policy as its own supervisor: after completing a
+trajectory, the same model reads it and generates a structured
+retrospective capturing what worked, what failed, and what it should
+do differently---then trains on this signal. When the policy improves,
+its next-round retrospectives become more accurate, creating a
+self-evolving supervision signal that stays aligned with the model
+throughout training.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Pure outcome RL (GRPO):} Gradient propagates from the final
+reward backward through all steps. Effective action-level attribution
+requires the model to implicitly learn which actions contributed to
+the outcome---a difficult credit assignment problem over long trajectories.
+
+\textbf{Static distillation:} A stronger model (teacher) generates
+demonstrations or skills, and the student is trained on them. The
+teacher is fixed: once the student surpasses the teacher on some
+tasks, the distilled supervision becomes stale and may even be harmful.
+
+\textbf{Off-policy hindsight:} Learning from past trajectories
+(collected by earlier policy versions) introduces distribution shift
+between the generating policy and the current policy. Skills derived
+from an earlier policy's behavior may not apply to the current policy's
+failure modes.
+
+\section{Core Mechanism}
+
+SEED runs three operations using the same model checkpoint, synchronized
+in a single training round:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Act:} Policy $\pi_k$ rolls out trajectories
+    $\{\tau_i\}$ in the environment.
+  \item \textbf{Analyze:} Policy $\pi_k$ reads each completed
+    $\tau_i$ and generates a natural-language hindsight skill $s_i$:
+    a 2--4 sentence description of the key decision pattern, crucial
+    observation, or failure cause in that trajectory.
+  \item \textbf{Distill:} Policy $\pi_{k+1}$ is trained on
+    $(x_i, s_i, a_i)$ triplets where $x_i$ is the task context,
+    $s_i$ is the hindsight skill, and $a_i$ is the correct action.
+\end{enumerate}
+
+After round $k$, $\pi_{k+1}$ becomes the actor and analyzer for
+round $k+1$. Skills generated by $\pi_{k+1}$ reflect its own
+current capabilities and remaining failure modes.
+
+\section{Technical Formulation}
+
+Let $\tau = (o_1, a_1, \ldots, o_T, a_T, R)$ be a trajectory.
+The hindsight skill generation prompt $\mathcal{P}_\text{analyze}(\tau)$
+instructs the model to identify:
+(a) which intermediate action most determined the outcome,
+(b) which environmental observation was the pivotal evidence, and
+(c) which alternative action would have changed the result.
+
+The skill generation objective:
+\[
+  s_i = \pi_k\!\left(\cdot \mid \mathcal{P}_\text{analyze}(\tau_i)\right)
+\]
+
+The distillation objective (behavior cloning with skill context):
+\[
+  \mathcal{L}_\text{SEED}(\theta) =
+    -\mathbb{E}_{(x,s,a) \sim \mathcal{D}_k}
+    \!\left[\log \pi_\theta(a \mid x, s)\right]
+\]
+
+The full training objective mixes outcome RL and skill distillation:
+\[
+  \mathcal{L}_\text{total} =
+    (1-\alpha)\,\mathcal{L}_\text{GRPO} + \alpha\,\mathcal{L}_\text{SEED}
+\]
+
+with $\alpha = 0.3$ in all experiments. GRPO provides the global
+policy gradient; SEED provides the local, token-level supervision.
+
+\section{Learning or Inference Procedure}
+
+Each SEED round proceeds as:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $B$ trajectories from $\pi_k$ in parallel.
+  \item For each trajectory, run the analysis prompt to obtain $s_i$.
+  \item Construct the distillation dataset $\mathcal{D}_k$.
+  \item Train $\pi_{k+1}$ on $\mathcal{L}_\text{total}$ for one epoch.
+\end{enumerate}
+
+At inference, the model is queried without any hindsight skill context;
+skills are a training-time scaffold only, not an inference-time input.
+
+\section{What the Guarantee Says}
+
+SEED does not guarantee that hindsight skills are accurate---the model
+may generate incorrect retrospectives about its own behavior. What
+it does guarantee is \emph{alignment}: since the analyzer and actor
+share weights, the analysis is always conducted from the perspective
+of the current policy's capabilities. As the policy improves, its
+analyses improve with it. This is a softer guarantee than formal
+credit assignment---but it holds without any external supervision.
+
+\section{Experimental Findings}
+
+\textbf{AlfWorld (household task success $\uparrow$):}
+
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+Method & 3B & 7B \\
+\midrule
+GRPO only & 61.3 & 72.8 \\
+Static distillation & 67.4 & 78.1 \\
+SEED (ours) & \textbf{74.2} & \textbf{83.5} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{WebArena (task success $\uparrow$):}
+
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+Method & 7B \\
+\midrule
+GRPO only & 18.4 \\
+Static distillation & 21.7 \\
+SEED (ours) & \textbf{26.3} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 3B model shows the largest proportional gain ($+$13pp on AlfWorld
+vs.\ GRPO-only), confirming that explicit hindsight supervision is
+most valuable when model capacity is limited.
+
+\section{Ablations and Interpretation}
+
+\textbf{Fixed analyzer ($\pi_0$ as analyzer throughout):} AlfWorld
+accuracy drops 5.1pp relative to full SEED. Stale analyzers produce
+skills that reflect initial failure modes, not current ones.
+
+\textbf{Scrambled skills (random pairing of skill $s_j$ with context
+$x_i$):} Accuracy falls to 59.8\% on AlfWorld---below GRPO-only at
+61.3\%. Incorrect skills actively hurt performance, confirming that
+content quality, not training format, drives the improvement.
+
+\textbf{Analysis without distillation (GRPO + analysis as internal
+chain-of-thought):} Improves AlfWorld by 1.4pp over GRPO-only. The
+self-analysis provides modest benefit as a form of implicit chain-of-thought,
+but the formal distillation step is responsible for the majority of gains.
+
+\textbf{$\alpha$ sensitivity:} $\alpha \in [0.2, 0.4]$ gives similar
+results. $\alpha > 0.6$ degrades GRPO performance as distillation
+dominates.
+
+\section*{Reference}
+
+Jinyang Wu, Shuo Yang, Zhengxi Lu, Fan Zhang, Yuhao Shen, Lang Feng,
+Haoran Luo, Zheng Lian, Shuai Zhang, Zhengqi Wen, Jianhua Tao.
+\textbf{SEED: Self-Evolving On-Policy Distillation for Agentic Reinforcement Learning}.
+arXiv:2607.14777, July 16, 2026.
+\url{https://arxiv.org/abs/2607.14777}
+
+\end{document}

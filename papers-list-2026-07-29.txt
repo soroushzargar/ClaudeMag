@@ -1,0 +1,74 @@
+ML Papers List — 2026-07-29
+Generated for ClaudeMag
+
+1. Frontier Language Models Struggle to Copy: Text Can Be Better Viewed in 2D [arXiv 2026]
+   Authors: Haodong Wen, Yiran Zhang, Yingfa Chen, Kaifeng Lyu
+   Affiliation: Tsinghua University
+   Venue/ID: arXiv:2607.16072
+   URL: https://arxiv.org/abs/2607.16072
+   Summary: Even frontier language models fail to copy long input strings exactly, despite solving
+   complex reasoning tasks within the same context window. The authors attribute this to a structural
+   flaw in standard 1D positional encodings (RoPE): producing output token y_k from input x_k
+   requires matching a relative offset that changes with input length, so copying relies on fragile
+   local-context shortcuts rather than positional precision. 2D-RoPE organizes tokens into a 2D grid,
+   assigning each a row ID and column ID, so copying reduces to retrieving input tokens at a fixed
+   column offset. Shallow Transformers trained with 2D-RoPE achieve perfect copying at input lengths
+   hundreds of times beyond training range, and the advantage holds in large-scale pretraining up to
+   1.4B parameters.
+
+2. MIRROR: Learning from the Other View for Multi-Modal Reasoning [arXiv 2026]
+   Authors: Wen Ye, Yuxiao Qu, Aviral Kumar, Xuezhe Ma
+   Affiliation: University of Southern California; Carnegie Mellon University
+   Venue/ID: arXiv:2607.21552
+   URL: https://arxiv.org/abs/2607.21552
+   Summary: Vision-language models underperform on visual reasoning even for geometry problems that
+   admit equivalent text, diagram, and combined text+diagram views. Different views expose
+   complementary reasoning paths: a model may solve a problem from text but fail on the diagram, or
+   succeed visually while failing textually. The authors construct ODA-Data, a paired multimodal
+   geometry dataset with text-dominant, image-dominant, and combined image+text views, and develop
+   Modality-Informed Reciprocal Reasoning Optimization (MIRROR), a reinforcement learning approach
+   that trains a model on the view where it performs best, then uses that signal to improve
+   performance on the harder view through reciprocal cross-modal reward shaping.
+
+3. DiFA: Inference-Time Forward-Process Alignment for Diffusion Models [ICML 2026 / arXiv 2026]
+   Authors: Shigui Li, Delu Zeng
+   Affiliation: South China University of Technology
+   Venue/ID: arXiv:2607.17972 (ICML 2026)
+   URL: https://arxiv.org/abs/2607.17972
+   Summary: Standard diffusion model inference treats each denoising step independently as a
+   numerical integration problem, ignoring the statistical structure of the forward process. DiFA
+   reframes inference-time data prediction refinement as a sequential state estimation problem,
+   treating iterative predictions along the reverse trajectory as correlated observations. A
+   forward-aligned temporal consensus, inspired by Kalman filtering, aggregates historical predictions
+   according to structural consistency and noise-level compatibility. A deviation guidance mechanism
+   counteracts over-smoothing. DiFA yields significant FID/IS/FD-DINOv2 improvements on CIFAR-10
+   and ImageNet, is training-free, and can wrap any existing sampler.
+
+4. SEED: Self-Evolving On-Policy Distillation for Agentic Reinforcement Learning [arXiv 2026]
+   Authors: Jinyang Wu, Shuo Yang, Zhengxi Lu, Fan Zhang, Yuhao Shen, Lang Feng, Haoran Luo,
+            Zheng Lian, Shuai Zhang, Zhengqi Wen, Jianhua Tao
+   Affiliation: University of Science and Technology of China
+   Venue/ID: arXiv:2607.14777
+   URL: https://arxiv.org/abs/2607.14777
+   Summary: Outcome-based RL for long-horizon agentic tasks provides only sparse trajectory-level
+   rewards, leaving a supervision gap between episode outcomes and token-level policy learning.
+   SEED converts completed on-policy trajectories into natural-language hindsight skills capturing
+   reusable workflows, decisive observations, and failure-avoidance rules, then distills these skills
+   back into the policy. One policy checkpoint plays dual roles: acting in the environment and
+   analyzing its own completed trajectories to generate hindsight supervision. After each update, the
+   improved policy becomes the next analyzer, so decision policy and hindsight supervision co-evolve,
+   yielding consistent improvements over static distillation on AlfWorld and WebArena.
+
+5. See like a Robot: Robot-Centric Pointmaps for Vision-Language-Action Models [arXiv 2026]
+   Authors: Byungkun Lee, Dongyoon Hwang, Dongjin Kim, Hojoon Lee, Minho Park, Jaegul Choo
+   Affiliation: KAIST AI; Holiday Robotics
+   Venue/ID: arXiv:2607.11498
+   URL: https://arxiv.org/abs/2607.11498
+   Summary: Vision-language-action (VLA) models predict actions in the robot's 3D coordinate frame
+   while observing the scene in the camera frame, creating a frame mismatch that is benign under
+   fixed viewpoints but harmful when large-scale datasets aggregate demonstrations across diverse
+   camera setups. Robot-centric pointmaps bridge this gap: images whose pixels store the 3D
+   coordinates of scene points in the robot frame, providing robot-frame geometry while preserving
+   the dense H×W grid expected by pretrained 2D VLAs, allowing integration with minimal
+   architectural change. The method achieves strong generalization across camera viewpoints
+   and outperforms camera-frame baselines on cross-viewpoint evaluation benchmarks.

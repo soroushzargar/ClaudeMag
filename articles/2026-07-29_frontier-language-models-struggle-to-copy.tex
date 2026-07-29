@@ -1,0 +1,248 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-29}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  positional encoding \textbullet{}
+  2D-RoPE \textbullet{}
+  in-context retrieval \textbullet{}
+  transformer architecture}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Frontier Language Models Struggle to Copy:
+  Text Can Be Better Viewed in 2D}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Structural Failure in 1D Positional Encoding Prevents Exact
+  String Copying---2D-RoPE Solves It at Training Scales up to 1.4B
+  Parameters}\par\vspace{6pt}
+
+{\small\textbf{By} Haodong Wen, Yiran Zhang, Yingfa Chen, Kaifeng Lyu
+  (Tsinghua University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.16072 \textbullet{} July 15, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Frontier language models solve complex multi-step reasoning yet
+consistently fail at a task any human child can perform: copying a
+string exactly. A new paper from Tsinghua University traces this failure
+to a structural flaw in standard 1D rotary positional encodings and
+proposes \textbf{2D-RoPE}, which organizes tokens into a two-dimensional
+grid so that copying reduces to zero-offset column retrieval.
+Shallow Transformers with 2D-RoPE achieve perfect copying on sequences
+hundreds of times longer than their training range.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard 1D positional encodings force copying to
+    rely on local-context shortcuts whose relative offsets change with
+    sequence length, causing systematic failure on long strings.
+  \item[Why it matters:] Verbatim extraction from context---for
+    quotes, code formatting, structured outputs---is foundational; a
+    structural fix is more reliable than prompt engineering.
+  \item[Method:] 2D-RoPE assigns each token a row ID and column ID;
+    copying at fixed column offset becomes a zero-relative-offset
+    attention task.
+  \item[Result:] 6-layer Transformers with 2D-RoPE reach 99.7\%
+    exact copy accuracy at lengths 8$\times$ beyond training range;
+    standard RoPE achieves 12\%.
+  \item[Evidence:] Advantage holds in 1.4B pretraining experiments
+    and on downstream verbatim extraction benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models have surpassed humans on olympiad mathematics,
+bar exams, and competitive programming---but they cannot reliably copy
+a 1024-token string they just read. This asymmetry is not a quirk of
+training data; it reflects a structural mismatch between how attention
+mechanisms encode position and what the copy task requires.
+
+The paper demonstrates the failure empirically on GPT-4o, Claude 3.7,
+and Gemini 2.0: exact-copy accuracy falls below 50\% on 512-token
+strings and degrades further on repetitive inputs. The authors then
+derive a root cause from the mathematics of RoPE, and propose a fix
+that achieves perfect copying at lengths orders of magnitude beyond
+training.
+
+\section{Why Existing Approaches Fall Short}
+
+In Transformer attention with RoPE, the attention score between query
+position $p$ and key position $q$ depends on the relative offset $p - q$.
+Copying token $x_k$ to output position $y_k$ requires attending to
+exactly input position $k$. But as the output grows, the relative offset
+$k - y_k$ changes---so the model must infer $k$ dynamically rather
+than attend to a fixed offset.
+
+In practice, models learn to copy by matching local context: if a
+substring appears only once, the model retrieves it via pattern matching
+rather than positional address. This works for unique strings but breaks
+when strings repeat (the context match is ambiguous) or are very long
+(the attention score for the correct position degrades relative to
+spurious matches). Prompt-engineering workarounds (``copy exactly'')
+improve but do not solve the problem because the architectural inductive
+bias remains.
+
+\section{Core Mechanism}
+
+2D-RoPE organizes a sequence of $N$ tokens into a grid with $R$ rows and
+$C = N/R$ columns. Token $i$ receives:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item Row ID: $r_i = \lfloor i/C \rfloor$
+  \item Column ID: $c_i = i \bmod C$
+\end{itemize}
+
+Rotary encoding is applied along each dimension independently. Under this
+view, copying is: for output position $(r, c)$, retrieve the input token
+at the same column $c$ in row $r$. The column offset between any output
+token and its corresponding input token is always zero---a fixed,
+length-independent offset that the model can reliably learn.
+
+The key invariant: \textit{the relative column offset for copying is 0,
+regardless of sequence length}. Standard 1D RoPE has no equivalent fixed
+offset.
+
+\section{Technical Formulation}
+
+Standard RoPE applies rotation $e^{ip\theta}$ at position $p$ with
+frequency $\theta$, giving attention score:
+\[
+  A_{pq} = \mathrm{Re}\!\left[ q_p^* k_q \cdot e^{i(p-q)\theta} \right]
+\]
+
+2D-RoPE splits the embedding dimension: half the heads attend to
+row position, half to column position:
+\[
+  A_{ij} = \mathrm{Re}\!\left[ q_i^* k_j \cdot e^{i\left[(r_i - r_j)\theta_R
+    + (c_i - c_j)\theta_C\right]} \right]
+\]
+
+During a copy task, $r_i - r_j = 0$ (same row, input vs.\ output)
+and $c_i - c_j = 0$ (same column), so:
+\[
+  A_{ij}^\text{copy} = \mathrm{Re}\!\left[ q_i^* k_j \right]
+\]
+
+The attention score reduces to the inner product of query and key
+without any positional modulation---a fixed, position-independent signal
+that is identical at any sequence length.
+
+\section{Learning or Inference Procedure}
+
+Training proceeds identically to standard causal language modeling,
+replacing the 1D position index with the 2D $(r, c)$ pair. No changes
+to the loss function, optimizer, or data pipeline are required. The grid
+dimensions $R$ and $C$ are treated as hyperparameters; the paper uses
+$C = 64$ for all experiments (so rows contain 64 tokens).
+
+At inference, sequences longer than training length are handled by
+extending the row dimension: a 4096-token sequence with $C = 64$
+requires $R = 64$ rows, while a 512-token training sequence requires
+only $R = 8$ rows. Column IDs remain bounded by $C$, so the column
+encoding generalizes trivially to longer sequences.
+
+\section{What the Guarantee Says}
+
+For a sequence of length $N$ with column width $C$, 2D-RoPE guarantees
+that the copy attention signal is \emph{position-independent} at offset
+$(0, 0)$ in row-column space. This is a structural, not statistical,
+guarantee: no amount of sequence length increase can alter the positional
+signal the model must attend to in order to copy correctly.
+
+The guarantee does not cover sequences longer than $R_\text{max} \cdot C$
+(where $R_\text{max}$ is the training row count), but row generalization
+is analogous to standard length generalization and can be addressed with
+existing techniques (ALiBi, YaRN).
+
+\section{Experimental Findings}
+
+\textbf{Synthetic copy task} (exact accuracy at length $L$, trained on $L=512$):
+
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+Model & $L=2048$ & $L=4096$ \\
+\midrule
+Standard RoPE (6L) & 34.1 & 12.3 \\
+2D-RoPE (6L) & 98.4 & 99.7 \\
+Standard RoPE (12L) & 41.8 & 18.7 \\
+2D-RoPE (12L) & 99.1 & 99.8 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Repetitive strings} (period 4, length 512, in-distribution):
+Standard RoPE: 7.3\%. 2D-RoPE: 98.1\%.
+
+\textbf{Pretraining at 1.4B parameters} (100B tokens, same perplexity
+as baseline): 2D-RoPE models improve on verbatim extraction benchmarks
+by 14.2 points while matching or exceeding baseline on MMLU, HellaSwag,
+and ARC-Challenge.
+
+\section{Ablations and Interpretation}
+
+\textbf{Grid aspect ratio:} Varying $C \in \{16, 32, 64, 128\}$ shows
+$C = 64$ is optimal; very narrow grids ($C = 16$) reduce copy benefit by
+requiring more rows and increasing within-row attention competition.
+
+\textbf{Attention visualization:} On copy tasks, 2D-RoPE heads in the
+column-position half show clean offset-0 attention spikes at the source
+token; standard RoPE models show diffuse attention over a $\pm 5$ token
+window, confirming the local-context shortcut.
+
+\textbf{Frontier model analysis:} Attention rollout on GPT-4o and
+Claude 3.7 during copy failures reveals the same diffuse-attention
+signature, confirming the failure mode is not specific to small models.
+
+\textbf{Column vs.\ row only:} Using only column encoding (dropping row)
+degrades general language modeling perplexity by 0.4 bits while
+maintaining near-perfect copying---confirming that row and column
+encodings serve distinct roles.
+
+\section*{Reference}
+
+Haodong Wen, Yiran Zhang, Yingfa Chen, Kaifeng Lyu.
+\textbf{Frontier Language Models Struggle to Copy: Text Can Be Better Viewed in 2D}.
+arXiv:2607.16072, July 15, 2026.
+\url{https://arxiv.org/abs/2607.16072}
+
+\end{document}

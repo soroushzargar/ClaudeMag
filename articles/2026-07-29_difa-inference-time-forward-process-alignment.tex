@@ -1,0 +1,283 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-29}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  inference-time optimization \textbullet{}
+  Kalman filtering \textbullet{}
+  ICML 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  DiFA: Inference-Time Forward-Process
+  Alignment for Diffusion Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Treating Each Denoising Step as a Kalman Observation Yields a
+  Training-Free Temporal Consensus Wrapper with Significant FID
+  Gains on CIFAR-10 and ImageNet}\par\vspace{6pt}
+
+{\small\textbf{By} Shigui Li, Delu Zeng
+  (South China University of Technology)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.17972 \textbullet{}
+  ICML 2026 \textbullet{} July 19, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Standard diffusion model inference treats each denoising step as an
+independent numerical integration, discarding the statistical
+correlation structure of predictions along the reverse trajectory.
+DiFA (\textbf{Di}ffusion \textbf{F}orward-process \textbf{A}lignment),
+accepted at ICML 2026, reframes inference as sequential state estimation
+inspired by Kalman filtering: each prediction is an observation of the
+true sample, fused with prior predictions according to noise-level
+compatibility to build a forward-aligned temporal consensus. The result
+is a training-free wrapper that wraps any existing sampler and yields
+consistent FID improvements.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Inference treats denoising steps as independent
+    estimators of $x_0$, ignoring forward-process statistical
+    correlations across the trajectory.
+  \item[Why it matters:] Exploiting the statistical structure of the
+    forward process during inference is free---it requires no training
+    and can improve any existing sampler.
+  \item[Method:] Noise-level-weighted temporal consensus aggregates
+    historical predictions; deviation guidance preserves fine-grained
+    detail that averaging would smooth out.
+  \item[Result:] FID 4.67$\to$3.21 on CIFAR-10 with DDIM (20 steps);
+    FID 12.4$\to$8.9 on ImageNet 256$\times$256 with DDIM (50 steps).
+  \item[Evidence:] Ablations confirm both the consensus and deviation
+    components are necessary; uniform averaging instead of
+    noise-weighted degrades FID by 0.4--1.2.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Diffusion models generate images by reversing a noise-injection process:
+starting from Gaussian noise $x_T$, a learned denoiser iteratively
+predicts the clean sample $x_0$ and steps toward it. The standard
+inference framework---DDIM, DPM-Solver, EDM---casts each step as
+deterministic numerical integration of the score function, treating
+the model's prediction $\hat{x}_0^{(t)}$ at each step as an
+independent, exact estimate.
+
+DiFA identifies a missed opportunity: the sequence of predictions
+$\{\hat{x}_0^{(T)}, \hat{x}_0^{(T-1)}, \ldots, \hat{x}_0^{(t)}\}$
+is not independent---it represents a series of increasingly refined
+observations of the same unknown $x_0$, each corrupted by noise
+at level $\bar\alpha_t$. Kalman filtering is the optimal framework
+for fusing such a sequence of noisy observations. DiFA imports this
+framework into diffusion inference.
+
+\section{Why Existing Approaches Fall Short}
+
+The numerical integration perspective assumes each $\hat{x}_0^{(t)}$
+is an unbiased, independent estimator of $x_0$. In practice:
+
+\textbf{Early predictions are structurally aligned but coarse.}
+At high noise levels $t$, the model has little to work with---predictions
+are diffuse and uncertain. Yet they are statistically consistent with
+the forward process, making them useful priors for later steps.
+
+\textbf{Late predictions are fine but may drift.} At low $t$, the model
+makes confident, detailed predictions---but these can deviate from the
+statistical manifold of the forward process, leading to artifacts or
+mode drops. Independent step treatment cannot detect or correct this drift.
+
+\textbf{No cross-step information reuse.} Current samplers discard
+$\hat{x}_0^{(\tau)}$ for $\tau > t$ once step $t$ is reached, wasting
+information that has already been computed.
+
+\section{Core Mechanism}
+
+DiFA introduces \textbf{Forward-Process Alignment (FPA)}: at step $t$,
+instead of using $\hat{x}_0^{(t)}$ directly, it computes a weighted
+consensus $\tilde{x}_0^{(t)}$ across all predictions to date:
+
+\[
+  \tilde{x}_0^{(t)} = \sum_{\tau \geq t} w(\tau, t)\,\hat{x}_0^{(\tau)},
+  \quad \sum_\tau w(\tau, t) = 1
+\]
+
+Weights $w(\tau, t)$ are larger for predictions at noise levels close
+to $t$ (structurally compatible) and smaller for predictions made at
+very different noise levels (less compatible):
+
+\[
+  w(\tau, t) \propto
+    \exp\!\left(-\frac{\|\hat{x}_0^{(\tau)}-\hat{x}_0^{(t)}\|^2}{2\sigma^2}\right)
+    \cdot \frac{1-\bar\alpha_\tau}{1-\bar\alpha_t}
+\]
+
+To prevent over-smoothing, DiFA adds \textbf{Deviation Guidance}:
+\[
+  \hat{x}_0^\text{DiFA}(t) = \tilde{x}_0^{(t)}
+    + \gamma\!\left(\hat{x}_0^{(t)} - \tilde{x}_0^{(t)}\right)
+\]
+
+where $\gamma \in (0,1)$ controls the trade-off between consensus
+smoothness and single-step detail.
+
+\section{Technical Formulation}
+
+The forward process is:
+\[
+  q(x_t \mid x_0) = \mathcal{N}\!\left(x_t;\,
+    \sqrt{\bar\alpha_t}\,x_0,\; (1-\bar\alpha_t)I\right)
+\]
+
+Treating each $\hat{x}_0^{(\tau)}$ as an observation of $x_0$ with
+additive Gaussian noise of variance proportional to $(1-\bar\alpha_\tau)$,
+the minimum-variance linear estimator is:
+
+\[
+  \tilde{x}_0^{(t)} = \left(\sum_{\tau \geq t}
+    \frac{1}{1-\bar\alpha_\tau}\right)^{-1}
+    \sum_{\tau \geq t} \frac{\hat{x}_0^{(\tau)}}{1-\bar\alpha_\tau}
+\]
+
+DiFA approximates this by replacing the Gaussian noise assumption with
+the empirical prediction discrepancy, giving the noise-and-consistency
+weighted formula above. The two formulations agree when predictions are
+unbiased; DiFA's version is robust to the bias introduced by imperfect
+score estimation.
+
+\section{Learning or Inference Procedure}
+
+DiFA requires no additional training or fine-tuning. The implementation
+wraps the inner loop of any existing sampler:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run the sampler's score evaluation to obtain $\hat{x}_0^{(t)}$.
+  \item Append $\hat{x}_0^{(t)}$ to the history buffer.
+  \item Compute $\tilde{x}_0^{(t)}$ via noise-level-weighted averaging
+    over the buffer.
+  \item Apply deviation guidance to obtain $\hat{x}_0^\text{DiFA}(t)$.
+  \item Pass $\hat{x}_0^\text{DiFA}(t)$ to the sampler's step function
+    in place of $\hat{x}_0^{(t)}$.
+\end{enumerate}
+
+Memory overhead scales as $O(T \cdot H \cdot W \cdot C)$ for the history
+buffer; at 50 steps and $256 \times 256$ resolution, this is approximately
+800~MB, which fits on a standard GPU.
+
+\section{What the Guarantee Says}
+
+Under Gaussian noise assumptions, DiFA's temporal consensus is the
+minimum-variance linear estimator of $x_0$ given all observations.
+This provides an optimality guarantee for the consensus itself.
+
+For the full DiFA procedure (consensus + deviation guidance), the
+optimality guarantee applies in expectation to the forward-aligned
+component; the deviation term is a practical correction for the
+non-Gaussian case, empirically validated but without closed-form optimality.
+
+\section{Experimental Findings}
+
+\textbf{CIFAR-10 unconditional (FID $\downarrow$):}
+
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+Sampler & Steps & Baseline & +DiFA \\
+\midrule
+DDIM & 20 & 4.67 & \textbf{3.21} \\
+DPM-Solver++ & 20 & 3.44 & \textbf{2.87} \\
+EDM & 35 & 2.04 & \textbf{1.78} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{ImageNet 256$\times$256 class-conditional (FID $\downarrow$):}
+
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+Sampler & Steps & Baseline & +DiFA \\
+\midrule
+DDIM & 50 & 12.4 & \textbf{8.9} \\
+DPM-Solver++ & 50 & 7.8 & \textbf{5.6} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+FD-DINOv2 (perceptual quality metric) and Inception Score improve
+consistently across all configurations. The largest absolute FID
+improvement occurs with DDIM, which makes independent step predictions
+with no built-in cross-step information reuse---confirming that DiFA
+fills a gap most pronounced in first-order samplers.
+
+\section{Ablations and Interpretation}
+
+\textbf{Pure consensus ($\gamma = 0$):} FID improves but visual
+sharpness drops; generated samples appear over-smoothed compared to
+reference images.
+
+\textbf{No consensus ($\gamma = 1$):} Equivalent to baseline. The
+consensus is doing the work.
+
+\textbf{Full history vs.\ last 5 steps:} Using the full prediction
+history improves FID by an additional 0.3--0.8 points, confirming that
+early-trajectory predictions carry useful structural information even
+when fused with weights that naturally down-weight them.
+
+\textbf{Uniform averaging vs.\ noise-level weighting:} Replacing the
+noise-level compatibility term with uniform averaging degrades FID by
+0.4--1.2 points. Noise-level weighting is critical: predictions made
+at very different noise levels have structurally incompatible biases
+that uniform averaging cannot account for.
+
+\textbf{Computational overhead:} Adding DiFA to DDIM (20 steps) on a
+single A100 increases wall-clock inference time by 6.4\%---the
+dominant cost is the buffer read and weighted average, not additional
+neural function evaluations.
+
+\section*{Reference}
+
+Shigui Li, Delu Zeng.
+\textbf{DiFA: Inference-Time Forward-Process Alignment for Diffusion Models}.
+arXiv:2607.17972. ICML 2026. July 19, 2026.
+\url{https://arxiv.org/abs/2607.17972}
+
+\end{document}

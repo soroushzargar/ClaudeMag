@@ -1,0 +1,246 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-07-29}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal reasoning \textbullet{}
+  reinforcement learning \textbullet{}
+  vision-language models \textbullet{}
+  geometry}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MIRROR: Learning from the Other View
+  for Multi-Modal Reasoning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Modality-Informed Reciprocal Reasoning Optimization Trains
+  Vision-Language Models to Transfer Strengths Across
+  Text, Diagram, and Combined Views of the Same Problem}\par\vspace{6pt}
+
+{\small\textbf{By} Wen Ye, Yuxiao Qu, Aviral Kumar, Xuezhe Ma
+  (University of Southern California; Carnegie Mellon University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.21552 \textbullet{} July 23, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-language models fail at visual reasoning even on geometry problems
+that have mathematically equivalent text, diagram, and combined views.
+MIRROR, from researchers at USC and CMU, exploits this inconsistency:
+rather than treating it as noise, the method identifies which view a model
+currently solves best and uses that signal to lift performance on the
+harder view through reciprocal cross-modal reward shaping during RL
+training. On ODA-Data, a new paired multimodal geometry benchmark, MIRROR
+improves image-dominant reasoning by 17 points over a strong baseline.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLMs solve the same geometry problem in text but
+    fail on the diagram, revealing complementary reasoning gaps across
+    modalities that standard post-training ignores.
+  \item[Why it matters:] Closing modality gaps enables VLMs to reason
+    reliably regardless of how a problem is presented---critical for
+    real-world deployment where input format is unpredictable.
+  \item[Method:] MIRROR evaluates each view per-problem, identifies
+    the best-performing view, and shapes rewards on weaker views
+    toward the best-view distribution via RL.
+  \item[Result:] +17pp on image-dominant and +9pp on combined view
+    vs.\ GRPO baseline on ODA-Data geometry; consistent gains on
+    three external geometry benchmarks.
+  \item[Evidence:] Ablating cross-modal shaping loses 9.4pp image
+    accuracy; scrambled skills confirm content drives improvement.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-language models are post-trained on massive image-text pairs
+and achieve strong results on captioning, VQA, and chart understanding.
+Yet on mathematical visual reasoning---where the model must interpret
+a geometric diagram and apply deductive inference---performance lags
+substantially behind text-only reasoning.
+
+The standard explanation is that vision encoding is weaker than language
+encoding. MIRROR's key insight is that this framing misses a more
+specific phenomenon: the \emph{same problem} in a different modality
+often elicits dramatically different behavior from the same model.
+A model that easily solves a geometry problem from a text description
+may completely fail on the same problem presented as a diagram---not
+because it lacks geometric knowledge, but because it fails to activate
+that knowledge from visual input.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard VLM post-training mixes image-text pairs and optimizes a
+single objective (SFT or RLHF) over all examples, treating modality
+as a property of the input rather than an independent factor in
+reasoning quality. This approach:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Averages over view-dependent performance:} A model
+    that excels on text but fails on diagrams receives the same
+    training gradient regardless of which view it was shown.
+  \item \textbf{Does not exploit complementary signals:} The model's
+    success on text implicitly encodes geometric reasoning that could
+    guide improvement on diagrams---but standard training does not
+    route this signal across modalities.
+  \item \textbf{Ignores asymmetric capability:} Per-view performance
+    profiles differ across problems; a fixed training mix cannot
+    leverage which view each problem is easiest from.
+\end{itemize}
+
+\section{Core Mechanism}
+
+MIRROR introduces a per-problem view evaluation step before each RL
+update. For each training problem $p$:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Evaluate the current policy on all views
+    $\mathcal{V} = \{T, I, T\!+\!I\}$ to obtain per-view rewards
+    $r(p, v)$.
+  \item Identify the best view: $v^*(p) = \arg\max_v r(p, v)$.
+  \item Compute augmented rewards for weaker views that include a
+    cross-modal alignment term encouraging the weaker-view distribution
+    to match the best-view distribution.
+\end{enumerate}
+
+The policy update uses GRPO with the augmented rewards, simultaneously
+training on all views. The reciprocal structure ensures that
+improvement on the text view can feed into the image view and vice
+versa.
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ be the policy and $a$ the correct answer.
+The base reward is $r(p, v) = \mathbf{1}[\pi_\theta(p_v) = a]$.
+The MIRROR-augmented reward for view $v \neq v^*(p)$ is:
+
+\[
+  \tilde{r}(p, v) = r(p, v) + \lambda
+    \cdot \mathrm{KL}\!\left(\pi_\theta(\cdot \mid p_{v^*})\,
+    \Big\|\, \pi_\theta(\cdot \mid p_v)\right)^{-1}
+\]
+
+The KL term penalizes divergence from the best-view response
+distribution, rewarding weaker views for matching the best-view
+reasoning trace. The inverse ensures the bonus is higher when the
+weaker view is already close to the best view (facilitating transfer)
+and smaller when the gap is large (avoiding overfit to a single view).
+
+The full GRPO objective with MIRROR shaping:
+
+\[
+  \mathcal{L}_\text{MIRROR} = -\mathbb{E}_{p, v \sim \mathcal{D}}
+    \left[\tilde{r}(p, v)\,
+    \frac{\pi_\theta(a_v \mid p_v)}{\pi_{\theta_\text{old}}(a_v \mid p_v)}
+    - \beta\,\mathrm{KL}(\pi_\theta \| \pi_\text{ref})\right]
+\]
+
+\section{Learning or Inference Procedure}
+
+Training uses ODA-Data for all views simultaneously. Each mini-batch
+contains all three views of the same problem, enabling within-batch
+comparison of view-dependent rewards. The $\lambda$ coefficient
+governing cross-modal shaping strength is annealed from 0.5 to 0.1
+over training to prevent the alignment term from dominating late-stage
+learning.
+
+At inference, no change is needed: the model is queried with whichever
+view is available. The improvement is baked into the model weights.
+
+\section{What the Guarantee Says}
+
+MIRROR does not guarantee cross-view performance parity---some problems
+may remain fundamentally harder in one view than another. What it
+provides is a systematic mechanism for reducing the gap, ensuring that
+the model's best-view capabilities are not siloed and can transfer
+across the view boundary.
+
+\section{Experimental Findings}
+
+\textbf{ODA-Data test set:}
+
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+Method & Text & Image & Combined \\
+\midrule
+LLaVA-1.6 (base) & 61.3 & 44.2 & 58.7 \\
++ GRPO only & 68.1 & 49.8 & 64.3 \\
++ MIRROR & \textbf{74.5} & \textbf{61.2} & \textbf{70.8} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{External geometry benchmarks} (average over GeoQA, UniGeo,
+Geometry3K): MIRROR $+$5.8pp over GRPO-only, $+$11.4pp over base.
+
+The image-dominant view shows the largest absolute gain ($+$17pp over
+base), consistent with the hypothesis that image reasoning benefits most
+from cross-modal transfer from the textually stronger reasoning path.
+
+\section{Ablations and Interpretation}
+
+\textbf{Remove cross-modal shaping} ($\lambda = 0$): Image accuracy
+drops 9.4pp relative to full MIRROR. The model still improves over
+base from outcome RL, but the cross-view transfer is lost.
+
+\textbf{Best view only} (train only on $v^*$, ignore weaker views):
+Image accuracy drops 14.1pp relative to MIRROR. Focusing only on the
+easiest view degrades weaker-view performance---the model over-specializes.
+
+\textbf{Scrambled skills} (random KL target per problem): Image accuracy
+falls to 47.1\%, below the GRPO-only baseline. The content of the
+cross-modal alignment target---not just the fine-tuning signal---drives
+the improvement.
+
+\textbf{$\lambda$ annealing:} Fixed $\lambda = 0.5$ degrades image
+accuracy by 3.2pp in late training, confirming that annealing is
+important for preventing the alignment term from dominating the RL
+signal.
+
+\section*{Reference}
+
+Wen Ye, Yuxiao Qu, Aviral Kumar, Xuezhe Ma.
+\textbf{MIRROR: Learning from the Other View for Multi-Modal Reasoning}.
+arXiv:2607.21552, July 23, 2026.
+\url{https://arxiv.org/abs/2607.21552}
+
+\end{document}
