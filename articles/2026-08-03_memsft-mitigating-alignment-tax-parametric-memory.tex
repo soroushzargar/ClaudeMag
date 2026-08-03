@@ -1,0 +1,248 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-03}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  alignment tax \textbullet{}
+  domain adaptation \textbullet{}
+  parametric memory \textbullet{}
+  catastrophic forgetting}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MemSFT: Mitigating Alignment Tax with an
+  External Parametric Memory}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Plug-and-Play Memory Module Imparts Domain Knowledge Without
+  Touching Backbone Weights---Matching Full SFT While Preserving
+  General Capability}\par\vspace{6pt}
+
+{\small\textbf{By} Jiarui Wang, Xiang Shi, Jiaqi Cao, Rubin Wei,
+  Xiquan Wang, Hao Sun, Jingzhi Wang, Zhiqi Yang, Qipeng Guo,
+  Bowen Zhou, Zhouhan Lin
+  (Shanghai Jiao Tong University; Fudan University; Tencent AI Lab)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.25614 \textbullet{} July 28, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Fine-tuning an LLM on a specialized domain reliably degrades its
+general-purpose capability---a phenomenon called the alignment tax.
+\textbf{MemSFT} avoids this by never updating backbone parameters: a
+compact parametric memory module is trained to imitate a domain retriever,
+and a learned router fuses memory and backbone distributions token-by-token
+at inference. Across biology, geoscience, and law, MemSFT exceeds full
+SFT on domain tasks while degrading general benchmarks by only 0.2\%---
+versus a 20.5-point drop for full SFT.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Fine-tuning on domain data causes catastrophic forgetting
+    of general capabilities, limiting the practical utility of LLM adaptation.
+  \item[Why it matters:] Deploying LLMs in law, medicine, and science
+    requires domain expertise without sacrificing general reasoning.
+  \item[Method:] Train a small parametric memory to distill a domain retriever;
+    a router dynamically fuses memory and backbone at each decoding step.
+  \item[Result:] 72.6 domain avg.\ (vs.\ 71.8 for full SFT);
+    74.6 general avg.\ (vs.\ 54.3 for full SFT).
+  \item[Evidence:] Evaluated on biology, geoscience, law with Qwen3-8B
+    through Qwen3-235B-A22B; memory transfers across model sizes.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models have transformed the landscape of domain-specific
+AI: a single pretrained model can serve as the foundation for law, medicine,
+finance, and science---but only with significant customization. Full
+supervised fine-tuning (SFT) on domain data is the dominant adaptation
+method, but it carries a well-documented cost: catastrophic forgetting.
+General benchmarks drop 15--30\% relative to the base model after full SFT
+on a specialized corpus.
+
+MemSFT recasts domain adaptation as a knowledge injection problem. Instead
+of modifying the backbone, it adds a compact module that holds the domain
+knowledge. The backbone remains intact; the memory supplies the domain delta;
+a router blends them conditionally during generation.
+
+\section{Why Existing Approaches Fall Short}
+
+Three adaptation paradigms exist, each with a critical limitation:
+
+\textbf{Full SFT:} Updates all backbone parameters. Achieves strong domain
+performance but causes catastrophic forgetting (general benchmarks drop
+15--30\%). Once fine-tuned, the backbone cannot easily serve multiple
+domains simultaneously.
+
+\textbf{LoRA/adapters:} Updates low-rank adapter matrices ($\ll 1\%$ of
+parameters). Reduces forgetting but does not eliminate it; domain gains
+are weaker than full SFT.
+
+\textbf{Retrieval-augmented generation (RAG):} Retrieves relevant documents
+at inference time. Preserves general capability but adds retrieval latency
+($\sim$100--500\,ms per query), requires a maintained document store, and
+does not internalize patterns that allow efficient pattern completion.
+
+MemSFT achieves full SFT domain performance with RAG-level general
+capability preservation, and with only 15\% additional inference latency
+over a vanilla backbone---no retrieval system required.
+
+\section{Core Mechanism}
+
+MemSFT consists of two components trained sequentially without backbone modification:
+
+\textbf{Parametric memory $M_\phi$:} A compact transformer ($\sim$75M
+parameters) trained to imitate a dense retriever operating over domain
+documents. Given the generation prefix $h_{1:t}$, $M_\phi$ produces a
+distribution over the next token that reflects domain-relevant patterns.
+
+\textbf{Router $g_\psi$:} A lightweight gating network ($\sim$1M parameters)
+that predicts, at each decoding step, what fraction of the output
+distribution should come from the memory vs.\ the backbone.
+
+\section{Technical Formulation}
+
+The memory is trained by knowledge distillation from a retriever:
+\[
+  \mathcal{L}_{\text{mem}} = D_{\mathrm{KL}}\!\bigl(
+    \mathrm{Retriever}(\cdot \mid h_{1:t},\, \mathcal{D}_{\mathrm{dom}})
+    \;\|\;
+    M_\phi(\cdot \mid h_{1:t})
+  \bigr)
+\]
+where $\mathcal{D}_{\mathrm{dom}}$ is the domain corpus. The retriever
+is a dense retrieval model that augments a frozen LM with top-$k$ documents.
+
+The final token distribution is:
+\[
+  p(w_t \mid w_{<t}) =
+    g_\psi(w_{<t}) \cdot M_\phi(w_t \mid w_{<t})
+    + \bigl(1 - g_\psi(w_{<t})\bigr) \cdot p_\theta(w_t \mid w_{<t})
+\]
+where $p_\theta$ is the frozen backbone and $g_\psi(w_{<t}) \in [0,1]$.
+
+The router is trained to maximize the likelihood of domain data under
+$p(\cdot)$, with a sparsity regularizer:
+\[
+  \mathcal{L}_{\text{router}} =
+    -\mathbb{E}_{(w,c)\sim\mathcal{D}_{\mathrm{dom}}}\!\bigl[
+      \log p(w \mid c)
+    \bigr] + \lambda \|g_\psi\|_1
+\]
+
+\section{Learning or Inference Procedure}
+
+Training proceeds in two stages:
+
+\textbf{Stage 1 (memory distillation):} Train $M_\phi$ against the
+retriever output distribution on domain documents for 10K steps with Adam.
+Backbone is frozen throughout.
+
+\textbf{Stage 2 (router training):} Freeze $M_\phi$, train $g_\psi$ on a
+held-out domain set for 1K steps. The sparsity regularizer encourages
+the router to invoke memory selectively: on non-domain prompts, the router
+converges to $g_\psi \approx 0$ (pure backbone).
+
+At inference, the backbone and memory run in parallel; the router blends
+their outputs. Per-step latency overhead is $\approx 15\%$ for Qwen3-8B.
+
+\section{What the Guarantee Says}
+
+Since the backbone parameters $\theta$ are never modified, the backbone's
+general-task performance is preserved exactly by construction. Any
+degradation in general benchmarks must arise from the router incorrectly
+invoking domain memory for non-domain prompts. The sparsity regularizer
+controls this: the expected general degradation is bounded above by
+$\lambda \cdot \mathbb{E}[g_\psi(w_{<t})]$ on non-domain contexts, which
+converges to near-zero with appropriate $\lambda$.
+
+\section{Experimental Findings}
+
+\textbf{Domains:} Biology (PubMedQA, BioASQ), Geoscience (GeoQA), Law
+(LegalBench). Models: Qwen3-8B to Qwen3-235B-A22B.
+
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+Method & Domain avg. & General avg. \\
+\midrule
+Base LLM & 62.3 & 74.8 \\
+Full SFT & 71.8 & 54.3 \\
+LoRA & 68.4 & 70.1 \\
+RAG & 70.2 & 74.7 \\
+MemSFT & \textbf{72.6} & \textbf{74.6} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+MemSFT exceeds full SFT on domain tasks by 0.8 points while preserving
+general capability (only 0.2-point drop versus a 20.5-point drop for
+full SFT). It also exceeds RAG by 2.4 domain points with 3$\times$ lower
+inference latency.
+
+\textbf{Cross-model reuse:} A memory trained with Qwen3-8B transfers to
+Qwen3-72B, recovering 92\% of per-domain performance vs.\ a native
+Qwen3-72B memory---demonstrating that the memory is architecturally
+portable across backbone sizes.
+
+\section{Ablations and Interpretation}
+
+\textbf{Router sparsity:} Removing $\lambda\|g_\psi\|_1$ causes the router
+to always blend both distributions ($g_\psi \approx 0.5$), degrading general
+performance by an additional 3.1 points while providing only marginal domain
+gains.
+
+\textbf{Memory size:} Scaling from 25M to 100M parameters improves domain
+performance by 2.4 points; diminishing returns beyond 75M.
+
+\textbf{Distillation teacher quality:} BM25 retriever (sparse) as teacher
+vs.\ dense retrieval reduces domain performance by 3.8 points, confirming
+that retrieval quality is the primary bottleneck for memory fidelity.
+
+\section*{Reference}
+
+Jiarui Wang, Xiang Shi, Jiaqi Cao, Rubin Wei, Xiquan Wang, Hao Sun,
+Jingzhi Wang, Zhiqi Yang, Qipeng Guo, Bowen Zhou, Zhouhan Lin.
+\textbf{MemSFT: Mitigating Alignment Tax with an External Parametric
+Memory}.
+arXiv:2607.25614, July 28, 2026.
+\url{https://arxiv.org/abs/2607.25614}
+
+\end{document}

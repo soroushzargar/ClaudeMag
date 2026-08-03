@@ -1,0 +1,82 @@
+ML Papers List — 2026-08-03
+Generated for ClaudeMag
+
+1. Explorative Modeling: Unlocking a Third Pretraining Axis and End-to-End Generation [arXiv 2026]
+   Authors: Alexi Gladstone, Heng Ji, Yilun Du
+   Affiliation: University of Illinois Urbana-Champaign; MIT
+   Venue/ID: arXiv:2607.27372
+   URL: https://arxiv.org/abs/2607.27372
+   Summary: Standard generative model training minimizes the expected loss over all data points, which
+   causes predictions to "blur" across modes of the data distribution rather than committing to any
+   one. Explorative Modeling (XM) factors the training loop: at each step, K candidate generations
+   are drawn and only the one that best matches the target is used for the gradient update. This
+   introduces exploration as a third pretraining axis beyond parameters and data. Increasing K
+   monotonically improves performance across images, video, and language, with Explorative Models
+   reaching 6.2× sample efficiency, 4.1× FLOP efficiency, and 47% better parameter efficiency
+   compared to standard training. XM achieves a near-SOTA FID of 1.43 on ImageNet without guidance.
+
+2. TurboVLA: Real-Time Vision-Language-Action Model at 32 Hz on an RTX 4090 with <1 GB VRAM [arXiv 2026]
+   Authors: Hengyi Xie, Chenfei Yao, Xianjin Wu, Xuanyang Xi, Yiping Tang, Di Xu,
+            Yingying Zhu, Dingkang Liang, Xiang Bai, Han Ding
+   Affiliation: Huazhong University of Science and Technology; Huawei Technologies Co. Ltd
+   Venue/ID: arXiv:2607.27205
+   URL: https://arxiv.org/abs/2607.27205
+   Summary: Vision-language-action (VLA) models for robotics commonly adopt a V→L→A pathway in
+   which visual observations are projected into a large language model's representation space before
+   being decoded into actions, incurring substantial computation and memory overhead at every policy
+   invocation. TurboVLA replaces this with a direct V+L→A mapping: visual observations and language
+   instructions are independently encoded, then combined via lightweight bidirectional vision-language
+   interaction, and continuous action chunks are predicted with a compact decoder. The result runs at
+   32 Hz (31.2 ms per step) on an RTX 4090, uses only 0.9 GB VRAM at inference, and achieves 97.7%
+   average success on LIBERO with only 0.2B parameters—matching or outperforming substantially larger
+   LLM-centric policies.
+
+3. RLPF: Reinforcement Learning from Performance Feedback for Code Generation [arXiv 2026]
+   Authors: Huihao Jing, Haozhe Cui, Wenbin Hu, Shaojin Chen, Haochen Shi, Changxuan Fan,
+            Yuxuan Liu, Hanyu Yang, Sirui Zhang, Ziyi Chen, Haoran Li, Yangqiu Song
+   Affiliation: Hong Kong University of Science and Technology
+   Venue/ID: arXiv:2607.27271
+   URL: https://arxiv.org/abs/2607.27271
+   Summary: Code models are increasingly trained with execution feedback, but most training signals
+   stop at correctness. RLPF studies how to train code agents to prefer faster correct
+   implementations, treating efficiency as a first-class training objective rather than an evaluation
+   metric. The key challenge is that runtime is a fragile reward—it is meaningful only after a
+   program is correct, varies across tasks, and gives little gradient signal when most sampled
+   programs fail to compile. RLPF introduces a staged reward: a correctness stage ensures programs
+   are runnable before a performance stage rewards relative speedup. On a family-disjoint test split,
+   RLPF raises a weak base model from 11.1% to 54.6% correct-and-runnable rate and from 8.1% to
+   38.6% CGRE (Correct-and-Graded Relative Efficiency).
+
+4. MemSFT: Mitigating Alignment Tax with an External Parametric Memory [arXiv 2026]
+   Authors: Jiarui Wang, Xiang Shi, Jiaqi Cao, Rubin Wei, Xiquan Wang, Hao Sun,
+            Jingzhi Wang, Zhiqi Yang, Qipeng Guo, Bowen Zhou, Zhouhan Lin
+   Affiliation: Shanghai Jiao Tong University; Fudan University; Tencent AI Lab
+   Venue/ID: arXiv:2607.25614
+   URL: https://arxiv.org/abs/2607.25614
+   Summary: Fine-tuning LLMs on domain-specific data improves performance in that domain but
+   degrades general capabilities—a phenomenon termed the alignment tax. MemSFT avoids this by
+   decoupling domain specialization from backbone parameter updates: a compact plug-and-play
+   parametric memory module is trained to imitate a non-parametric retriever over domain data,
+   memorizing domain-specific knowledge without touching the backbone. During generation, a learned
+   router dynamically fuses the output distributions of the memory and backbone at each decoding
+   step. Once trained for a domain, the memory can be reused across LLMs of different sizes.
+   Experiments across biology, geoscience, and law with models from Qwen3-8B to Qwen3-235B-A22B
+   show consistent domain improvement with negligible degradation on general tasks, whereas full SFT
+   causes severe catastrophic forgetting.
+
+5. SkillRise: Agentic Reinforcement Learning for Cross-Task Skill Evolution [arXiv 2026]
+   Authors: Zhiyuan Yao, Yuxin Chen, Zhengxi Lu, Zishan Xu, Yueqing Sun, Yifu Guo, Yuquan Lu,
+            Zhengzhou Cai, Kangning Zhang, Zhuowen Han, Zihan Wang, Ziang Ye, Qi Gu,
+            Xunliang Cai, Weiwen Liu, Yongliang Shen
+   Affiliation: Zhejiang University; National University of Singapore; Shanghai Jiao Tong University;
+                Meituan
+   Venue/ID: arXiv:2607.26784
+   URL: https://arxiv.org/abs/2607.26784
+   Summary: Standard agentic reinforcement learning treats each task as an independent episode,
+   missing the opportunity to transfer learned workflows to future tasks. SkillRise trains a single
+   policy that simultaneously solves tasks and curates an evolving skill document: given a task, the
+   agent attempts to solve it while updating a skill document passed as context to the next task.
+   Decoupled credit assignment rewards solving with the current task outcome and skill curation with
+   discounted downstream outcomes, ensuring skills are only reinforced when they demonstrably help
+   future tasks. SkillRise achieves the best Pass@1 among compared methods on ALFWorld, WebShop, and
+   ScienceWorld across zero-shot and few-shot conditions.

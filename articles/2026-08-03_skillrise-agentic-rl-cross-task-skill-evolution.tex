@@ -1,0 +1,268 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-03}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agentic reinforcement learning \textbullet{}
+  skill evolution \textbullet{}
+  cross-task transfer \textbullet{}
+  credit assignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SkillRise: Agentic Reinforcement Learning for
+  Cross-Task Skill Evolution}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Single Policy Alternates Between Solving Tasks and Curating a
+  Growing Skill Document---Rewarded for Downstream Impact, Not
+  Document Plausibility}\par\vspace{6pt}
+
+{\small\textbf{By} Zhiyuan Yao, Yuxin Chen, Zhengxi Lu, Zishan Xu,
+  Yueqing Sun, Yifu Guo, Yuquan Lu, Zhengzhou Cai, Kangning Zhang,
+  Zhuowen Han, Zihan Wang, Ziang Ye, Qi Gu, Xunliang Cai,
+  Weiwen Liu, Yongliang Shen
+  (Zhejiang University; NUS; SJTU; Meituan)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.26784 \textbullet{} July 29, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Standard agentic RL treats each task as an independent episode, discarding
+transferable workflows after every interaction. \textbf{SkillRise} trains
+a single policy to simultaneously solve tasks and maintain an evolving
+natural-language skill document. A key innovation is \emph{decoupled credit
+assignment}: skill curation is rewarded based on its downstream impact on
+future tasks, not on document quality alone. On ALFWorld, WebShop, and
+ScienceWorld, SkillRise achieves the best Pass@1 among all compared methods.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Agentic RL discards generalizable patterns after each
+    task, preventing efficient transfer to future related tasks.
+  \item[Why it matters:] Real-world agents face streams of related tasks;
+    the ability to curate and reuse skills is essential for continual improvement.
+  \item[Method:] Single policy that solves tasks and curates a skill
+    document; decoupled credit assignment rewards curation by downstream
+    task improvement.
+  \item[Result:] Best Pass@1 on ALFWorld (78.9\%), WebShop (66.3\%),
+    ScienceWorld (50.2\%).
+  \item[Evidence:] 11--12 pp. gain over standard RLVR; shared solve-curate
+    policy outperforms separate-policy baselines.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Agentic reinforcement learning for LLMs (RLVR) has demonstrated that
+language agents can learn to navigate web interfaces, plan household tasks,
+and execute scientific workflows purely from outcome-based rewards. But these
+agents are trained and tested on episodic tasks: each episode is independent,
+and the knowledge gained in one episode is only preserved insofar as
+it is absorbed into the model's parameters through gradient updates.
+
+This means every new task starts from scratch. A household agent that learned
+to find items in a drawer on task 1 has no mechanism to record that workflow
+and apply it directly on task 2. SkillRise proposes a simple but effective
+alternative: let the agent write its own workflow documentation, and reward
+the documentation by how much it helps future tasks.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior work on skill-augmented agentic RL (Voyager, SKILL1, SkillRL,
+SkillFlow) decomposes skill evolution into a pipeline:
+\begin{enumerate}[itemsep=1pt,parsep=0pt]
+  \item \textit{Extract:} A separate skill extraction module reads
+    completed trajectories and identifies transferable patterns.
+  \item \textit{Store:} Extracted skills are written to a retrieval database.
+  \item \textit{Retrieve:} At test time, a retriever fetches relevant
+    skills as context.
+\end{enumerate}
+
+This pipeline has two weaknesses. First, it requires separate optimization
+objectives for each component: extraction, retrieval, and execution are
+trained separately with potentially conflicting objectives. Second, the
+skill document is static after extraction and cannot be revised in light of
+future task failures---a pattern extracted from an easy instance may
+mislead on a harder variant.
+
+SkillRise collapses all three stages into a single reinforcement learning
+objective applied to a single policy.
+
+\section{Core Mechanism}
+
+SkillRise operates over a sequence of $N$ tasks $T_1, T_2, \ldots, T_N$
+organized from easy to hard. For each task $T_t$, the agent is given the
+current skill document $S_{t-1}$ and takes two sequential actions:
+
+\textbf{Solve:} Generate a trajectory $a_{1:H}$ to complete $T_t$ given
+context $(T_t, S_{t-1})$.
+
+\textbf{Curate:} Given $(T_t, a_{1:H}, S_{t-1})$, generate an updated
+skill document $S_t$ that adds, revises, or deletes workflow entries
+in light of what was learned on $T_t$.
+
+Both actions are produced by the same policy $\pi_\theta$; no separate
+extraction or retrieval module exists.
+
+\section{Technical Formulation}
+
+Let $r_{\mathrm{solve}}(T_t, a_{1:H})$ be the task completion reward and
+$r_{\mathrm{curate}}(S_t, T_{t+1:t+k})$ be the discounted impact of the
+updated skill document on the next $k$ tasks:
+
+\[
+  r_{\mathrm{curate}}(S_t, T_{t+1:t+k}) =
+    \frac{1}{k}\sum_{j=1}^{k} \gamma^j \cdot
+    \Delta r_{\mathrm{solve}}(T_{t+j},\; S_t \text{ vs.\ } S_{t-1})
+\]
+
+The SkillRise objective is:
+\[
+  \mathcal{J}(\theta) = \mathbb{E}\!\left[
+    \sum_{t=1}^{N} r_{\mathrm{solve}}(T_t, a_{1:H}^{(t)})
+    + \gamma \cdot r_{\mathrm{curate}}(S_t, T_{t+1:t+k})
+  \right]
+\]
+
+This is the critical distinction from prior work: curation is rewarded by
+downstream impact ($\Delta r_{\mathrm{solve}}$), not by surface-level quality.
+A skill is only reinforced when it demonstrably helps solve future tasks.
+
+\section{Learning or Inference Procedure}
+
+Training uses Group Relative Policy Optimization (GRPO): multiple curation
+outputs are sampled for each post-task state, and the policy is updated
+based on relative advantage between outputs that have better vs.\ worse
+downstream impact.
+
+The training curriculum organizes tasks by difficulty within each domain:
+easier instances first. This ensures that skill documents accumulate useful
+content early in training before harder tasks demand more nuanced workflows.
+Skill documents are constrained to 2,000 tokens to fit within the context
+window alongside task instructions.
+
+\section{What the Guarantee Says}
+
+Decoupled credit assignment provides a monotonicity property: if the
+curation policy is improved, the downstream solve reward is non-decreasing
+in expectation. This follows from the definition of $r_{\mathrm{curate}}$:
+if $S_t$ improves performance on future tasks, the curation reward is
+positive, incentivizing the policy to generate more useful updates.
+
+For a fixed backbone, the SkillRise objective upper-bounds the cumulative
+task completion rate over the $N$-task stream.
+
+\section{Experimental Findings}
+
+\textbf{ALFWorld (household task completion, Pass@1):}
+
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+Method & Pass@1 \\
+\midrule
+Base LLM & 42.3\% \\
+Standard RLVR & 67.8\% \\
+SKILL1 & 71.4\% \\
+SkillRise & \textbf{78.9\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{WebShop (e-commerce navigation, Task Success):}
+
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+Method & Success \\
+\midrule
+Standard RLVR & 56.2\% \\
+SkillFlow & 61.4\% \\
+SkillRise & \textbf{66.3\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{ScienceWorld (scientific experiment tasks, Pass@1):}
+
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+Method & Pass@1 \\
+\midrule
+Standard RLVR & 38.1\% \\
+SKILLC & 43.7\% \\
+SkillRise & \textbf{50.2\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Gains over standard RLVR are 11.1\,pp (ALFWorld), 10.1\,pp (WebShop),
+and 12.1\,pp (ScienceWorld).
+
+\section{Ablations and Interpretation}
+
+\textbf{Decoupled vs.\ immediate curation reward:} Replacing
+$r_{\mathrm{curate}}$ with an immediate quality score (document fluency
+or coverage) reduces ALFWorld Pass@1 by 6.6\,pp, confirming that
+downstream impact is the essential signal.
+
+\textbf{Shared vs.\ separate policy:} Training a separate curation policy
+(independent weights) reduces ALFWorld Pass@1 by 4.1\,pp, suggesting
+productive weight-sharing: solving improves curation, and curation
+improves solving through shared world model knowledge.
+
+\textbf{Curriculum ordering:} Random task ordering reduces ALFWorld
+Pass@1 by 6.3\,pp, confirming that the easy-to-hard curriculum is
+essential for early skill accumulation before difficult tasks arrive.
+
+\textbf{Document length:} Allowing up to 4,000 tokens (vs.\ 2,000) gains
+1.2\,pp on ScienceWorld, suggesting the constraint is occasionally binding
+for complex scientific workflows.
+
+\section*{Reference}
+
+Zhiyuan Yao, Yuxin Chen, Zhengxi Lu, et al.
+\textbf{SkillRise: Agentic Reinforcement Learning for Cross-Task Skill
+Evolution}.
+arXiv:2607.26784, July 29, 2026.
+\url{https://arxiv.org/abs/2607.26784}
+
+\end{document}

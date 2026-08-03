@@ -1,0 +1,245 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-03}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language-action \textbullet{}
+  robot policy \textbullet{}
+  real-time inference \textbullet{}
+  efficient VLA}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  TurboVLA: Real-Time Vision-Language-Action Model
+  at 32\,Hz on an RTX\,4090 with $<$1\,GB VRAM}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Eliminating the LLM Bottleneck in Robot Policies via Direct
+  V$+$L$\to$A Mapping Yields 97.7\% on LIBERO with Only
+  0.2B Parameters}\par\vspace{6pt}
+
+{\small\textbf{By} Hengyi Xie, Chenfei Yao, Xianjin Wu, Xuanyang Xi,
+  Yiping Tang, Di Xu, Yingying Zhu, Dingkang Liang, Xiang Bai, Han Ding
+  (Huazhong Univ.\ of Science and Technology; Huawei Technologies)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.27205 \textbullet{} July 30, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+State-of-the-art robot manipulation models route all perception through a
+billion-parameter language model---incurring hundreds of milliseconds of
+latency and gigabytes of VRAM at every policy step. \textbf{TurboVLA}
+breaks from this convention, replacing the V$\to$L$\to$A pathway with a
+direct V$+$L$\to$A mapping using a compact bidirectional interaction module.
+The result runs at 32\,Hz on a consumer RTX\,4090 with $<$1\,GB VRAM while
+achieving 97.7\% average success on LIBERO---matching models 35$\times$
+larger.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLM-centric VLA policies incur prohibitive compute and
+    memory overhead at every inference step, blocking real-time deployment.
+  \item[Why it matters:] Real-time control at 32\,Hz on consumer hardware
+    is a prerequisite for affordable robot deployment outside research labs.
+  \item[Method:] Independent visual and language encoders fused via
+    lightweight bidirectional cross-attention; continuous action chunks
+    predicted by a compact decoder.
+  \item[Result:] 97.7\% on LIBERO, 31.2\,ms per step, 0.9\,GB VRAM,
+    0.2B parameters.
+  \item[Evidence:] Matches or exceeds OpenVLA-7B and Pi-0 (3.3B) while
+    running 7--35$\times$ faster and consuming 7--16$\times$ less memory.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-language-action models represent the current frontier of generalist
+robot policies: by building on pre-trained vision-language models, they
+inherit rich semantic representations that generalize across diverse
+manipulation tasks. Papers like OpenVLA and Pi-0 have demonstrated that
+leveraging multi-billion-parameter LLM backbones as the core of a robot
+policy can yield impressive task success rates.
+
+The bottleneck, however, is clear: inference in these models runs at
+2--10\,Hz on research-grade GPU hardware, requiring tens of gigabytes of
+VRAM. Consumer robots, surgical systems, and industrial manipulators
+demand 30--100\,Hz control with modest compute budgets. TurboVLA
+challenges the architectural assumption that the LLM must be in the
+critical path of every policy inference.
+
+\section{Why Existing Approaches Fall Short}
+
+The dominant V$\to$L$\to$A paradigm processes visual observations by
+projecting them into the LLM's token space: visual patches become
+``visual tokens'' that attend to language tokens in the LLM's self-attention
+layers. This design has three costs:
+
+\textbf{Quadratic attention complexity.} The joint visual-language sequence
+has $N_v + N_l$ tokens; self-attention costs $O((N_v + N_l)^2)$ per layer.
+For $N_v = 256$ visual tokens and $N_l = 30$ language tokens, this is
+$\sim 80{,}000$ token pairs per layer, repeated across all 32+ LLM layers.
+
+\textbf{Memory dominated by LLM weights.} Even a 7B-parameter LLM at
+4-bit quantization occupies $\sim 3.5$\,GB---more than most embedded
+compute platforms support.
+
+\textbf{No separation of concerns.} The LLM processes both semantic
+instruction understanding and low-level observation encoding in the same
+computational graph, making it impossible to specialize or prune either
+component independently.
+
+\section{Core Mechanism}
+
+TurboVLA introduces three specialized modules that replace the monolithic
+LLM backbone:
+
+\begin{enumerate}[itemsep=1pt,parsep=0pt]
+  \item \textbf{Visual encoder (ViT-S/16):} Encodes the observation image
+    into $N_v = 196$ patch tokens $V \in \mathbb{R}^{N_v \times d_v}$.
+  \item \textbf{Language encoder (CLIP text, frozen):} Encodes the
+    instruction into $N_l \approx 30$ tokens $L \in \mathbb{R}^{N_l \times d_l}$.
+  \item \textbf{Bidirectional Vision-Language Interaction (BiVLI):}
+    Applies two rounds of alternating cross-attention, letting $V$ attend
+    to $L$ and $L$ attend to $V$, producing aligned representations $V'$
+    and $L'$.
+\end{enumerate}
+
+The BiVLI module contains only $\sim$50M parameters. The action decoder
+takes $[\mathrm{pool}(V') \oplus \mathrm{pool}(L')]$ and predicts a
+chunk of $H = 10$ continuous actions.
+
+\section{Technical Formulation}
+
+For round $r \in \{1, 2\}$ of BiVLI:
+\[
+  V^{(r)} = V^{(r-1)} + \mathrm{MHA}_{V\leftarrow L}(Q{=}V^{(r-1)},\; K{=}L^{(r-1)},\; V{=}L^{(r-1)})
+\]
+\[
+  L^{(r)} = L^{(r-1)} + \mathrm{MHA}_{L\leftarrow V}(Q{=}L^{(r-1)},\; K{=}V^{(r)},\; V{=}V^{(r)})
+\]
+where $\mathrm{MHA}$ is multi-head attention. The interaction cost is
+$O(N_v \cdot N_l)$ per round---$30\times$ lower than full self-attention
+over the combined sequence.
+
+The combined representation $z = \mathrm{pool}(V^{(2)}) \oplus \mathrm{pool}(L^{(2)})$
+is decoded to an action chunk:
+\[
+  \hat{a}_{1:H} = \mathrm{Decoder}(z), \qquad
+  \hat{a}_{1:H} \in \mathbb{R}^{H \times d_a}
+\]
+
+Training minimizes the behavior cloning loss:
+\[
+  \mathcal{L}_{\text{BC}} = \sum_{h=1}^{H} \bigl\|\hat{a}_h - a_h^*\bigr\|_2^2
+\]
+over expert demonstrations.
+
+\section{Learning or Inference Procedure}
+
+Training uses two stages. In the first (pretraining) stage, the visual
+encoder is initialized from CLIP ViT-S/16 and the BiVLI module is
+randomly initialized; both are trained on the OpenX-Embodiment dataset
+($\sim$1M demonstrations). In the second (fine-tuning) stage, the full
+model including the visual encoder is fine-tuned on task-specific
+demonstrations in the target environment (LIBERO, $\sim$500
+demonstrations per suite). The CLIP text encoder is frozen throughout.
+
+At inference, the visual encoder, BiVLI, and action decoder run in a
+single forward pass per time step---no autoregressive decoding, no KV
+cache management, no LLM overhead.
+
+\section{What the Guarantee Says}
+
+By design, the backbone parameters $p_\theta$ are never called at
+inference time. The only per-step compute is ViT-S forward (12\,ms),
+BiVLI two-round cross-attention (11\,ms), and MLP action decoder (8\,ms),
+totaling 31.2\,ms---safely below the 33\,ms deadline for 30\,Hz control.
+This is a structural bound, not a statistical approximation: no matter
+how complex the manipulation task, the per-step latency is fixed by
+architecture rather than by task difficulty.
+
+\section{Experimental Findings}
+
+\textbf{LIBERO benchmark (5 suites, higher is better):}
+
+\begin{center}\small
+\begin{tabular}{lcccc}
+\toprule
+Model & Params & Avg. & ms/step & VRAM \\
+\midrule
+OpenVLA-7B & 7B & 96.1\% & 218 & 14.0\,GB \\
+Pi-0 (distil.) & 3.3B & 97.2\% & 82 & 6.4\,GB \\
+TurboVLA & \textbf{0.2B} & \textbf{97.7\%} & \textbf{31} & \textbf{0.9\,GB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+TurboVLA achieves the best average success rate while using 35$\times$
+fewer parameters, running 7$\times$ faster, and consuming 7--16$\times$
+less memory.
+
+\textbf{Cross-embodiment:} Evaluated on Franka, xArm, and UR5, TurboVLA
+shows less catastrophic forgetting between embodiments than OpenVLA,
+attributed to the frozen CLIP text encoder providing a stable semantic
+anchor during multi-embodiment fine-tuning.
+
+\section{Ablations and Interpretation}
+
+\textbf{BiVLI rounds:} $R=1$ round drops average success by 3.2\%; $R=4$
+rounds adds only 0.4\% while doubling BiVLI latency. Two rounds is the
+Pareto-optimal choice for accuracy/latency trade-off.
+
+\textbf{Visual encoder size:} ViT-B/16 (3$\times$ more parameters) improves
+success by 1.1\% but doubles VRAM. ViT-S/16 is appropriate for
+resource-constrained deployment.
+
+\textbf{Action chunk horizon:} $H=10$ gives the best task completion;
+shorter horizons ($H=4$) hurt due to high-frequency control jitter and
+longer horizons ($H=20$) hurt due to compounding prediction error.
+
+\section*{Reference}
+
+Hengyi Xie, Chenfei Yao, Xianjin Wu, Xuanyang Xi, Yiping Tang, Di Xu,
+Yingying Zhu, Dingkang Liang, Xiang Bai, Han Ding.
+\textbf{TurboVLA: Real-Time Vision-Language-Action Model at 32\,Hz on
+an RTX\,4090 with $<$1\,GB VRAM}.
+arXiv:2607.27205, July 30, 2026.
+\url{https://arxiv.org/abs/2607.27205}
+
+\end{document}

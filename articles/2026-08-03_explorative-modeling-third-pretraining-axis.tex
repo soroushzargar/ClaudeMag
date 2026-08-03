@@ -1,0 +1,255 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-03}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  explorative modeling \textbullet{}
+  generative pretraining \textbullet{}
+  mode commitment \textbullet{}
+  sample efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Explorative Modeling: Unlocking a Third
+  Pretraining Axis and End-to-End Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Training Generative Models to Commit to Modes by Sampling $K$
+  Candidates and Updating Only the Best---Yielding 6$\times$ Sample
+  Efficiency at Near-SOTA Quality}\par\vspace{6pt}
+
+{\small\textbf{By} Alexi Gladstone, Heng Ji, Yilun Du
+  (University of Illinois Urbana-Champaign; MIT)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2607.27372 \textbullet{} July 29, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Generative model training has two well-known scaling axes: parameters and
+data. A new paper proposes a third---exploration---by sampling $K$
+candidate outputs per training example and updating only on the best
+match. \textbf{Explorative Models (XMs)} reach 6.2$\times$ sample
+efficiency, 4.1$\times$ FLOP efficiency, and 47\% better parameter
+efficiency compared to standard training, with a near-SOTA FID of 1.43
+on ImageNet 256$\times$256 without guidance.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard MLE training averages over modes of the
+    data distribution, producing blurry or incoherent generations.
+  \item[Why it matters:] Mode averaging is a fundamental inefficiency in
+    generative training---fixing it unlocks major sample and FLOP savings.
+  \item[Method:] Sample $K$ candidates per training example; update only
+    on the best-matching one, so gradients reinforce mode-committing outputs.
+  \item[Result:] 6.2$\times$ sample efficiency, 4.1$\times$ FLOP
+    efficiency, 47\% parameter savings, FID~1.43 on ImageNet.
+  \item[Evidence:] Gains are monotone in $K$ across images, video, and
+    language; advantage holds in large-scale pretraining.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The deep learning revolution was built on end-to-end training: instead
+of decomposing a problem into hand-designed stages, a single model is
+trained end-to-end by gradient descent on a task loss. Generative
+modeling has remained a partial exception. While diffusion models,
+autoregressive models, and flow models have made remarkable progress,
+the training loop itself has remained standard: minimize the expected loss
+over all data examples, averaging over all the modes in the distribution.
+
+This paper argues that the averaging implicit in maximum likelihood
+estimation is a fundamental inefficiency. When a training example has
+multiple plausible completions, the gradient pushes the model to cover all
+of them simultaneously---producing predictions that blur across modes
+rather than committing to one. The proposed fix, Explorative Modeling
+(XM), factors the training loop to commit to modes: sample $K$ candidates,
+pick the best, update on that. Exploration is treated as a quantitative
+scaling axis alongside parameters and data.
+
+\section{Why Existing Approaches Fall Short}
+
+Maximum likelihood training minimizes
+\[
+  \mathcal{L}_{\text{MLE}}(\theta) = -\mathbb{E}_{(x,c)\sim\mathcal{D}}\bigl[\log p_\theta(x \mid c)\bigr]
+\]
+This encourages the model to assign probability mass to every mode of the
+data distribution. In practice, this causes mode averaging: the model
+hedges rather than commits, producing blurry images, inconsistent video
+frames, or generic text.
+
+Existing remedies address the symptom at inference time (guidance,
+best-of-$N$ sampling) but leave the training objective unchanged. This
+means mode-averaging gradients are incorporated into model weights,
+requiring extra inference compute to overcome them. XM addresses the root
+cause at training time.
+
+\section{Core Mechanism}
+
+At each training step, instead of computing a loss from one generation
+matched to one data example, XM:
+\begin{enumerate}[itemsep=1pt,parsep=0pt]
+  \item Samples $K$ candidate generations $\hat{x}_1,\ldots,\hat{x}_K \sim p_\theta(\cdot \mid c)$.
+  \item Selects the best-matching candidate:
+    $\hat{x}^* = \arg\max_k\, \mathrm{sim}(\hat{x}_k, x)$.
+  \item Computes the training gradient only on $\hat{x}^*$.
+\end{enumerate}
+
+The key invariant: gradients always reinforce mode-committing outputs. The
+model is never penalized for failing to cover modes it did not select.
+For $K = 1$, XM reduces to standard MLE; increasing $K$ monotonically
+improves training quality.
+
+\section{Technical Formulation}
+
+Let $p_\theta(x \mid c)$ be the generative model. The XM objective is:
+\[
+  \mathcal{L}_{\text{XM}}(\theta) = -\mathbb{E}_{(x,c)\sim\mathcal{D}}\bigl[\log p_\theta(\hat{x}^* \mid c)\bigr]
+\]
+where
+\[
+  \hat{x}^* = \arg\max_{\hat{x}_k \in \{\hat{x}_1,\ldots,\hat{x}_K\}}
+               \mathrm{sim}(\hat{x}_k,\, x).
+\]
+The similarity function $\mathrm{sim}(\cdot,\cdot)$ is task-dependent:
+perceptual distance for images, video quality metrics for video, and
+ROUGE/token-overlap for language. The gradient is:
+\[
+  \nabla_\theta \mathcal{L}_{\text{XM}} =
+    -\nabla_\theta \log p_\theta(\hat{x}^* \mid c)
+\]
+---identical in form to MLE but computed only on the best candidate.
+
+The authors show that $\mathcal{L}_{\text{XM}}$ upper-bounds the
+negative log-likelihood of the best-of-$K$ sample. As
+$K \to \infty$, the objective converges to the entropy of the
+highest-probability mode, incentivizing mode commitment rather than
+mode coverage.
+
+\section{Learning or Inference Procedure}
+
+Training is identical to standard generative model training except for the
+sampling step. No changes are needed to the architecture, optimizer, or
+data pipeline. The per-step compute cost increases by a factor of
+approximately $K$ for forward passes (to generate $K$ candidates), but
+only one backward pass is performed, so the memory overhead is modest.
+
+At inference, the model is used identically to a standard generative model:
+single forward pass, no additional ranking or sampling. Exploration is
+baked into the parameters at training time, not deferred to test time.
+
+\section{What the Guarantee Says}
+
+For $K=1$, $\mathcal{L}_{\text{XM}} = \mathcal{L}_{\text{MLE}}$.
+For $K > 1$, $\mathcal{L}_{\text{XM}} \leq \mathcal{L}_{\text{MLE}}$
+---the XM objective is never worse, and strictly better when the model
+has non-zero variance over candidates. The gap grows with the diversity
+of the model's distribution: early in training, when the model is
+uncertain, exploration provides the largest benefit.
+
+\section{Experimental Findings}
+
+\textbf{ImageNet 256$\times$256 generation (FID, lower is better):}
+
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+Model & FID & Guidance \\
+\midrule
+Standard MLE baseline & 2.21 & No \\
+XM ($K=8$) & \textbf{1.43} & No \\
+XM ($K=8$) + CFG & \textbf{1.41} & Yes \\
+SOTA diffusion model & 1.40 & Yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Efficiency at matched FID (FID = 2.21):}
+
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+Axis & XM vs.\ Standard \\
+\midrule
+Sample efficiency & 6.2$\times$ \\
+FLOP efficiency & 4.1$\times$ \\
+Parameter efficiency & 47\% fewer params \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Scaling of exploration ($K$):} Increasing $K \in \{1, 2, 4, 8, 16, 32\}$
+monotonically reduces FID, with approximately log-linear improvement.
+
+\textbf{Video generation:} XM reduces FVD by 21\% relative to the MLE
+baseline at matched compute on a text-to-video benchmark.
+
+\textbf{Language generation:} XM improves the diversity-quality
+Pareto frontier by 15\% MAUVE on a causal LM fine-tuning task.
+
+\section{Ablations and Interpretation}
+
+\textbf{Similarity metric:} Replacing perceptual loss with L2 pixel distance
+degrades FID by 0.6, confirming that the quality of the match function
+determines how well candidates proxy for mode quality.
+
+\textbf{$K$ vs.\ additional training steps:} At a fixed total FLOP budget,
+$K=4$ with more steps outperforms $K=1$ with fewer steps, confirming that
+exploration is more efficient than additional data processing when the model's
+own distribution spans the relevant modes.
+
+\textbf{Connection to best-of-$N$:} Best-of-$N$ at inference requires $N$
+forward passes per generation and does not affect model weights. XM amortizes
+the exploration cost into training: the inference model inherits mode-committing
+behavior without any per-generation overhead.
+
+\textbf{End-to-end generation:} XM stabilizes joint training of encoder-decoder
+architectures with shared parameters across intermediate and final outputs,
+because mode-committing gradients prevent the latent space from collapsing
+toward averaged representations.
+
+\section*{Reference}
+
+Alexi Gladstone, Heng Ji, Yilun Du.
+\textbf{Explorative Modeling: Unlocking a Third Pretraining Axis and
+End-to-End Generation}.
+arXiv:2607.27372, July 29, 2026.
+\url{https://arxiv.org/abs/2607.27372}
+
+\end{document}
