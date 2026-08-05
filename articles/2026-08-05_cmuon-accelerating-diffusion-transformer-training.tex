@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion transformer \textbullet{}
+  momentum orthogonalization \textbullet{}
+  optimizer \textbullet{}
+  image generation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CMuon: Accelerating and Stabilizing Diffusion Transformer Training
+  via Chunked Momentum Orthogonalization}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Partitioning Fused Weight Matrices Before Orthogonalization Delivers a $2\times$
+  Speedup Over AdamW and FID 1.18 on ImageNet~256}\par\vspace{6pt}
+
+{\small\textbf{By} Chuyan Chen, Peng Sun \& Kun Yuan}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.02502 \textbullet{} ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The Muon optimizer's momentum orthogonalization accelerates standard Transformer
+training, but applying it directly to Diffusion Transformers stalls at late stages.
+CMuon traces the cause to fused weight tensors coupling independent subspaces and
+fixes it with a single structural change---partitioning matrices into chunks before
+orthogonalization. A 675M-parameter DiT trained with CMuon achieves FID~1.18 on
+ImageNet 256$\times$256 in 200 epochs, more than $2\times$ faster than AdamW.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Muon achieves faster convergence than AdamW on standard Transformers
+    but stalls in the late training phase when applied to Diffusion Transformers (DiTs).
+  \item[Why it matters:] DiT training is the dominant compute cost for frontier image
+    and video generation; a $2\times$ optimizer speedup directly halves training cost.
+  \item[Method:] Identify fused weight tensors (AdaLN, QKV) as the source of subspace
+    coupling; chunk them prior to Nesterov momentum orthogonalization.
+  \item[Result:] FID 1.18 on ImageNet 256$\times$256 in 200 epochs (675M parameters),
+    $>2\times$ training speedup over AdamW.
+  \item[Evidence:] Controlled ablations against Muon and AdamW; FID curves over full
+    200-epoch training run; accepted ECCV 2026.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Diffusion Transformers (DiTs) power the best image and video generation models of
+2026, from FLUX to Sora-class video synthesis. Training them is extremely expensive:
+a state-of-the-art image generation DiT requires thousands of GPU-hours, and video
+models demand an order of magnitude more. Any optimizer improvement that accelerates
+convergence without degrading final quality translates directly to lower training cost.
+
+Muon---the Momentum Orthogonalization optimizer---has attracted attention because it
+achieves significantly faster convergence than AdamW on vanilla Transformer language
+models. CMuon makes Muon work on DiTs by identifying and fixing a structural mismatch
+between Muon's assumptions and DiT's weight layout.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{AdamW} is the de-facto DiT optimizer. It works reliably but converges slowly,
+requiring many epochs to reach competitive FID scores.
+
+\textbf{Vanilla Muon} applies Nesterov momentum and then orthogonalizes the resulting
+gradient update matrix via Newton--Schulz iterations before applying the weight update.
+This exploits the geometry of the weight matrix space to find descent directions that
+make maximal use of each parameter. On standard Transformer blocks (Q, K, V, and MLP
+projections each in their own tensors), it works well.
+
+But DiTs use \textbf{Adaptive Layer Norm (AdaLN)}: a conditioning mechanism that
+generates per-channel scale and shift parameters from the diffusion timestep embedding,
+modulating the activations of each Transformer block. For GPU efficiency, the linear
+layers implementing AdaLN fuse the weights for scale and shift into a single large
+matrix, and similarly the Q, K, V projections are sometimes stored fused. Applying
+Muon to these fused tensors treats two functionally independent linear maps as a single
+entity, causing the orthogonalization to mix their update directions. This implicit
+coupling distorts the gradient geometry and causes convergence to plateau.
+
+\section{Core Mechanism}
+
+CMuon introduces a minimal pre-processing step before the Muon update:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Identify} all fused weight tensors in the DiT (AdaLN scale+shift
+    matrices, fused QKV projections, etc.).
+  \item \textbf{Chunk} each fused matrix along its output channel dimension according
+    to the functional boundary (e.g., split AdaLN into its scale matrix and its shift
+    matrix separately).
+  \item \textbf{Orthogonalize} each chunk independently via the Newton--Schulz
+    approximation to the matrix orthogonal factor.
+  \item \textbf{Reassemble} the chunked updates and apply them to the original
+    fused parameter tensor.
+\end{enumerate}
+
+No architectural changes or additional hyperparameters are required. The same chunking
+boundaries used during the forward pass for functional interpretation are reused here
+during the optimizer step.
+
+\section{Technical Formulation}
+
+Let $\mathbf{W} \in \mathbb{R}^{2d \times d}$ be a fused AdaLN weight matrix
+combining a scale projection $\mathbf{W}_s \in \mathbb{R}^{d \times d}$ and a
+shift projection $\mathbf{W}_b \in \mathbb{R}^{d \times d}$.
+
+The Muon update for $\mathbf{W}$ is:
+\[
+\Delta\mathbf{W} = \mathrm{NS}(\mathbf{M}),
+\quad
+\mathbf{M} = \mu \mathbf{M}_{\mathrm{prev}} + \mathbf{G},
+\]
+where $\mathbf{G}$ is the gradient, $\mu$ is momentum, and
+$\mathrm{NS}(\cdot)$ denotes the Newton--Schulz orthogonalization:
+\[
+\mathrm{NS}(\mathbf{A}) \approx \frac{3}{2}\mathbf{A} - \frac{1}{2}\mathbf{A}\mathbf{A}^\top\mathbf{A}
+\quad \text{(one step)}.
+\]
+
+The CMuon update orthogonalizes each chunk separately:
+\[
+\Delta\mathbf{W}_s = \mathrm{NS}(\mathbf{M}_s), \quad
+\Delta\mathbf{W}_b = \mathrm{NS}(\mathbf{M}_b),
+\]
+where $\mathbf{M}_s, \mathbf{M}_b$ are the momentum matrices for each chunk
+(maintained separately). The final update is $\Delta\mathbf{W} =
+[\Delta\mathbf{W}_s;\,\Delta\mathbf{W}_b]$.
+
+By orthogonalizing each functional subspace independently, each chunk's update
+direction is computed in the geometry appropriate to its own weight space rather
+than the mixed geometry of the fused tensor.
+
+\section{Learning or Inference Procedure}
+
+CMuon is a drop-in optimizer replacement. Training proceeds as:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Forward pass and diffusion denoising loss computation (identical to standard
+    DiT training).
+  \item Backward pass yielding gradients for all parameters.
+  \item For each fused weight tensor, split gradients and momentum along the chunk
+    boundary, orthogonalize each chunk, reassemble update.
+  \item For non-fused parameters (e.g., biases, embedding tables), use AdamW as usual
+    (Muon is not well-suited to 1-D parameter vectors).
+  \item Apply updates with a learning rate schedule identical to AdamW baselines
+    for fair comparison.
+\end{enumerate}
+
+Inference is unaffected: CMuon is a training-time optimizer; the deployed model
+is identical in architecture to a standard DiT.
+
+\section{What the Guarantee Says}
+
+Muon's orthogonalization is motivated by the Riemannian gradient on the manifold of
+matrices with bounded spectral norm. Each update step is guaranteed to be a descent
+direction in this geometry. The CMuon insight is that applying this guarantee to a
+fused matrix provides a weaker guarantee than applying it to each component separately,
+because the fused matrix does not lie on a single manifold coherent with either
+component's optimization landscape. Chunk-level orthogonalization restores the
+per-component descent guarantee.
+
+\section{Experimental Findings}
+
+Evaluated on DiT-XL/2 (675M parameters) training on ImageNet 256$\times$256
+with class-conditional generation:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item CMuon achieves \textbf{FID 1.18} in 200 epochs---competitive with the
+    best published DiT-XL/2 results.
+  \item Training is \textbf{$>2\times$ faster} than AdamW measured by FID at equal
+    epoch count.
+  \item Vanilla Muon on DiTs plateaus around epoch 120--140 and never reaches FID~1.3;
+    CMuon continues descending through 200 epochs.
+  \item No guidance (classifier-free or otherwise) is used during evaluation,
+    making this an apples-to-apples comparison.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without chunking (vanilla Muon):} Convergence stalls at FID $\approx 1.4$
+around epoch 130. The late-stage plateau is eliminated by chunking.
+
+\textbf{Chunk granularity:} Chunking at the AdaLN scale+shift boundary is sufficient.
+Further splitting within Q, K, V provides marginal additional gain on this architecture.
+
+\textbf{Non-fused layers:} Applying Muon (without chunking) to non-fused DiT layers
+(attention projections stored separately) does not cause convergence issues, confirming
+that fused tensors are the specific failure mode.
+
+\textbf{AdamW vs.\ CMuon FID curves:} At epoch~100 AdamW achieves FID~$\approx$1.8,
+while CMuon achieves FID~$\approx$1.3, confirming the $2\times$ epoch-efficiency claim.
+
+\section*{Reference}
+
+Chuyan Chen, Peng Sun, Kun Yuan. \textbf{CMuon: Accelerating and Stabilizing
+Diffusion Transformer Training via Chunked Momentum Orthogonalization}.
+arXiv:2608.02502, ECCV 2026.
+\url{https://arxiv.org/abs/2608.02502}
+
+\end{document}

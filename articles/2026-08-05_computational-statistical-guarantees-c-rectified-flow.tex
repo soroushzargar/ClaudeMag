@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  rectified flow \textbullet{}
+  optimal transport \textbullet{}
+  flow matching \textbullet{}
+  statistical learning theory}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Computational and Statistical Guarantees of the $c$-Rectified Flow}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Cost-Aware Flow Matching Variant Provably Minimises User-Specified Transport
+  Costs While Preserving Marginals, With Sample Complexity Bounds}\par\vspace{6pt}
+
+{\small\textbf{By} Leda Wang, Zhehao Xu, Qiang Liu \& Harrison H. Zhou
+  (UT Austin; Yale University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.02487 \textbullet{} August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Flow matching trains fast generative models but offers no guarantee that the
+learned transport minimises any user-specified cost. The \textit{$c$-Rectified Flow}
+restricts learned vector fields to gradient-of-convex-conjugate form and proves
+that iterative application monotonically reduces $c$-transport cost while
+automatically preserving marginal distributions---with sample complexity bounds
+characterising how many data points are needed.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard rectified flow / flow matching learns a valid generative
+    model but provides no guarantee of minimising any user-specified transport cost.
+  \item[Why it matters:] Many scientific applications (molecule generation,
+    image editing, optimal control) have explicit cost functions; a theoretically
+    grounded cost-aware flow model is essential for safe deployment.
+  \item[Method:] Restrict vector fields to $\nabla\bar{c}(\nabla f_t(\cdot))$ form;
+    iterative application provably reduces $c$-transport cost.
+  \item[Result:] Computational and statistical guarantees for cost-aware flow learning;
+    conditions for recovery of the true optimal transport solution.
+  \item[Evidence:] Formal proofs of convergence and sample complexity; counterexamples
+    delineating when strong assumptions are necessary.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Rectified flow and its generalisations (flow matching, stochastic interpolants)
+have become the standard training framework for generative models used in image
+synthesis, video generation, and scientific modelling. The core idea is simple:
+train a neural ODE velocity field $v_t(x)$ to push samples from a source distribution
+$\pi_0$ (e.g., Gaussian noise) towards a target distribution $\pi_1$ (e.g., data),
+with training implemented as a simple regression objective.
+
+This works remarkably well in practice. But for applications where the \emph{how}
+of transport matters---molecule generation (minimise conformational energy),
+image editing (preserve perceptual structure), optimal control (minimise actuator
+effort)---standard flow matching provides no guarantee that the learned transport
+is cost-efficient. It may find a valid coupling $\pi_0 \to \pi_1$ that is wasteful
+or even physically unrealisable.
+
+$c$-Rectified Flow closes this gap.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard rectified flow} minimises the squared-$L_2$ distance between a
+straight-line trajectory and the learned trajectory, which corresponds to the
+$L_2$ transport cost. It provides no guarantees for other cost functions and even
+for $L_2$ it recovers the OT solution only under strong regularity conditions.
+
+\textbf{Iterative rectification} (reflow) applies rectified flow recursively on
+coupled samples to straighten trajectories, reducing $L_2$ cost in practice but
+providing no monotone convergence guarantee for general costs $c$.
+
+\textbf{Minibatch OT} pre-computes approximate couplings before training, but the
+approximation error accumulates and there is no learning-theoretic analysis of
+the resulting flow.
+
+\section{Core Mechanism}
+
+For a convex cost function $c: \mathbb{R}^d \times \mathbb{R}^d \to \mathbb{R}$,
+let $\bar{c}$ denote its convex conjugate (Legendre--Fenchel transform):
+\[
+\bar{c}(u) = \sup_{x}\, \langle u, x \rangle - c(x).
+\]
+
+$c$-Rectified Flow restricts the learned velocity field to the structured form:
+\[
+v_t(x) = \nabla\bar{c}\!\left(\nabla f_t(x)\right),
+\]
+where $f_t: \mathbb{R}^d \to \mathbb{R}$ is an unconstrained time-dependent
+scalar potential. The key observation is that any vector field of this form
+is automatically the subdifferential of a convex function (since $\bar{c}$
+is convex and $f_t$ is smooth), which is precisely the structure of the
+optimal transport map for cost $c$ by Brenier's generalised theorem.
+
+The neural network learns $f_t$ (unconstrained), and $v_t$ is computed from it
+via automatic differentiation. The constraint is enforced implicitly by the
+parameterisation, not by projection or regularisation.
+
+\section{Technical Formulation}
+
+\textbf{Training objective.}
+Given source samples $\{x_0^{(i)}\}_{i=1}^n \sim \pi_0$ and target samples
+$\{x_1^{(j)}\}_{j=1}^n \sim \pi_1$, paired by a coupling $\gamma_t$ at
+interpolation time $t \in [0,1]$, the $c$-Rectified Flow objective is:
+\[
+\mathcal{L}_{c\text{-RF}}(\theta) =
+\mathbb{E}_{(x_0, x_1) \sim \gamma}\!\left[
+\left\| v_\theta(x_t, t) - \dot x_t \right\|^2
+\right],
+\quad x_t = (1-t)x_0 + t x_1,
+\]
+where $v_\theta = \nabla\bar{c}(\nabla f_\theta)$ is enforced by parameterisation.
+
+\textbf{Computational guarantee.}
+Let $\mathcal{T}_c(\gamma)$ denote the $c$-transport cost of coupling $\gamma$.
+Theorem~1 in the paper establishes:
+\[
+\mathcal{T}_c(\gamma^{(k+1)}) \leq \mathcal{T}_c(\gamma^{(k)})
+\]
+for all $k$, where $\gamma^{(k)}$ is the coupling induced by the $k$-th iterate
+of $c$-rectification. Marginals are preserved exactly at each iteration.
+
+\textbf{Statistical guarantee.}
+Theorem~2 provides: with $n$ i.i.d.\ samples from $\pi_0 \times \pi_1$, the
+estimated $c$-transport cost satisfies:
+\[
+\mathcal{T}_c(\hat\gamma_n) - \mathcal{T}_c(\gamma^*) \leq
+C_s \cdot n^{-2/(d+4)} \cdot \log n
+\]
+with high probability, where $C_s$ depends on the smoothness class of the
+optimal transport map and the Lipschitz constant of $\bar{c}$.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Iterative $c$-rectification:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialise coupling $\gamma^{(0)} = \pi_0 \otimes \pi_1$ (independent).
+  \item For $k = 0, 1, 2, \ldots$:
+    \begin{enumerate}[itemsep=1pt,parsep=0pt]
+      \item Pair samples from $\pi_0$ and $\pi_1$ by simulating the current
+        flow $v^{(k)}$ to obtain coupled pairs $(x_0, x_1^{(k)})$.
+      \item Train $v^{(k+1)}$ by minimising $\mathcal{L}_{c\text{-RF}}$ on
+        these coupled pairs.
+    \end{enumerate}
+\end{enumerate}
+
+\textbf{Inference:} Simulate the learned ODE
+$\dot{x}_t = v^{(K)}_\theta(x_t, t)$ from $x_0 \sim \pi_0$ to $x_1$
+using a numerical ODE solver (e.g., Euler with $T$ steps).
+
+\section{What the Guarantee Says}
+
+The computational guarantee ensures that repeated $c$-rectification is a
+monotone interior algorithm: each iterate reduces the cost without leaving
+the feasible set of couplings with the correct marginals. This is analogous
+to coordinate descent on a convex objective but here the geometry is the
+space of probability couplings.
+
+The statistical guarantee implies that at dimension $d$ and smoothness $s$,
+the estimation error decays as $n^{-s/(2s+d)}$ (classical non-parametric rate),
+showing that $c$-Rectified Flow is statistically efficient.
+
+However, recovery of the true OT solution requires additional assumptions:
+connected support of $\pi_0, \pi_1$ and smoothness of the OT map $T^*$.
+The paper provides counterexamples showing these conditions are not vacuous.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item On synthetic 2-D optimal transport problems with non-$L_2$ costs
+    (e.g., $c(x,y) = \|x-y\|_1$, earth-mover cost), $c$-Rectified Flow
+    achieves provably lower transport cost than standard flow matching after
+    the same number of training iterations.
+  \item Monotone cost decrease is confirmed empirically for $K = 1, 2, 3$
+    iterations of $c$-rectification across five experimental settings.
+  \item Sample complexity curves match the theoretical $n^{-2/(d+4)}$ rate
+    on synthetic data with known ground-truth OT maps.
+  \item On a molecular conformer generation task with steric clash cost,
+    $c$-Rectified Flow produces conformers with lower energy than standard
+    flow matching baselines.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Effect of $\bar{c}$ parameterisation:} Using a learned neural $\bar{c}$
+rather than the closed-form convex conjugate produces slightly better results
+but is harder to optimise and risks losing the theoretical guarantees if the
+learned function is not truly convex.
+
+\textbf{Iteration count $K$:} Cost decreases most sharply in the first iteration
+($k = 0 \to 1$) and yields diminishing returns beyond $K = 3$. This matches the
+theoretical prediction that later iterates are already close to the OT solution.
+
+\textbf{Disconnect: theory vs.\ practice:} In settings without smooth OT maps
+(e.g., multimodal targets with disconnected support), $c$-Rectified Flow converges
+to a local cost minimum rather than the global OT solution, consistent with the
+counterexamples in the theoretical analysis.
+
+\section*{Reference}
+
+Leda Wang, Zhehao Xu, Qiang Liu, Harrison H. Zhou.
+\textbf{Computational and Statistical Guarantees of the $c$-Rectified Flow}.
+arXiv:2608.02487, August 2026.
+\url{https://arxiv.org/abs/2608.02487}
+
+\end{document}

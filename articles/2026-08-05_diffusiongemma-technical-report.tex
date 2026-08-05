@@ -1,0 +1,217 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  discrete diffusion \textbullet{}
+  mixture of experts \textbullet{}
+  fast text generation \textbullet{}
+  open-weight LLM}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  DiffusionGemma Technical Report}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Google DeepMind's Open 26B MoE Model Generates Text at 1000+ Tokens per Second
+  via Block-Parallel Discrete Diffusion}\par\vspace{6pt}
+
+{\small\textbf{By} Adrien Ali Ta\"iga et al.\ (DiffusionGemma Team,
+  Google DeepMind)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.00146 \textbullet{} August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Autoregressive text generation has a fundamental throughput ceiling: it emits one token
+per forward pass, making latency proportional to sequence length. \textit{DiffusionGemma}
+eliminates this bottleneck by iteratively denoising an entire 256-token canvas in parallel,
+achieving over 1000 tokens per second on a single NVIDIA H100---up to $4\times$ faster than
+comparable AR models---while fitting within 18\,GB VRAM when quantised and released
+under the Apache 2.0 licence.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Autoregressive LLMs generate one token per forward pass, making
+    throughput fundamentally linear in sequence length and bottlenecked by memory bandwidth.
+  \item[Why it matters:] A $4\times$ throughput gain at matched quality halves the
+    inference cost of frontier LLMs, directly enabling larger, cheaper deployments.
+  \item[Method:] Fine-tune the Gemma 4 26B MoE backbone with (1) SFT for bidirectional
+    denoising and (2) RL + sampler distillation for joint quality and efficiency gains.
+  \item[Result:] 1000+ tok/s on H100, 700+ tok/s on RTX~5090; fits in 18\,GB VRAM when
+    quantised; open-weights under Apache 2.0.
+  \item[Evidence:] Speed benchmarks on NVIDIA H100 and RTX~5090; quality evaluated against
+    equivalent-parameter AR models.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models generate text by sampling one token at a time in a strict
+left-to-right order. This autoregressive (AR) constraint is simple and ensures
+the model can condition each new token on all prior context, but it imposes a hard
+throughput ceiling: no matter how wide the model is, each forward pass produces
+exactly one token. For a sequence of $N$ tokens, the model must run $N$ serial
+passes, making decode time $O(N)$ in the number of forward passes regardless of
+hardware parallelism.
+
+Diffusion-based text generation breaks this constraint by treating generation as
+iterative denoising over a complete sequence. DiffusionGemma represents the state
+of the art on this front: a 26B-parameter open-weights model that generates full
+blocks of tokens in parallel, with measured throughput exceeding 1000 tokens per
+second on a single H100---a $4\times$ improvement over equivalent AR models.
+
+\section{Why Existing Approaches Fall Short}
+
+Earlier attempts at diffusion-based language models (e.g.\ MDLM, SEDD) trained
+from scratch on text corpora and did not match the quality of AR models of similar
+parameter count. The quality gap arose because diffusion LMs require learning
+bidirectional context modelling, a fundamentally harder pre-training problem than
+the unidirectional next-token prediction that gives AR models their strong priors.
+
+Prior fast-generation methods for AR models (speculative decoding, token streaming)
+provide modest speedups (2--3$\times$) but remain bounded by the sequential
+auto-regressive paradigm. DiffusionGemma bypasses this bound entirely.
+
+\section{Core Mechanism}
+
+\textbf{Architecture.}
+DiffusionGemma is based on Gemma~4, specifically the 26B-A4B Mixture-of-Experts
+variant: 26B total parameters with only 3.8B activated per token during inference.
+The sparse MoE routing means most expert parameters are dormant in any given forward
+pass, keeping latency low while retaining the model's large capacity.
+
+\textbf{Block-Autoregressive Multi-Canvas Sampling.}
+At inference, DiffusionGemma begins with a canvas of 256 \texttt{[MASK]} tokens.
+Each denoising iteration:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Predicts the probability distribution over the full vocabulary for every
+    masked position simultaneously;
+  \item Samples and commits the most confident subset of positions;
+  \item Repeats until the canvas is fully populated.
+\end{enumerate}
+Once committed, positions are not revised. In practice far fewer than 256 iterations
+are required, as many positions are filled confidently in the first few steps.
+
+\section{Technical Formulation}
+
+Let $\mathbf{x} = (x_1, \ldots, x_L)$ be a sequence of $L$ tokens.
+At each denoising step $t$ the model receives a partially masked sequence
+$\tilde{\mathbf{x}}^{(t)}$ and predicts a distribution over unmasked completions:
+\[
+p_\theta\!\left(\mathbf{x} \mid \tilde{\mathbf{x}}^{(t)}\right)
+= \prod_{i \in \mathcal{M}^{(t)}} p_\theta\!\left(x_i \mid \tilde{\mathbf{x}}^{(t)}\right),
+\]
+where $\mathcal{M}^{(t)}$ is the set of masked positions at step $t$.
+The SFT objective is:
+\[
+\mathcal{L}_{\mathrm{SFT}}(\theta) =
+-\mathbb{E}_{\mathbf{x}, t, \mathcal{M}}\!\left[
+  \sum_{i\in\mathcal{M}} \log p_\theta(x_i \mid \tilde{\mathbf{x}}^{(t)})
+\right].
+\]
+The RL stage optimises a reward $r(\mathbf{x})$ that combines generation quality
+(from a judge model) and inference efficiency (number of denoising steps to convergence):
+\[
+\mathcal{L}_{\mathrm{RL}}(\theta) =
+-\mathbb{E}_{\mathbf{x}\sim p_\theta}\!\left[r(\mathbf{x})\right]
++ \lambda\,D_{\mathrm{KL}}(p_\theta \| p_{\mathrm{ref}}),
+\]
+where $p_{\mathrm{ref}}$ is the SFT checkpoint and $\lambda$ controls KL regularisation.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Stage 1---SFT.}
+Starting from the Gemma~4 AR checkpoint, the model is fine-tuned on text data using
+the masked denoising objective above. Less than 10\% of the original pre-training
+token budget is required, as the AR checkpoint provides strong representations that
+transfer directly to the bidirectional denoising task.
+
+\textbf{Stage 2---RL + Sampler Distillation.}
+A combined training step jointly (i) uses RL to improve response quality by rewarding
+high-judge-score outputs and (ii) distils a fast sampler that fills the canvas in
+fewer denoising steps without quality loss.
+
+\textbf{Inference.}
+The model is applied with block-autoregressive sampling: a canvas of 256 masked tokens
+is initialised, then denoised iteratively. Generation can be quantised to 4-bit
+precision to fit within 18\,GB VRAM.
+
+\section{What the Guarantee Says}
+
+The two-stage recipe inherits Gemma~4's general language understanding and instruction
+following, while the RL stage provides an explicit optimisation target linking generation
+quality to reward. The KL regularisation in the RL objective bounds the distance from the
+SFT checkpoint, preventing degenerate solutions that score high on the judge but collapse
+the output distribution. The sampler distillation guarantee is that the fast sampler matches
+the full sampler's output distribution within a KL tolerance tuned during training.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{1000+ tokens/second} on a single NVIDIA H100 (batch size~1, int4 quantisation).
+  \item \textbf{700+ tokens/second} on a consumer NVIDIA GeForce RTX~5090.
+  \item \textbf{Up to $4\times$ faster} than the Gemma~4 AR baseline on dedicated GPU hardware.
+  \item Fits in \textbf{18\,GB VRAM} when quantised to 4-bit, enabling local deployment
+    on high-end consumer GPUs without multi-GPU setup.
+  \item Quality competitive with the equivalent AR model on standard instruction-following
+    and language-understanding benchmarks.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Stage~1 only vs.\ Stage~1+2.} The SFT-only checkpoint has higher variance
+in denoising step count; Stage~2 distillation produces a sampler that converges in
+fewer iterations, explaining the efficiency gains beyond what the base denoiser achieves.
+
+\textbf{Canvas size.} The 256-token canvas size balances between parallelism (larger
+is better) and the difficulty of predicting many tokens at once with high confidence
+(larger is worse). Ablations showed 256 to be near-optimal for the 26B parameter scale.
+
+\textbf{MoE vs.\ dense.} The 26B-A4B MoE architecture activates fewer parameters per
+token than a dense 4B model would but leverages a much larger total capacity. The sparse
+activation is essential for hitting the latency targets at this parameter scale.
+
+\section*{Reference}
+
+DiffusionGemma Team (Adrien Ali Ta\"iga et al.). \textbf{DiffusionGemma Technical Report}.
+arXiv:2608.00146, August 2026.
+\url{https://arxiv.org/abs/2608.00146}
+
+\end{document}

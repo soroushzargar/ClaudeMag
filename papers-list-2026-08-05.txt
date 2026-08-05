@@ -1,0 +1,80 @@
+ML Papers List — 2026-08-05
+Generated for ClaudeMag
+
+1. DiffusionGemma Technical Report [arXiv 2026]
+   Authors: Adrien Ali Taïga et al. (DiffusionGemma Team, Google DeepMind)
+   Affiliation: Google DeepMind
+   Venue/ID: arXiv:2608.00146
+   URL: https://arxiv.org/abs/2608.00146
+   Summary: DiffusionGemma is an experimental open-weight language model that uses discrete
+   diffusion to generate text at exceptionally high speed. Rather than decoding one token at
+   a time, it iteratively refines blocks of 256 tokens in parallel, eliminating the sequential
+   bottleneck of conventional autoregressive LLMs. The model is built by fine-tuning the
+   Mixture-of-Experts Gemma 4 backbone (26B total / 3.8B active parameters) with a
+   compute-efficient two-stage pipeline: supervised fine-tuning teaches bidirectional denoising,
+   and a second stage combines reinforcement learning with sampler distillation to improve
+   quality and efficiency jointly. DiffusionGemma achieves 1000+ tokens per second on a single
+   NVIDIA H100 and 700+ on an RTX 5090—up to 4× faster than equivalent autoregressive models—
+   while fitting within 18 GB VRAM when quantized, enabling consumer-GPU deployment.
+
+2. Why Large Language Models Fail at Tabular Prediction [arXiv 2026]
+   Authors: Marta Garnelo, Wojciech M. Czarnecki
+   Affiliation: Google DeepMind
+   Venue/ID: arXiv:2608.02412
+   URL: https://arxiv.org/abs/2608.02412
+   Summary: LLMs are routinely outperformed by simple classical baselines on tabular prediction,
+   yet the cause has remained obscure. Garnelo and Czarnecki run controlled experiments on 31
+   benchmark datasets to evaluate five hypotheses for the failure: inability to handle noise,
+   the CSV format obscuring structure, numeric tokenisation, query batch size, and input
+   dimensionality. Experiments falsify the first four. Dimensionality is decisive: the LLM is
+   the only method among nine whose accuracy monotonically falls as dimension grows, while every
+   classical baseline stays flat or improves. In two dimensions the LLM's predictions match a
+   local distance-based method with up to 91.6% grid agreement, but in higher dimensions no
+   classical learner reproduces its behavior—suggesting the prediction mechanism itself changes
+   with dimension in a qualitatively novel way.
+
+3. CMuon: Accelerating and Stabilizing Diffusion Transformer Training via Chunked Momentum Orthogonalization [arXiv 2026]
+   Authors: Chuyan Chen, Peng Sun, Kun Yuan
+   Affiliation: Not specified (ECCV 2026)
+   Venue/ID: arXiv:2608.02502 / ECCV 2026
+   URL: https://arxiv.org/abs/2608.02502
+   Summary: Diffusion Transformers (DiTs) achieve state-of-the-art image synthesis but require
+   enormous training compute. The Muon optimizer (Momentum Orthogonalization) promised relief,
+   but its direct application to DiTs causes suboptimal late-stage convergence because standard
+   DiT architectures fuse functionally distinct weight blocks (AdaLN, QKV) into single tensors.
+   Applying Muon to these fused matrices couples independent subspaces, distorting update
+   directions. CMuon fixes this with one simple change: partition fused matrices into independent
+   chunks before orthogonalization. A 675M-parameter DiT trained with CMuon achieves FID 1.18
+   on ImageNet 256×256 in just 200 epochs—more than 2× faster than AdamW—while eliminating the
+   convergence plateau of vanilla Muon. Accepted to ECCV 2026.
+
+4. TRAM: Enhancing Multimodal Reasoning with Trajectory-Derived Auxiliary Memory [arXiv 2026]
+   Authors: Kang Liu, Zijing Wang, Yongkang Liu, Mengjie Zhao, Xiaocui Yang, Shi Feng,
+            Yifei Zhang, Daling Wang
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.01922
+   URL: https://arxiv.org/abs/2608.01922
+   Summary: Multimodal Large Reasoning Models (MLRMs) excel at vision + multi-step inference
+   but degrade as reasoning chains grow long: intermediate conclusions established early in the
+   trajectory lose influence by the time later steps need them. TRAM is a training-free method
+   that augments standard MLRM decoding with an auxiliary memory pathway derived from the
+   reasoning trajectory itself. Attribution analysis reveals that correctness is more closely
+   associated with whether trajectories retain and integrate reasoning-derived information
+   across stages than with visual attribution alone. By explicitly maintaining a compact
+   trajectory memory and injecting it into decoding, TRAM improves accuracy on long-chain
+   multimodal reasoning benchmarks without any fine-tuning.
+
+5. Computational and Statistical Guarantees of the c-Rectified Flow [arXiv 2026]
+   Authors: Leda Wang, Zhehao Xu, Qiang Liu, Harrison H. Zhou
+   Affiliation: UT Austin; Yale University
+   Venue/ID: arXiv:2608.02487
+   URL: https://arxiv.org/abs/2608.02487
+   Summary: Rectified Flow and flow matching have become dominant frameworks for fast generative
+   modeling, yet theoretical guarantees for learning the optimal-transport (OT) solution have
+   lagged. c-Rectified Flow is a cost-aware variant that modifies the flow matching objective
+   to restrict vector fields to the form ∇c̄(∇f_t(·)), where c̄ is the convex conjugate of the
+   transport cost c. Wang et al. provide both computational guarantees (iterative application
+   monotonically reduces c-transport cost while preserving marginals) and statistical guarantees
+   (sample complexity bounds for the learned flow from finite data). They also delineate when
+   the method recovers the true OT solution and when strong assumptions such as connected support
+   or smoothness are required, providing a rigorous foundation for cost-aware generative modeling.

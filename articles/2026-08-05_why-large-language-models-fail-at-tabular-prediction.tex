@@ -1,0 +1,220 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  tabular prediction \textbullet{}
+  in-context learning \textbullet{}
+  dimensionality \textbullet{}
+  LLM limitations}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Why Large Language Models Fail at Tabular Prediction}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Systematic Study Identifies Input Dimensionality---Not Format, Noise, or
+  Tokenisation---as the Decisive Factor in LLM Tabular Failure}\par\vspace{6pt}
+
+{\small\textbf{By} Marta Garnelo \& Wojciech M. Czarnecki
+  (Google DeepMind)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.02412 \textbullet{} Submitted 3 August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Large language models are outperformed by fifty-year-old baselines on tabular
+data. A new controlled study across 31 benchmark datasets falsifies four popular
+explanations for this failure and finds that dimensionality alone is decisive:
+LLM accuracy monotonically falls as feature count grows, while every classical
+method stays flat or improves, and in two dimensions the LLM's predictions match
+a local distance-based method with up to 91.6\% grid agreement.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLMs routinely lose to classical baselines on tabular
+    prediction, but the root cause has been unknown.
+  \item[Why it matters:] Tabular data dominates enterprise ML; understanding why
+    LLMs fail guides where not to deploy them and points to what a fix would require.
+  \item[Method:] Evaluate a frontier LLM in pure in-context inference on 31 datasets;
+    sweep input dimensionality via random linear projections; test five candidate hypotheses.
+  \item[Result:] Dimensionality is the sole decisive factor; all four other hypotheses
+    are falsified by controlled experiments.
+  \item[Evidence:] 31 datasets, 9 comparison methods; 91.6\% prediction grid agreement
+    with local distance-based methods in 2-D; failure mode unmatched by any classical degradation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Tabular data---rows of numeric and categorical features with a prediction target---is
+the most common format in real-world machine learning. Despite LLMs' remarkable
+across-the-board progress, they have failed to close the gap with classical methods
+on tabular benchmarks. A frontier LLM prompted with a CSV of training examples and
+asked to predict the label for a test row is consistently beaten by random forests,
+gradient boosting, and even simple $k$-nearest-neighbour classifiers.
+
+This failure has spawned a dedicated field of tabular foundation models, yet the
+underlying cause has been debated without controlled evidence. Garnelo and Czarnecki
+run the most systematic study to date, falsifying four popular hypotheses and
+identifying the sole culprit: input dimensionality.
+
+\section{Why Existing Approaches Fall Short}
+
+The field has proposed several ad-hoc explanations:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \textbf{Noisy / non-separable data:} LLMs may be sensitive to label noise
+    or overlapping class boundaries more common in tabular data than text.
+  \item \textbf{CSV format:} Serialising rows as comma-separated values may obscure
+    the column structure that classical methods exploit.
+  \item \textbf{Numeric tokenisation:} Numbers like \texttt{3.14} are split into
+    multiple tokens (\texttt{3}, \texttt{.}, \texttt{14}), possibly disrupting
+    numeric reasoning.
+  \item \textbf{Query batch size:} Classifying many test points per prompt may
+    introduce interference between predictions.
+\end{itemize}
+
+None of these has been rigorously tested as a \emph{cause} of the failure.
+All four are falsified below.
+
+\section{Core Mechanism}
+
+The study places the LLM in its purest in-context regime: a single generation
+pass over a prompt containing the full training set serialised as CSV plus one
+test point. No tools, fine-tuning, chain-of-thought, or agentic scaffolding.
+This isolates the LLM's native prediction mechanism.
+
+To control dimensionality, random linear projections are applied to each of
+the 31 datasets, producing versions with 2, 4, 8, 16, 32, and 64 features.
+This lets the study vary dimensionality while keeping the underlying dataset
+structure the same.
+
+The LLM is compared to eight classical methods including $k$-NN, random forests,
+gradient-boosted trees, and linear classifiers---nine methods total.
+
+\section{Technical Formulation}
+
+Let $\mathbf{X} \in \mathbb{R}^{n \times d}$ be the training set with labels
+$\mathbf{y} \in \{1,\ldots,C\}^n$, and let $\mathbf{x}^* \in \mathbb{R}^d$ be
+a test point. The LLM predicts:
+\[
+\hat{y}^* = \arg\max_{c}\, p_{\mathrm{LLM}}(c \mid \mathrm{prompt}(\mathbf{X}, \mathbf{y}, \mathbf{x}^*)).
+\]
+The dimensionality sweep uses a random matrix $\mathbf{P} \in \mathbb{R}^{d \times k}$
+with $k < d$ to project features: $\tilde{\mathbf{x}} = \mathbf{x}\mathbf{P}$.
+Accuracy is measured as a function of $k$.
+
+For the behavioural comparison, the \emph{prediction grid agreement} between
+two classifiers $f_1$ and $f_2$ is:
+\[
+\mathrm{Agreement}(f_1, f_2)
+= \mathbb{E}_{\mathbf{x}^*}\!\left[\mathbf{1}\!\left[f_1(\mathbf{x}^*) = f_2(\mathbf{x}^*)\right]\right],
+\]
+evaluated on a fine grid over the feature space.
+
+\section{Learning or Inference Procedure}
+
+The experimental protocol has three phases:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Hypothesis testing:} For each of the five hypotheses, design a
+    controlled variant of the prompt or data (e.g., corrupt labels for (a), use
+    alternative serialisation for (b)) and test whether it changes the gap to classical
+    methods. No change = hypothesis falsified.
+  \item \textbf{Dimensionality sweep:} Apply random projections to sweep $d \in
+    \{2, 4, 8, 16, 32, 64\}$ and measure accuracy vs.\ $d$ for all nine methods.
+  \item \textbf{Behavioural comparison:} In 2-D (where the LLM still performs
+    competitively), compute prediction grid agreement between the LLM and all
+    eight classical methods to identify which method's decision boundary it mimics.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Falsification results are definitive at the experimental level: each variant
+produces no statistically significant change in the LLM--classical gap when
+hypotheses (a)--(d) are tested. The dimensionality effect is monotone across all
+31 datasets and all 9 comparison methods, making it robust to dataset-specific
+confounds.
+
+\section{Experimental Findings}
+
+\textbf{Dimensionality is decisive.}
+The LLM is the only method among nine whose accuracy decreases monotonically with
+$d$. Every classical baseline stays flat or improves as $d$ grows (more features
+contain more signal for classical methods). The crossover point where classical
+methods overtake the LLM is typically around $d = 4$--8.
+
+\textbf{In 2-D, the LLM mimics a distance-based method.}
+Grid agreement between the LLM and the nearest-neighbour classifier reaches
+\textbf{91.6\%} in 2-D. No other classical method achieves this level of
+agreement with the LLM's predictions at any dimensionality.
+
+\textbf{High-dimensional failure mode is novel.}
+At $d > 8$, the LLM's decision boundary no longer matches any classical method,
+including noise-corrupted or degraded variants. The failure is mechanistically
+distinct from all classical failure modes.
+
+\section{Ablations and Interpretation}
+
+\textbf{Hypothesis (a)---noise:} Adding label noise to all methods equally
+reduces accuracy for all, but the LLM--classical gap is unchanged. Falsified.
+
+\textbf{Hypothesis (b)---CSV format:} Alternative serialisations (JSON, Markdown
+tables, space-separated) produce no statistically significant change in LLM accuracy.
+Falsified.
+
+\textbf{Hypothesis (c)---tokenisation:} Replacing all numeric values with symbolic
+tokens (\texttt{A}, \texttt{B}, \ldots) does not restore LLM performance.
+Falsified.
+
+\textbf{Hypothesis (d)---batch size:} Classifying 1, 5, or 20 test points per
+query produces no consistent change in accuracy. Falsified.
+
+\textbf{The prediction mechanism at high $d$ is an open question.}
+The LLM's unique sensitivity to dimensionality and the breakdown of its resemblance
+to any known classical method at $d > 8$ leave its high-dimensional prediction
+mechanism as a fundamental open problem for mechanistic interpretability research.
+
+\section*{Reference}
+
+Marta Garnelo, Wojciech M. Czarnecki. \textbf{Why Large Language Models Fail at
+Tabular Prediction}. arXiv:2608.02412, August 2026.
+\url{https://arxiv.org/abs/2608.02412}
+
+\end{document}
