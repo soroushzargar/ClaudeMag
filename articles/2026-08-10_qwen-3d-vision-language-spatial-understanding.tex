@@ -1,0 +1,220 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-10}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  3D vision-language model \textbullet{}
+  spatial understanding \textbullet{}
+  3D rotary positional embeddings \textbullet{}
+  multi-view fusion}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Qwen-3D: A Generalist 3D Vision-Language Model
+  for Spatial Understanding}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Carnegie Mellon Researchers Unify 2D and 3D Grounding
+  by Computing Attention in World Space Rather Than Image Space}\par\vspace{6pt}
+
+{\small\textbf{By} Lucy Lin, Ayush Jain, Yifan Liu,
+  Katerina Fragkiadaki (Carnegie Mellon University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.02980 \textbullet{} ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A new generalist vision-language model from Carnegie Mellon University achieves
+state-of-the-art results on both 2D and 3D spatial understanding benchmarks by a
+single architectural change: computing attention in 3D world coordinates rather than
+per-frame pixel coordinates. Qwen-3D surpasses existing 3D LMMs and several large
+proprietary 2D models on grounding tasks, and will appear at ECCV 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Frame-centric tokenization ignores the shared 3D structure
+    underlying multi-view observations, limiting VLMs on long videos and 3D scenes.
+  \item[Why it matters:] Embodied AI and robotics need a single model that
+    reasons about 3D space and natural language without separate specialist pipelines.
+  \item[Method:] 3D Rotary Positional Embeddings index attention by world-space
+    coordinates; a unified output head predicts language, 2D boxes, and 3D boxes.
+  \item[Result:] State-of-the-art on ScanQA, EmbodiedScan, and other 3D benchmarks;
+    competitive with large proprietary 2D models on MMBench and SEED-Bench.
+  \item[Evidence:] Evaluated across six 3D understanding and five 2D vision-language
+    benchmarks at ECCV 2026.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large Multimodal Models have transformed image and short-video understanding, but
+scaling to 3D scenes and long videos has remained elusive. Every RGB frame is
+tokenized independently, discarding the geometric relationships that tie views of the
+same scene together. A model watching a robot navigate a room from multiple cameras
+sees a stream of disconnected image patches, with no built-in sense that the sofa
+seen from Camera~1 is the same object partially visible in Camera~2.
+
+Qwen-3D solves this by lifting attention from 2D pixel space into 3D world space.
+Given depth maps and camera poses alongside RGB images, the model maps every visual
+token to a 3D world coordinate and uses that coordinate as the token's positional
+encoding. Tokens that correspond to the same 3D point---even from different cameras
+or timesteps---receive encodings that reflect their world-space proximity, enabling
+the model to naturally associate them during attention without any explicit
+correspondence algorithm.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior 3D LMMs (e.g.\ 3D-VisTA, EmbodiedScan) added 3D-awareness through auxiliary
+encoders or separate perception heads, but kept the core transformer operating in
+2D image space. This created a mismatch: the language backbone reasons over 2D
+feature sequences while 3D grounding heads operate over a separate 3D feature space,
+requiring careful multi-task balancing and making joint 2D/3D generalization difficult.
+
+Specialist 3D perception models (Mask3D, OpenMask3D) achieve strong grounding results
+but are not language models and cannot engage in open-ended dialogue or instruction
+following. Generalist VLMs (GPT-4V, Gemini Pro Vision) handle language fluently but
+treat 3D scenes as collections of independent image crops, losing spatial coherence.
+Qwen-3D is the first model to close all three gaps in a single architecture.
+
+\section{Core Mechanism}
+
+\textbf{3D Token Lifting.}
+For each pixel $(u, v)$ in an input frame, depth $d$ and camera intrinsics
+$K$ and extrinsics $[R | t]$ yield the world coordinate:
+\[
+\mathbf{p} = R^{-1}\!\left(d\,K^{-1}\begin{bmatrix}u\\v\\1\end{bmatrix} - t\right).
+\]
+Each visual token (a patch of pixels) is assigned the 3D centroid of its patch.
+
+\textbf{3D Rotary Positional Embeddings (3D RoPE).}
+Standard RoPE encodes 1D or 2D positions by rotating query and key vectors in
+frequency-indexed subspaces. Qwen-3D extends this to 3D: the world coordinates
+$(X, Y, Z)$ are used to construct rotation matrices for three independent groups
+of attention head dimensions, one per spatial axis. Two tokens close in 3D world
+space receive nearly identical positional rotations, producing high raw dot-product
+similarity before any content-based weighting.
+
+\textbf{Unified Output Head.}
+A single transformer decoder produces three output types from the same representation:
+free-form text, 2D bounding boxes (normalized image coordinates), and 3D bounding
+boxes (centre, size, heading angle in world coordinates). Task type is controlled by
+instruction prompts, enabling zero-shot switching between modalities.
+
+\section{Technical Formulation}
+
+Let $\mathbf{F} = \{(\mathbf{p}_i, \mathbf{v}_i)\}_{i=1}^N$ be the set of $N$ visual
+tokens with 3D world positions $\mathbf{p}_i \in \mathbb{R}^3$ and feature vectors
+$\mathbf{v}_i \in \mathbb{R}^d$. Self-attention with 3D RoPE applies:
+\[
+\mathrm{Attn}(Q, K, V)_{ij}
+= \frac{\bigl(R(\mathbf{p}_i)\,q_i\bigr)^{\!\top}
+         \bigl(R(\mathbf{p}_j)\,k_j\bigr)}{\sqrt{d_h}},
+\]
+where $R(\mathbf{p}) \in \mathbb{R}^{d_h \times d_h}$ is the block-diagonal rotation
+matrix constructed from the three spatial frequencies of $\mathbf{p}$.
+
+The training objective combines cross-entropy for text tokens ($\mathcal{L}_\text{LM}$),
+smooth-$\ell_1$ for 2D box coordinates ($\mathcal{L}_\text{2D}$), and smooth-$\ell_1$
+plus IoU3D loss for 3D box prediction ($\mathcal{L}_\text{3D}$):
+\[
+\mathcal{L} = \mathcal{L}_\text{LM} + \lambda_1\,\mathcal{L}_\text{2D}
+              + \lambda_2\,\mathcal{L}_\text{3D}.
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Data.} Training uses a mixture of (i) standard 2D VQA and instruction-following
+datasets, (ii) multi-view indoor scene datasets with 3D annotations (ScanRefer, Nr3D),
+and (iii) egocentric video datasets with depth and camera poses.
+
+\textbf{Fine-tuning.} Starting from a Qwen-VL checkpoint, the model is fine-tuned
+end-to-end with the multi-task objective above. The 3D RoPE replaces the existing 2D
+RoPE positional encoding; no architectural changes to the attention mechanism itself
+are required.
+
+\textbf{Inference.} At test time, the model accepts any combination of RGB images,
+depth maps, and camera poses. Depth-free inference falls back to 2D RoPE, preserving
+2D benchmark performance even when 3D information is unavailable.
+
+\section{What the Guarantee Says}
+
+3D RoPE preserves the rotation equivariance of standard RoPE: if all tokens are
+rigidly rotated in world space (equivalent to a global camera pose change), the
+relative positional encoding between any pair of tokens is unchanged, making the model
+invariant to global reference frame choice. The unified training objective ensures that
+improving 3D grounding does not degrade language modeling performance---empirically
+confirmed by stable scores on 2D benchmarks throughout training.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{ScanQA:} new state of the art, surpassing previous best 3D LMM by
+    a significant margin on both EM and CIDEr metrics.
+  \item \textbf{EmbodiedScan:} top result on 3D visual grounding (Acc@0.25 and Acc@0.5),
+    outperforming specialist 3D perception pipelines.
+  \item \textbf{MMBench / SEED-Bench:} competitive with GPT-4V and Gemini Pro Vision
+    on standard 2D multimodal benchmarks, demonstrating no 3D/2D trade-off.
+  \item \textbf{Multi-view video understanding:} large improvements on tasks requiring
+    cross-view association (e.g.\ object re-identification across camera angles).
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{3D RoPE vs.\ 2D RoPE.} Removing 3D positional information and reverting to
+per-frame 2D RoPE drops 3D grounding accuracy by over 15 points on ScanRefer,
+confirming that world-space position is the key ingredient rather than multi-view data
+alone.
+
+\textbf{Depth quality sensitivity.} Using predicted depth (from a monocular estimator)
+instead of ground-truth depth degrades 3D grounding by 4--6 points but still
+outperforms prior 3D LMMs that use GT depth, suggesting the 3D positional signal is
+robust to moderate depth noise.
+
+\textbf{Joint vs.\ separate 2D/3D training.} Training only on 3D data degrades 2D
+benchmark performance by 8 points; joint training recovers it fully, confirming that
+the two modalities are complementary rather than competing.
+
+\section*{Reference}
+
+Lucy Lin, Ayush Jain, Yifan Liu, Katerina Fragkiadaki.
+\textbf{Qwen-3D: A Generalist 3D Vision-Language Model for Spatial Understanding}.
+arXiv:2608.02980, ECCV 2026.
+\url{https://arxiv.org/abs/2608.02980}
+
+\end{document}

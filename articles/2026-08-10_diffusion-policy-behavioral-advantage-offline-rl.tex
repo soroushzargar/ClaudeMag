@@ -1,0 +1,244 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-10}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  offline reinforcement learning \textbullet{}
+  diffusion policy \textbullet{}
+  Q-value correction \textbullet{}
+  distribution shift}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Diffusion Policy with Behavioral Advantage Correction
+  for Offline Reinforcement Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  BAC-PE Uses the Behavior Policy's Q-Function to Simultaneously
+  Tame Overestimation and Conservatism in Offline RL}\par\vspace{6pt}
+
+{\small\textbf{By} Botao Dong, Longyang Huang, Ning Pang,
+  Hongtian Chen}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.02332 \textbullet{} August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Offline reinforcement learning is caught between two failure modes: over-conservative
+penalization of in-distribution actions and overestimation of out-of-distribution
+actions. Behavioral Advantage Corrected Policy Evaluation (BAC-PE) resolves this
+dilemma by adding the behavior policy's advantage function as a correction term to
+the learned Q-function, with convergence guarantees and strong empirical results
+across D4RL, Antmaze, and robotic manipulation benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Distribution shift in offline RL causes Q-functions to either
+    overestimate out-of-distribution actions or over-penalize in-distribution ones.
+  \item[Why it matters:] Safe offline RL from logged data is essential for robotics
+    and healthcare, where online interaction is expensive or dangerous.
+  \item[Method:] Correct the learned Q-function with the behavior policy's advantage;
+    represent both policies as diffusion models for multimodal action distributions.
+  \item[Result:] Outperforms CQL, TD3+BC, and Diffusion-QL on D4RL locomotion and
+    Antmaze; strong results on robotic manipulation.
+  \item[Evidence:] Theoretical convergence bound on Q-estimation error; evaluated on
+    D4RL, Antmaze, and Robosuite benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Offline reinforcement learning promises to extract useful policies from logs of past
+behavior---a critical capability for domains such as healthcare and autonomous driving
+where online interaction is too costly or dangerous. The fundamental challenge is that
+the learned policy will inevitably visit state-action pairs not well represented in
+the fixed dataset. Standard Q-learning then propagates erroneous value estimates for
+these out-of-distribution (OOD) actions, causing the policy to exploit them
+catastrophically.
+
+The field has responded with two families of corrections. \emph{Conservative} methods
+(CQL, IQL) penalize OOD actions with explicit regularization, but the penalty is
+necessarily blunt: it can suppress well-covered in-distribution actions alongside
+genuinely dangerous OOD ones. \emph{Implicit constraint} methods (TD3+BC, BEAR)
+restrict the policy to stay close to the behavior distribution, but tight constraints
+sacrifice the ability to improve over a mediocre behavior policy. BAC-PE takes a
+fundamentally different approach: rather than penalizing OOD actions by their
+distance from the behavior distribution, it \emph{corrects} Q-values using
+information the behavior policy actually provides.
+
+\section{Why Existing Approaches Fall Short}
+
+The behavior policy $\mu$ generates all data in the offline dataset. Its Q-function
+$Q^\mu$ is estimable from the data without distribution shift, because every action
+in the dataset was taken by $\mu$ on the state distribution that $\mu$ itself induced.
+This is the key observation that existing methods leave on the table.
+
+\textbf{Conservative Q-Learning (CQL)} adds a penalty $-\mathbb{E}_{a \sim \pi}[Q]$
+to push Q-values down for policy actions and up for data actions. But it does so
+uniformly across all policy actions, regardless of whether they are genuinely OOD or
+merely low-density actions that $\mu$ took rarely but which are still valid.
+
+\textbf{TD3+BC} adds a behavioral cloning regularizer $\|a - a_\mu\|^2$ to the
+policy gradient, preventing large deviations from the logged actions but also
+preventing the policy from taking shortcuts the behavior policy missed.
+
+Neither method uses $Q^\mu$ directly. BAC-PE does.
+
+\section{Core Mechanism}
+
+\textbf{Behavioral Advantage.}
+The behavioral advantage of action $a$ in state $s$ is:
+\[
+A^\mu(s, a) = Q^\mu(s, a) - V^\mu(s),
+\]
+where $V^\mu(s) = \mathbb{E}_{a \sim \mu}[Q^\mu(s,a)]$.
+A positive behavioral advantage means $a$ is \emph{better than average} under $\mu$;
+a negative behavioral advantage means $a$ is OOD or poor.
+
+\textbf{BAC-PE Correction.}
+The corrected Q-function for the learned policy $\pi$ is:
+\[
+\hat{Q}^\pi(s, a) = Q^\pi(s, a) + \alpha\,A^\mu(s, a).
+\]
+The intuition:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item If $a$ was frequently taken and good under $\mu$ (large $A^\mu > 0$),
+    $\hat{Q}^\pi$ is boosted, offsetting excessive conservatism.
+  \item If $a$ was rare or poor under $\mu$ (small or negative $A^\mu$),
+    $\hat{Q}^\pi$ is suppressed, offsetting overestimation.
+\end{itemize}
+No uniform penalty is applied; the correction is adaptive, action-by-action.
+
+\textbf{Diffusion Policy.}
+Both $\mu$ and $\pi$ are represented as \emph{diffusion models} over the action space:
+\[
+\pi_\theta(a|s) \propto \int p_{\theta,T}(a_T)\prod_{t=1}^T
+p_{\theta,t}(a_{t-1}|a_t,\,s)\,\mathrm{d}a_{1:T},
+\]
+where $a_T \sim \mathcal{N}(0, I)$ and $p_{\theta,t}$ is a learned denoising step.
+Diffusion policies capture multimodal action distributions (e.g.\ multiple valid
+grasps for a manipulation task) that Gaussian or deterministic policies cannot.
+
+\section{Technical Formulation}
+
+Let $\mathcal{D} = \{(s_i, a_i, r_i, s'_i)\}$ be the offline dataset collected under
+$\mu$. BAC-PE estimates $Q^\mu$ and $V^\mu$ via standard TD with dataset transitions:
+\[
+Q^\mu_{\phi} \leftarrow \arg\min_\phi \mathbb{E}_{\mathcal{D}}\!\left[
+  \bigl(Q^\mu_\phi(s,a) - r - \gamma\,V^\mu_\phi(s')\bigr)^2\right],
+\]
+then learns $Q^\pi$ with the corrected target:
+\[
+\hat{Q}^\pi_\psi \leftarrow \arg\min_\psi \mathbb{E}_{\mathcal{D}}\!\left[
+  \Bigl(\hat{Q}^\pi_\psi(s,a) - r - \gamma\,\hat{Q}^\pi_\psi(s', a'_{s'})\Bigr)^2
+  \right],
+\]
+where $a'_{s'} \sim \pi_\theta(\cdot|s')$.
+
+The policy is optimized to maximize $\hat{Q}^\pi$ subject to a KL constraint on
+deviation from $\mu$:
+\[
+\mathcal{L}(\theta) = -\mathbb{E}_{s, a \sim \pi_\theta}\!\left[\hat{Q}^\pi(s,a)\right]
++ \lambda\,D_{\mathrm{KL}}(\pi_\theta(\cdot|s)\;\|\;\mu(\cdot|s)).
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Stage 1: Behavior policy fitting.} A diffusion model is fit to the offline
+dataset actions conditioned on states: this is standard behavioral cloning with a
+diffusion denoiser.
+
+\textbf{Stage 2: Q-function estimation.} $Q^\mu_\phi$ and $V^\mu_\phi$ are trained
+via TD using the offline dataset.
+
+\textbf{Stage 3: Policy optimization.} The diffusion policy $\pi_\theta$ is optimized
+alternately updating the denoising network (to maximize $\hat{Q}^\pi$) and the
+Q-function $Q^\pi_\psi$ (to provide targets for the next policy update).
+
+\textbf{Inference.} At test time, the diffusion policy generates actions by running $T$
+denoising steps from Gaussian noise conditioned on the current state.
+
+\section{What the Guarantee Says}
+
+\textbf{Theorem (informal).} Under standard concentrability and function approximation
+assumptions, the BAC-PE Q-function $Q^\pi_k$ at iteration $k$ satisfies:
+\[
+\|Q^\pi_k - Q^{\pi^*}\|_\infty \;\leq\; \varepsilon_k + C\,\delta_\mu,
+\]
+where $\varepsilon_k \to 0$ as $k \to \infty$, $C$ is a problem constant, and
+$\delta_\mu = \sup_{s,a}(\pi(a|s)/\mu(a|s))$ is the concentrability coefficient.
+Actions well-covered by $\mu$ ($\delta_\mu$ small) converge to their true Q-values;
+error grows gracefully as actions move OOD.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{D4RL locomotion} (HalfCheetah, Hopper, Walker2D, Ant):
+    BAC-PE improves over Diffusion-QL by 3--7 normalized score points on
+    medium-expert datasets, the most challenging offline distribution.
+  \item \textbf{Antmaze} (medium-play, large-diverse): 8--12 success rate
+    improvement over CQL, which is excessively conservative on long-horizon tasks.
+  \item \textbf{Robosuite manipulation} (Lift, PickPlace): 15\% improvement
+    in task completion over TD3+BC, where multimodal action distributions are critical.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Advantage coefficient $\alpha$.} Setting $\alpha = 0$ (no correction) gives
+standard diffusion Q-learning; increasing $\alpha$ improves performance up to $\alpha
+\approx 1$ and then degrades, consistent with the theoretical bound: too large
+$\alpha$ over-weights behavior-policy information at the expense of the true Q-values.
+
+\textbf{Diffusion vs.\ Gaussian policy.} Replacing the diffusion policy with a
+Gaussian policy degrades performance by 5--8 points on manipulation tasks where
+action distributions are strongly multimodal, confirming that representation quality
+matters alongside the BAC-PE correction.
+
+\textbf{$Q^\mu$ estimation quality.} Using a poorly estimated $Q^\mu$ (trained on
+a small data subset) degrades performance, confirming that BAC-PE's advantage
+is contingent on reliable behavior-policy value estimation.
+
+\section*{Reference}
+
+Botao Dong, Longyang Huang, Ning Pang, Hongtian Chen.
+\textbf{Diffusion Policy with Behavioral Advantage Correction for Offline
+Reinforcement Learning}. arXiv:2608.02332, August 2026.
+\url{https://arxiv.org/abs/2608.02332}
+
+\end{document}

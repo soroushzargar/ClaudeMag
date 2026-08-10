@@ -1,0 +1,75 @@
+ML Papers List — 2026-08-10
+Generated for ClaudeMag
+
+1. Qwen-3D: A Generalist 3D Vision-Language Model for Spatial Understanding [arXiv 2026]
+   Authors: Lucy Lin, Ayush Jain, Yifan Liu, Katerina Fragkiadaki
+   Affiliation: Carnegie Mellon University
+   Venue/ID: arXiv:2608.02980 / ECCV 2026
+   URL: https://arxiv.org/abs/2608.02980
+   Summary: Qwen-3D is a generalist 3D vision-language model that performs attention directly
+   in 3D world space rather than over independent image frames. Given multi-view RGB observations,
+   depth maps, and camera poses, it maps all visual tokens into a shared 3D coordinate system
+   and applies geometry-aware attention through 3D Rotary Positional Embeddings. This enables
+   observations from multiple views and time steps to be fused into a persistent, world-aligned
+   representation. The model jointly supports language reasoning, 2D grounding, and 3D grounding
+   within a unified architecture, achieving state-of-the-art performance across a broad range of
+   vision-language and 3D understanding benchmarks, surpassing existing 3D LMMs and several large
+   proprietary 2D models. Accepted to ECCV 2026.
+
+2. Recurrent Residual Quantization: A Progressive Multi-Precision Representation for LLMs [arXiv 2026]
+   Authors: Yu Luo, Bo Dong, Wenhua Cheng, Haihao Shen
+   Affiliation: Not specified (NeurIPS 2026)
+   Venue/ID: arXiv:2608.04048 / NeurIPS 2026
+   URL: https://arxiv.org/abs/2608.04048
+   Summary: Recurrent Residual Quantization (RRQ) is a post-training quantization (PTQ) framework
+   that represents LLM weights as a low-bit quantized base together with a sequence of quantized
+   residual corrections, enabling multiple effective precisions (2-, 4-, 6-, 8-bit) from a single
+   checkpoint. Starting from a 2-bit PTQ model, RRQ progressively adds lightweight 2-bit residuals
+   via round-to-nearest to construct higher-precision representations. The method is calibration-free
+   and avoids joint multi-bit optimization. For Qwen3-8B, the full 2/4/6/8-bit package is constructed
+   in 1,293 seconds, 3.3× faster than MatGPTQ. Accepted to NeurIPS 2026.
+
+3. Diffusion Policy with Behavioral Advantage Correction for Offline Reinforcement Learning [arXiv 2026]
+   Authors: Botao Dong, Longyang Huang, Ning Pang, Hongtian Chen
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.02332
+   URL: https://arxiv.org/abs/2608.02332
+   Summary: Offline reinforcement learning suffers from distribution shift between the behavioral data
+   and the learned policy, causing erroneous Q-value estimation that misguides policy optimization.
+   This paper develops Behavioral Advantage Corrected Policy Evaluation (BAC-PE), which uses the
+   Q-function of the behavior policy to correct the learned policy's Q-function, mitigating both
+   pessimistic conservatism and overestimation bias. Diffusion models represent both the behavior
+   policy and the learned policy, performing distribution matching for accurate policy regularization.
+   The convergence of BAC-PE is analyzed theoretically, with an upper bound derived on the difference
+   between the learned Q-function and the true Q-function.
+
+4. Position: It's Time to Optimize LLMs for Self-Consistency [arXiv 2026]
+   Authors: Itamar Pres, Belinda Z. Li, Laura Ruis, Zifan Carl Guo, Keya Hu, Mehul Damani,
+            Isha Puri, Ekdeep Singh Lubana, Jacob Andreas
+   Affiliation: MIT CSAIL and other institutions
+   Venue/ID: arXiv:2608.05188
+   URL: https://arxiv.org/abs/2608.05188
+   Summary: This position paper argues that persistent LLM failures—sycophancy (overconditioning
+   on user framing), incomplete logical generalization, and confident-but-incorrect responses—arise
+   from a modeling assumption that treats behavior as evaluable independently on single input-output
+   pairs. The authors show that many failures can only be detected by reasoning about relationships
+   between a model's responses across inputs. They observe that a wide variety of existing techniques
+   designed to improve specific aspects of LM behavior (consistency across paraphrases, logical
+   entailment, calibration) can be understood as special cases of a common "consistency optimization"
+   procedure, and argue it is time to unify these under an explicit self-consistency objective during
+   training and evaluation.
+
+5. Mamba with Hierarchical Memory: Solving Representation Bottleneck in Long Sequence Modeling [arXiv 2026]
+   Authors: Qinwen Wang, Jieping Luo, Aoxiang Qin, Ruoyu Zhao, Jianxiong Tang,
+            Wei Zhang, Zhichao Lu, Luziwei Leng
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.02347
+   URL: https://arxiv.org/abs/2608.02347
+   Summary: Recurrent linear attention models like Mamba offer efficient linear-time sequence
+   modeling as an alternative to Transformers, but their fixed-capacity recurrent states create
+   a representation bottleneck that limits performance on long sequences. Drawing on hierarchical
+   human memory (sensory, working, and long-term memory), Hierarchical Memory Mamba (HMM)
+   integrates a lightweight working memory module that extracts slow paragraph-level semantics (PLS)
+   from the fast sensory memory in the backbone's hidden states. The PLS is subsequently compressed
+   into persistent long-term memory for task-relevant retrieval, allowing the model to maintain
+   relevant context across arbitrarily long sequences without expanding the fixed recurrent state.
