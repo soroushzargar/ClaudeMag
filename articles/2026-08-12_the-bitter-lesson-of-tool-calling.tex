@@ -1,0 +1,219 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  tool calling \textbullet{}
+  LLM agents \textbullet{}
+  programmatic invocation \textbullet{}
+  benchmark evaluation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  The Bitter Lesson of Tool Calling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Programmatic Python-Stub Invocation Outperforms JSON Tool Calling
+  in 11 of 14 Models Across a Generation-Spanning Benchmark}\par\vspace{6pt}
+
+{\small\textbf{By} Ishan Patel, Sahil Sen, Elias Lumer, Vamse Kumar Subbiah}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.06370 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The dominant paradigm for giving language models access to external tools---native JSON
+tool calling---was adopted by convention, not by systematic study. A new paper
+comparing Programmatic Tool Calling (PTC) against JSON tool calling across 14 models on
+BFCL~v4 finds that PTC matches or beats JSON in 11 of 14 models, with the GPT-5.6
+family gaining 10.6\% and PTC winning 13 of 14 models under parallel fan-out tasks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The JSON tool-calling format is the default for LLM agents,
+    but has never been systematically compared to programmatic alternatives at scale.
+  \item[Why it matters:] Tool calling underlies virtually every production LLM agent;
+    a 10\% accuracy gap from a format choice is a free performance gain.
+  \item[Method:] Evaluate PTC (typed Python stubs + code execution) vs.\ JSON across
+    14 models on BFCL~v4 under three tracks: standard, parallel fan-out, context rot.
+  \item[Result:] PTC wins in 11/14 standard, 13/14 parallel fan-out; JSON drops 2.3\%
+    under context rot while PTC holds steady.
+  \item[Evidence:] GPT-5.6 family gains +10.6\% with PTC; results replicated across
+    model families and generations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Every production LLM agent system must make a choice the field has rarely examined:
+how should tools be presented to the language model? The two dominant options are
+\textbf{native JSON tool calling}, where the model emits a structured JSON object
+naming the tool and providing argument values, and \textbf{Programmatic Tool Calling
+(PTC)}, where tools are defined as typed Python function stubs and the model writes
+executable Python code to invoke them.
+
+JSON tool calling became the standard through historical momentum---it was the
+format exposed by early commercial APIs, and the ecosystem solidified around it.
+This paper asks whether that default is actually optimal, and finds systematically
+that it is not. PTC exploits models' extensive code training, allows the model to
+reason about function signatures before committing to a call, and composes naturally
+with Python's type system for argument validation.
+
+\section{Why Existing Approaches Fall Short}
+
+JSON tool calling has two structural weaknesses that PTC avoids. First, the JSON
+schema for a tool is typically serialized as a string in the prompt, forcing the model
+to parse an ad~hoc format rather than the typed function signatures it encountered
+during code pretraining. Second, under parallel fan-out---where multiple tools must
+be invoked in a single turn---JSON requires emitting a list of JSON objects, a format
+the model sees rarely, whereas PTC naturally supports multi-function Python calls with
+loop and control-flow structures.
+
+Under \textbf{context rot}---the realistic condition where prior conversation turns
+accumulate in the context window, cluttering it with tool definitions and results from
+earlier steps---JSON performance degrades 2.3\% on average while PTC holds steady.
+The hypothesis is that Python code provides stronger structural anchoring than JSON
+blobs, making it more robust to noisy context.
+
+\section{Core Mechanism}
+
+In PTC, each tool is presented as a typed Python stub:
+
+\begin{verbatim}
+def search_web(query: str,
+               max_results: int = 5
+               ) -> list[dict]:
+    """Search the web for query."""
+    ...
+\end{verbatim}
+
+The model is instructed to write Python code invoking these stubs, with actual
+execution handled by the agent harness. Results are returned as Python objects and
+made available to the next step. This mirrors the model's training distribution for
+code: function calls, not JSON blobs.
+
+\section{Technical Formulation}
+
+Let $\mathcal{T} = \{t_1, \ldots, t_K\}$ be the set of available tools and
+$q$ the user query. Under JSON calling, the model produces:
+\[
+a_{\mathrm{JSON}} = \{``\text{name}'': t_k,\; ``\text{args}'': \{\ldots\}\}
+\]
+Under PTC, the model produces executable Python:
+\[
+a_{\mathrm{PTC}} = t_k(\text{arg}_1=v_1, \ldots, \text{arg}_m=v_m)
+\]
+Functional correctness is measured on BFCL~v4 by checking that $a$ matches the
+reference invocation: $\mathbb{1}[a = a^*]$. The aggregate metric is accuracy
+averaged over all items in each evaluation track.
+
+The context-rot track injects $n$ prior turns of tool-use history into the context
+before the test query:
+\[
+\Delta_{\mathrm{rot}} = \mathrm{Acc}(n=0) - \mathrm{Acc}(n=N_{\mathrm{rot}})
+\]
+with $\Delta_{\mathrm{rot}}^{\mathrm{PTC}} \approx 0$ and
+$\Delta_{\mathrm{rot}}^{\mathrm{JSON}} \approx -2.3\%$ on average.
+
+\section{Learning or Inference Procedure}
+
+\textbf{No training.} Both PTC and JSON are evaluated at inference time by changing
+only the prompt format and tool-presentation schema. No fine-tuning is performed.
+The study is therefore a pure format comparison, isolating the effect of tool
+presentation from any model-level differences.
+
+\textbf{BFCL v4} provides three tracks:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Standard:} single-turn, well-scoped tool calls
+  \item \textbf{Parallel fan-out:} multiple tools invoked in one turn
+  \item \textbf{Context rot:} accumulated prior turns in context
+\end{itemize}
+
+All 14 models are evaluated identically under both formats.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that PTC's advantage is
+consistent across 14 models spanning multiple families and training generations,
+making it unlikely to be an artifact of any single model's quirks. The parallel
+fan-out win rate of 13/14 is particularly robust. The paper does not claim PTC
+universally dominates, but establishes a strong empirical prior for practitioners
+choosing a tool-calling format.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Standard track:} PTC matches or beats JSON in 11 of 14 models.
+  \item \textbf{Parallel fan-out:} PTC wins in 13 of 14 models---the largest margin.
+  \item \textbf{Context rot:} JSON accuracy drops 2.3\% on average;
+    PTC accuracy is stable.
+  \item \textbf{GPT-5.6 family:} +10.6\% with PTC over JSON baseline---the largest
+    single-model gain observed.
+  \item \textbf{Failure cases:} PTC loses in 3/14 models on the standard track;
+    all three are models with weaker code-generation training.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Why does PTC help on parallel fan-out?}
+PTC naturally expresses multiple calls as sequential Python statements or a list,
+both of which appear extensively in code pretraining. JSON parallel calls require
+a list of JSON objects, a format the model sees infrequently.
+
+\textbf{Why is PTC robust to context rot?}
+Python code has clear syntactic structure (indentation, keywords, type annotations)
+that provides stronger anchoring than JSON when the context window is cluttered.
+
+\textbf{Why does PTC fail in 3 models?}
+The three models where JSON wins have weaker code-generation capability, suggesting
+the PTC advantage is mediated by code training. For code-weak models, the structured
+JSON prompt may be clearer than free Python code.
+
+\textbf{Practical takeaway:}
+For any model with strong code-generation training---which describes the majority
+of frontier LLMs in 2026---switching from JSON to PTC is a zero-cost accuracy gain.
+
+\section*{Reference}
+
+Ishan Patel, Sahil Sen, Elias Lumer, Vamse Kumar Subbiah.
+\textbf{The Bitter Lesson of Tool Calling}.
+arXiv:2608.06370, August 2026.
+\url{https://arxiv.org/abs/2608.06370}
+
+\end{document}

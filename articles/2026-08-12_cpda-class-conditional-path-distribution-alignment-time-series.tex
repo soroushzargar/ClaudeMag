@@ -1,0 +1,237 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  domain adaptation \textbullet{}
+  time series \textbullet{}
+  path signatures \textbullet{}
+  distribution alignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CPDA: Class-Conditional Path Distribution
+  Alignment for Unsupervised Time-Series
+  Domain Adaptation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Composite Signature-Spectral Kernel Beats 30 Baselines
+  on 13 Time-Series DA Benchmarks Without Adversarial Training}\par\vspace{6pt}
+
+{\small\textbf{By} Felix Ott, Christopher Mutschler}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.09193 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Most unsupervised time-series domain adaptation (UTS-DA) methods align only global
+marginal feature distributions, discarding the class structure that defines decision
+boundaries. CPDA instead aligns class-conditional latent \emph{path distributions}
+via a novel composite signature-spectral kernel that jointly captures temporal
+trajectory structure, frequency content, and semantic features. Evaluated on
+13 benchmarks against 30 baselines, CPDA achieves consistent state-of-the-art
+results with CNN, ResNet18, and TCN backbones---without adversarial training.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] UTS-DA distribution shifts arise from different users, sensors,
+    or temporal dynamics; prior methods align only global marginals, losing class
+    structure.
+  \item[Why it matters:] Labeling data for every new deployment context is
+    infeasible; UTS-DA enables transfer without target labels in IoT, health,
+    and manufacturing.
+  \item[Method:] Class-conditional alignment via a composite kernel combining
+    path signatures, spectral features, semantic pooling, and low-rank dynamics.
+  \item[Result:] State-of-the-art on 13 benchmarks against 30 baselines with
+    3 backbone architectures.
+  \item[Evidence:] Non-adversarial; stable training across all experimental
+    configurations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Time-series classifiers deployed in the real world face a pervasive problem:
+the distribution of training data differs from the distribution at deployment.
+A human activity recognition model trained on data from a 25-year-old male with
+one wearable device may perform poorly on a 60-year-old female with a different
+device. A machine fault-detection system trained on one production line may fail
+on a nominally identical line with slightly different resonance characteristics.
+
+Unsupervised time-series domain adaptation addresses this by transferring knowledge
+from a labeled \textbf{source domain} to an unlabeled \textbf{target domain}.
+The key insight of CPDA is that temporal data has rich structure---\textbf{path
+trajectories} in feature space, \textbf{frequency spectra}, and \textbf{class-specific
+distributional signatures}---that global marginal alignment discards. CPDA preserves
+this structure through a principled kernel design.
+
+\section{Why Existing Approaches Fall Short}
+
+The dominant paradigm in UTS-DA follows the deep domain adaptation tradition from
+computer vision: minimize a distributional discrepancy (e.g., MMD) or train a domain
+adversary (e.g., DANN) on marginal feature distributions. Both approaches have
+structural limitations for time-series data.
+
+\textbf{Global marginal alignment} ignores class structure. If source class~A
+aligns with target class~B due to superficial distributional similarity, a classifier
+that looked correct in source space will fail in target space. This \textbf{negative
+transfer} effect is well-known but remains underaddressed in UTS-DA.
+
+\textbf{Spectral and temporal structure} is discarded when features are pooled
+before alignment. A model that misses the difference between a 10~Hz and a 15~Hz
+vibration pattern may align the two classes' pooled statistics while failing on
+the actual classification problem.
+
+\textbf{Adversarial training} is unstable, sensitive to hyperparameters, and prone
+to mode collapse, making it difficult to deploy reliably across diverse benchmark
+settings.
+
+\section{Core Mechanism}
+
+CPDA operates in the encoder's latent space, treating each sample as a
+\textbf{path}---a sequence of latent feature vectors over time. It aligns
+class-conditional path distributions via a composite kernel $k_{\mathrm{CPDA}}$
+that combines four components:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Semantic pooling kernel:} Classic RBF kernel on time-averaged
+    latent features; captures overall distributional similarity.
+  \item \textbf{Path-signature kernel:} Measures similarity of ordered polynomial
+    statistics of the time-series trajectory---captures temporal dynamics.
+  \item \textbf{Spectral kernel:} Fourier-based kernel on the frequency-domain
+    representation of the latent path---captures periodic structure.
+  \item \textbf{Low-rank path-signature kernel:} Compressed, dominant modes of
+    temporal variation via truncated signature expansion---reduces noise sensitivity.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+Let $\phi_\theta: \mathcal{X} \to \mathbb{R}^{T \times d}$ be the encoder mapping
+a time-series $x$ to a $T$-step latent path. Define the class-conditional source
+and target distributions:
+\[
+P^y_S = \{\phi_\theta(x) \mid x \in \mathcal{D}_S, y_x = y\}, \quad
+P^y_T = \{\phi_\theta(x) \mid x \in \mathcal{D}_T, \hat{y}_x = y\}
+\]
+where $\hat{y}_x$ are pseudo-labels for target samples.
+
+The CPDA discrepancy is:
+\[
+\mathcal{D}_{\mathrm{CPDA}} = \sum_{y=1}^{C} \mathrm{MMD}^2_{k_{\mathrm{CPDA}}}(P^y_S, P^y_T)
+\]
+with:
+\[
+k_{\mathrm{CPDA}}(\gamma, \gamma') =
+  \alpha_1 k_{\mathrm{sem}}(\gamma, \gamma') +
+  \alpha_2 k_{\mathrm{sig}}(\gamma, \gamma') +
+  \alpha_3 k_{\mathrm{spec}}(\gamma, \gamma') +
+  \alpha_4 k_{\mathrm{lr}}(\gamma, \gamma')
+\]
+where $\gamma, \gamma'$ are latent paths and $\alpha_i$ are learned mixture weights.
+
+The training objective is:
+\[
+\mathcal{L} = \mathcal{L}_{\mathrm{CE}}(\mathcal{D}_S) +
+              \lambda\,\mathcal{D}_{\mathrm{CPDA}}(\mathcal{D}_S, \mathcal{D}_T)
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Pseudo-label generation:} Target pseudo-labels are produced by the
+source-trained classifier and updated iteratively as the encoder improves.
+High-confidence pseudo-labels (above a threshold) are used for alignment.
+
+\textbf{Optimization:} Stochastic gradient descent on $\mathcal{L}$; no adversarial
+loop, no discriminator. The MMD-based objective is smooth and differentiable.
+
+\textbf{Inference:} Standard forward pass through the adapted encoder and classifier;
+no test-time computation overhead relative to the base model.
+
+\section{What the Guarantee Says}
+
+Under standard domain adaptation assumptions (covariate shift, shared label
+conditional), minimizing class-conditional MMD drives the target encoder toward
+the source class-conditional distributions, providing a theoretical basis for
+classifier transfer. The path-signature kernel is characteristic on path space
+under mild regularity conditions, guaranteeing that $\mathcal{D}_{\mathrm{CPDA}} = 0$
+implies equality of path distributions. In practice, finite-sample approximation
+introduces error, but the rich kernel reduces the approximation gap relative
+to simpler kernels.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{13 benchmarks:} Including activity recognition (HAR, UCIHAR,
+    WISDM), fault detection (CWRU, PU), and physiological monitoring (EEG, ECG).
+  \item \textbf{30 baselines:} Spanning discrepancy-based (MMD, CORAL),
+    adversarial (DANN, CDAN, AdvSKM), and pseudo-labeling methods (SHOT, SDAT).
+  \item \textbf{3 backbones:} CNN, ResNet18, TCN---CPDA achieves state-of-the-art
+    with all three.
+  \item \textbf{Margin:} CPDA outperforms the second-best method on average
+    across all 13 benchmarks by a consistent margin with all backbone choices.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Kernel component ablation.}
+Removing any single component ($k_{\mathrm{sig}}$, $k_{\mathrm{spec}}$,
+$k_{\mathrm{lr}}$, $k_{\mathrm{sem}}$) degrades performance on most benchmarks,
+confirming that each component captures complementary distributional information.
+The path-signature kernel has the largest marginal contribution on benchmarks
+with strong temporal dynamics (fault detection); the spectral kernel dominates
+on benchmarks with periodic signals (EEG, ECG).
+
+\textbf{Global vs.\ class-conditional alignment.}
+Replacing class-conditional alignment with global marginal MMD using
+$k_{\mathrm{CPDA}}$ degrades performance substantially on benchmarks with
+closely adjacent class clusters, confirming the negative-transfer hypothesis.
+
+\textbf{Non-adversarial vs.\ adversarial.}
+CPDA trains stably across all 13 benchmarks; GAN-based methods (DANN, CDAN)
+show higher variance and failed convergence on 3 of 13 benchmarks.
+
+\section*{Reference}
+
+Felix Ott, Christopher Mutschler.
+\textbf{CPDA: Class-Conditional Path Distribution Alignment for
+Unsupervised Time-Series Domain Adaptation}.
+arXiv:2608.09193, August 2026.
+\url{https://arxiv.org/abs/2608.09193}
+
+\end{document}

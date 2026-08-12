@@ -1,0 +1,231 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  LLM safety \textbullet{}
+  multilingual evaluation \textbullet{}
+  Indic languages \textbullet{}
+  cultural bias}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SurakshaEval: An Indic Safety Benchmark
+  for Multilingual LLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Human-Written Safety Prompts in Ten Indian Languages
+  Reveal Systematic Over-Refusal and Missed Implicit Bias
+  in Frontier Multilingual Models}\par\vspace{6pt}
+
+{\small\textbf{By} Debopriyo Banerjee, Kapil Rajesh Kavitha,
+  Angana Borah, Xudong Han, Yuxia Wang, Parameswari Krishnamurthy,
+  Utkarsh Agarwal, Atharva Kulkarni, Swaran Lata, Ayush Munot,
+  Dhruv Sahnan, Aaryamonvikram Singh, Preslav Nakov, Monojit Choudhury}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.07862 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Existing LLM safety benchmarks overwhelmingly target English and Western cultural
+contexts, leaving safety behavior for non-Western languages poorly characterized.
+SurakshaEval fills this gap with human-written safety prompts in ten major Indian
+languages plus English, revealing that frontier multilingual LLMs systematically
+over-refuse harmless queries in some languages while failing to detect culturally
+embedded harmful content in others.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLM safety evaluation is English-centric; safety behavior in
+    Indian languages with over one billion speakers is unmeasured.
+  \item[Why it matters:] Deployment gaps in non-English safety lead to either
+    over-censorship or undetected harm at massive scale.
+  \item[Method:] Human-written prompts in 10 Indian languages + English, combining
+    generic and culturally-specific items; evaluated on frontier multilingual LLMs.
+  \item[Result:] Three systematic failure modes identified: over-refusal,
+    missed implicit bias, and insufficient cultural contextual awareness.
+  \item[Evidence:] Evaluated across leading multilingual LLMs; failures are
+    consistent across model families.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+India has 22 constitutionally recognized languages and a population exceeding 1.4
+billion, with rapidly growing access to LLM-based assistants through multilingual
+interfaces. Yet the safety research community has evaluated LLMs almost exclusively
+on English content and Western cultural norms. This creates a structural gap: models
+deployed in India may be over-refusing benign requests in Hindi, Tamil, or Bengali
+because safety filters trained on English toxicity patterns generalize poorly
+to structurally different languages---while simultaneously failing to flag genuinely
+harmful content encoded in culturally specific references that the models lack
+context to recognize.
+
+SurakshaEval provides the first systematic safety evaluation infrastructure for this
+underserved population, covering ten languages that together account for hundreds of
+millions of daily LLM users.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard safety benchmarks (e.g., HarmBench, SafetyBench) are designed around
+English language harms: explicit violence, CSAM, bioweapons information, and so on.
+These categories translate imperfectly across cultural contexts for two reasons.
+
+First, many harmful categories are culturally encoded. Communal incitement in India
+exploits specific historical tensions between religious and caste communities;
+recognizing such content requires cultural knowledge that English-trained safety
+classifiers do not have. Second, safety filters trained on English data often
+\textbf{over-generalize} to other languages, flagging content as unsafe because
+of surface-level patterns (vocabulary, script, topic) rather than actual harm.
+
+No prior benchmark simultaneously addresses both failure modes across the Indian
+language family, which spans Indo-Aryan and Dravidian language groups with
+fundamentally different grammatical structures.
+
+\section{Core Mechanism}
+
+SurakshaEval is constructed in two tiers:
+
+\textbf{Generic prompts:} Safety scenarios applicable across India and comparable
+to standard English safety benchmarks:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Explicit violence and self-harm
+  \item Misinformation and health misinformation
+  \item Illegal activities
+  \item Hate speech targeting national/ethnic identity
+\end{itemize}
+
+\textbf{Culturally specific prompts:} Scenarios that require knowledge of Indian
+sociocultural context to evaluate correctly:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Communal tensions and religious incitement
+  \item Caste-based discrimination and slurs
+  \item Regional political incitement
+  \item Language-community tensions
+\end{itemize}
+
+All prompts are written by \textbf{native speakers} of the target language with
+subject-matter expertise in the cultural safety context.
+
+\section{Technical Formulation}
+
+Let $L$ be a language from the set of 11 languages (10 Indic + English),
+$P$ a prompt, $M$ a multilingual LLM, and $R = M(P)$ the model's response.
+Safety evaluation assigns a label $y \in \{0, 1\}$ (safe/unsafe) to $R$.
+
+Two metrics are computed per language $L$:
+
+\textbf{Over-refusal rate:}
+\[
+\mathrm{ORR}(M, L) = \frac{\#\{P \in \mathcal{P}_{\mathrm{safe}}^L : y(M(P)) = 1\}}
+                          {|\mathcal{P}_{\mathrm{safe}}^L|}
+\]
+i.e., the fraction of safe prompts incorrectly refused.
+
+\textbf{Harm detection rate:}
+\[
+\mathrm{HDR}(M, L) = \frac{\#\{P \in \mathcal{P}_{\mathrm{unsafe}}^L : y(M(P)) = 1\}}
+                          {|\mathcal{P}_{\mathrm{unsafe}}^L|}
+\]
+i.e., the fraction of harmful prompts correctly flagged.
+
+An ideal model maximizes $\mathrm{HDR}$ and minimizes $\mathrm{ORR}$ across all $L$.
+
+\section{Learning or Inference Procedure}
+
+SurakshaEval is an \textbf{evaluation benchmark}; no training is performed. Models
+are evaluated in zero-shot and few-shot settings with standardized prompts. Responses
+are labeled by human annotators, with inter-annotator agreement measured for each
+language. The benchmark is designed for repeated evaluation as new models are released.
+
+\section{What the Guarantee Says}
+
+The benchmark provides two guarantees by construction: (1) all prompts are human-written
+by native speakers, ensuring linguistic authenticity; (2) the two-tier structure
+(generic + culturally specific) ensures coverage of both universal and India-specific
+harm categories. No claim is made about completeness across all possible Indian
+language harms; the authors note that the benchmark will require ongoing expansion
+as new harm categories emerge.
+
+\section{Experimental Findings}
+
+Three systematic failure modes are observed across all tested LLMs:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Over-refusal:} Models refuse harmless queries in Indian languages
+    at higher rates than equivalent English queries. The rate varies by language
+    and correlates with training data volume for that language.
+
+  \item \textbf{Missed implicit bias:} Models fail to detect harmful content
+    in culturally specific prompts---communal incitement, caste-based slurs,
+    regional political hate speech---at significantly higher rates than for
+    equivalent English harms.
+
+  \item \textbf{Insufficient contextual awareness:} Even when models detect a
+    sensitive topic, responses often apply Western-centric framing that is
+    inappropriate for the Indian cultural context, leading to responses that
+    are technically safe but practically harmful or unhelpful.
+\end{enumerate}
+
+\section{Ablations and Interpretation}
+
+\textbf{Generic vs.\ culturally specific items.}
+Harm detection rates are substantially higher for generic items than for
+culturally specific items across all models and languages, confirming that
+English-centric safety training transfers well to universal harm categories
+but poorly to culture-specific ones.
+
+\textbf{Script vs.\ language effects.}
+Languages written in non-Latin scripts (Devanagari, Tamil, Bengali, etc.)
+show higher over-refusal rates than English, suggesting safety filters may
+be partially triggered by script-level features rather than content.
+
+\textbf{Model size.}
+Larger models show lower over-refusal rates but similar harm-detection gaps
+for culturally specific content, indicating that scale alone does not resolve
+the cultural knowledge deficit.
+
+\section*{Reference}
+
+Debopriyo Banerjee et al.
+\textbf{SurakshaEval: An Indic Safety Benchmark for Multilingual LLMs}.
+arXiv:2608.07862, August 2026.
+\url{https://arxiv.org/abs/2608.07862}
+
+\end{document}

@@ -1,0 +1,80 @@
+ML Papers List — 2026-08-12
+Generated for ClaudeMag
+
+1. The Bitter Lesson of Tool Calling [arXiv 2026]
+   Authors: Ishan Patel, Sahil Sen, Elias Lumer, Vamse Kumar Subbiah
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.06370
+   URL: https://arxiv.org/abs/2608.06370
+   Summary: This paper conducts the first generation-spanning, systematic comparison of
+   Programmatic Tool Calling (PTC) — where tools are exposed as typed Python stubs
+   invoked through code — against native JSON tool calling across 14 language models on
+   the BFCL v4 benchmark. PTC matches or exceeds JSON tool calling in 11 of 14 models,
+   with the GPT-5.6 family achieving a 10.6% improvement over the JSON baseline. Under
+   parallel fan-out PTC wins in 13 of 14 models, and under context rot (where context
+   windows become cluttered) PTC holds steady while the JSON baseline drops 2.3% on
+   average. The paper argues that tool calling is a design choice and that the default
+   JSON paradigm is quietly costing accuracy across the field.
+
+2. Learning When to Trust via Selective Context Preference Optimization [arXiv 2026]
+   Authors: Xian Sun, Wei Chow, Yingshuo Wang, Junhao Liu, Wei Gao, Qing Wu, Lingdong Kong
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.06377
+   URL: https://arxiv.org/abs/2608.06377
+   Summary: Language models increasingly condition their answers on external signals, but
+   a single misleading context item can flip a correct answer to wrong (sycophancy), while
+   training models to resist context can make them ignore helpful signals. This paper
+   introduces MIST, a human-annotated benchmark rendering each reasoning item under four
+   matched conditions (clean, misleading, correct-context, irrelevant-context), and the
+   SC2W metric counting how often a misleading signal flips a clean-correct answer to
+   wrong. The proposed SCOPE method mines clean-correct / misleading-wrong failures and
+   applies DPO over balanced preference pairs across all four conditions. SCOPE
+   significantly reduces SC2W while preserving utilization of helpful context.
+
+3. Spatiotemporal Agility: Time-Constrained Reinforcement Learning for Vision-Guided Dynamic Quadrupedal Interception [arXiv 2026]
+   Authors: Yidong Zhu, Zibo Dai, Tongning Zhang, Leixin Chang, Hua Chen
+   Affiliation: Zhejiang University; LimX Dynamics Technology Co., Ltd.
+   Venue/ID: arXiv:2608.06907
+   URL: https://arxiv.org/abs/2608.06907
+   Summary: Most quadruped locomotion policies rely on velocity-tracking commands and
+   struggle to reach precise targets within strict temporal constraints, limiting their
+   agility in dynamic interaction tasks. This paper introduces a ball-catching benchmark
+   for legged robots and proposes an integrated framework combining a vision module that
+   predicts landing point and time with a position-and-time conditioned RL locomotion
+   policy. Rather than decomposing the task into a separate high-level planner and
+   velocity-tracking low-level controller, the policy takes direct temporal targets and
+   position goals as input, learning to coordinate body movement and timing simultaneously.
+
+4. SurakshaEval: An Indic Safety Benchmark for Multilingual LLMs [arXiv 2026]
+   Authors: Debopriyo Banerjee, Kapil Rajesh Kavitha, Angana Borah, Xudong Han, Yuxia Wang,
+            Parameswari Krishnamurthy, Utkarsh Agarwal, Atharva Kulkarni, Swaran Lata,
+            Ayush Munot, Dhruv Sahnan, Aaryamonvikram Singh, Preslav Nakov, Monojit Choudhury
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.07862
+   URL: https://arxiv.org/abs/2608.07862
+   Summary: Existing LLM safety benchmarks predominantly target English and Western contexts,
+   missing the linguistic diversity and localized safety risks of non-Western languages.
+   SurakshaEval is a novel safety benchmark composed of human-written prompts spanning
+   real-world scenarios in ten major Indian languages — Assamese, Bengali, Gujarati, Hindi,
+   Kannada, Malayalam, Marathi, Punjabi, Tamil, and Telugu — plus English. It includes both
+   generic prompts common across India and region- and language-specific prompts that capture
+   localized sociocultural sensitivities. Experiments establish safety baseline performance
+   for leading multilingual LLMs and identify recurring failure modes: over-refusal, missed
+   detection of implicit bias, and insufficient contextual awareness in regionally sensitive
+   settings.
+
+5. CPDA: Class-Conditional Path Distribution Alignment for Unsupervised Time-Series Domain Adaptation [arXiv 2026]
+   Authors: Felix Ott, Christopher Mutschler
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.09193
+   URL: https://arxiv.org/abs/2608.09193
+   Summary: Unsupervised time-series domain adaptation (UTS-DA) must bridge distribution
+   shifts induced by different users, sensors, or temporal dynamics without target labels.
+   Prior methods align only global feature marginals, discarding class structure during
+   transfer. CPDA is a non-adversarial, discrepancy-based framework that aligns source and
+   target class-conditional latent path distributions using a composite signature-spectral
+   kernel, which jointly captures pooled semantic features, temporal path structure,
+   frequency-domain information, and low-rank path-signature dynamics. Source labels and
+   target soft pseudo-labels enable class-preserving alignment. Extensive experiments with
+   CNN, ResNet18, and TCN backbones on 13 time-series DA benchmarks against 30 discrepancy,
+   adversarial, and pseudo-labeling baselines demonstrate consistent state-of-the-art results.

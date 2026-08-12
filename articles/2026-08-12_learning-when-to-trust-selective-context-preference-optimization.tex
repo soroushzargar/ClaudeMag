@@ -1,0 +1,223 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  context reliability \textbullet{}
+  sycophancy \textbullet{}
+  direct preference optimization \textbullet{}
+  LLM alignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Learning When to Trust via Selective Context
+  Preference Optimization}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  MIST Benchmark and SCOPE Training Teach Language Models
+  to Resist Misleading Context Without Ignoring Helpful Signals}\par\vspace{6pt}
+
+{\small\textbf{By} Xian Sun, Wei Chow, Yingshuo Wang, Junhao Liu,
+  Wei Gao, Qing Wu, Lingdong Kong}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.06377 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A new paper introduces MIST, a benchmark that renders each reasoning item under
+four matched context conditions, and SCOPE, a DPO-based training method that teaches
+models to distinguish misleading from helpful context. SCOPE significantly reduces
+the fraction of correct answers flipped wrong by misleading signals while preserving
+the model's benefit from genuinely useful context.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLMs are sycophantic toward misleading context yet training to
+    resist context can make them ignore helpful signals.
+  \item[Why it matters:] RAG, web search, and chat history all deliver context
+    that may be wrong; models that cannot discriminate are unsafe to deploy.
+  \item[Method:] MIST benchmark (4 matched conditions per item) + SC2W metric +
+    SCOPE (DPO over balanced preference pairs across all four conditions).
+  \item[Result:] SCOPE significantly reduces SC2W while preserving correct-context
+    utilization; balanced training is crucial.
+  \item[Evidence:] Ablation confirms that optimizing only on misleading pairs
+    degrades helpful-context performance.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Retrieval-augmented generation, web-search-augmented chat, and memory-augmented
+agents all place LLMs in an environment where external context is omnipresent.
+When that context is accurate, it should help the model answer correctly.
+When it is misleading---outdated retrieval, user misconceptions, adversarial
+injections---the model should recognize the discrepancy and trust its own
+knowledge over the flawed signal.
+
+Current LLMs fail in both directions: they are sycophantic toward user-provided
+context (a misleading signal flips a correct answer wrong), yet attempts to harden
+models against misleading context often produce models that ignore helpful context
+universally. This paper frames the problem as a \textbf{discrimination task}: the
+model must learn to distinguish the quality of context, not merely resist all of it.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior robustness work has largely attacked misleading context as a single phenomenon,
+training on adversarial examples where context is always wrong. This produces models
+with one failure mode traded for another: high resistance to misleading context, but
+equally high resistance to correct context, because the model has learned
+``context $\to$ ignore,'' not ``misleading context $\to$ ignore.''
+
+Evaluating this nuance requires a benchmark that explicitly presents both misleading
+and correct context for the same item. Without matched conditions, it is impossible
+to separate context-resistance from context-utilization, and prior evaluations have
+conflated the two.
+
+\section{Core Mechanism}
+
+\textbf{MIST Benchmark.}
+Each item in MIST appears under four matched conditions:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Clean:} question alone, no external context
+  \item \textbf{Misleading:} context that nudges toward the wrong answer
+  \item \textbf{Correct context:} context that supports the right answer
+  \item \textbf{Irrelevant:} context unrelated to the question
+\end{enumerate}
+
+The \textbf{SC2W metric} (Susceptibility to Context-induced Wrong answers) counts
+how often condition~2 flips a clean-correct answer to wrong:
+\[
+\mathrm{SC2W} = \frac{\#\{\text{clean-correct} \wedge \text{misleading-wrong}\}}{
+  \#\{\text{clean-correct}\}}
+\]
+
+\textbf{SCOPE Training.}
+SCOPE (Selective Context Preference Optimization) applies DPO over preference pairs
+mined from MIST failures. The preferred completion is the model's clean-correct
+answer; the dispreferred completion is the misleading-flipped wrong answer.
+Crucially, pairs are sampled \textbf{equally across all four conditions},
+not only misleading ones.
+
+\section{Technical Formulation}
+
+Let $x$ be a question and $c$ a context drawn from condition set
+$\mathcal{C} = \{\emptyset, \text{mis}, \text{cor}, \text{irr}\}$.
+The DPO objective over preference pairs $(y_w, y_l)$ is:
+
+\[
+\mathcal{L}_{\mathrm{DPO}} = -\mathbb{E}_{(x,c,y_w,y_l) \sim \mathcal{D}}\!\left[
+  \log\sigma\!\left(\beta\log\frac{\pi_\theta(y_w \mid x,c)}{\pi_{\mathrm{ref}}(y_w \mid x,c)}
+  - \beta\log\frac{\pi_\theta(y_l \mid x,c)}{\pi_{\mathrm{ref}}(y_l \mid x,c)}\right)\right]
+\]
+
+where $\mathcal{D}$ is the balanced dataset spanning all four conditions with equal weight.
+The SC2W constraint requires that:
+\[
+\mathbb{P}\bigl[y^* \mid x, c_{\mathrm{mis}}\bigr] >
+\mathbb{P}\bigl[y^* \mid x, c_{\mathrm{mis}}\bigr]\big|_{\pi_{\mathrm{ref}}}
+\]
+while preserving:
+\[
+\mathbb{P}\bigl[y^* \mid x, c_{\mathrm{cor}}\bigr] \approx
+\mathbb{P}\bigl[y^* \mid x, c_{\mathrm{cor}}\bigr]\big|_{\pi_{\mathrm{ref}}}
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Pair mining:} Identify items where the base model is correct in the clean
+condition but incorrect in the misleading condition. Each such item yields one DPO
+preference pair.
+
+\textbf{Balanced sampling:} Sample equal numbers of preference pairs from each of
+the four conditions. This ensures the model cannot learn a context-agnostic
+``ignore all signals'' policy.
+
+\textbf{DPO fine-tuning:} Standard DPO applied to the preference dataset; no
+modifications to the DPO algorithm are required.
+
+\textbf{Inference:} No change. The trained model processes queries with external
+context in the standard RAG pipeline.
+
+\section{What the Guarantee Says}
+
+No formal guarantee. The balanced training design provides an intuitive argument:
+because pairs from the correct-context condition reward trusting helpful context
+while pairs from the misleading condition reward resisting bad context, the model
+must learn the discrimination rather than a blanket policy. The empirical ablation
+confirms this: training on misleading-only pairs degrades correct-context
+utilization, while balanced training does not.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{SC2W reduction:} SCOPE significantly reduces the fraction of
+    correct answers flipped wrong by misleading context.
+  \item \textbf{Correct-context utilization:} Preserved after SCOPE training;
+    the model continues to benefit from genuine context.
+  \item \textbf{Irrelevant-context:} Model correctly learns to ignore
+    irrelevant signals.
+  \item \textbf{Clean accuracy:} Maintained; SCOPE does not degrade the model's
+    baseline reasoning.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Misleading-only DPO vs.\ SCOPE.}
+Training DPO only on misleading-context pairs achieves strong SC2W reduction
+but degrades correct-context utilization by a significant margin, confirming
+the ``context-ignore'' failure mode. SCOPE's balanced sampling resolves this.
+
+\textbf{Effect of condition balance.}
+Increasing the proportion of misleading pairs toward 100\% monotonically
+trades SC2W improvement for correct-context degradation. The balanced
+50/50/50/50 split across conditions achieves the best combined performance.
+
+\textbf{MIST item difficulty.}
+High-SC2W items tend to involve superficially plausible misleading contexts
+(wrong dates, plausible-but-incorrect numbers). These are the cases where
+the model most needs the discrimination capability SCOPE provides.
+
+\section*{Reference}
+
+Xian Sun, Wei Chow, Yingshuo Wang, Junhao Liu, Wei Gao, Qing Wu, Lingdong Kong.
+\textbf{Learning When to Trust via Selective Context Preference Optimization}.
+arXiv:2608.06377, August 2026.
+\url{https://arxiv.org/abs/2608.06377}
+
+\end{document}

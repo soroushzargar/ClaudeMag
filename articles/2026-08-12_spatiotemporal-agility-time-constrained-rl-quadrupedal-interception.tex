@@ -1,0 +1,222 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  legged robotics \textbullet{}
+  reinforcement learning \textbullet{}
+  spatiotemporal control \textbullet{}
+  dynamic interception}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Spatiotemporal Agility: Time-Constrained Reinforcement
+  Learning for Vision-Guided Dynamic Quadrupedal
+  Interception}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Zhejiang University Team Replaces Velocity-Tracking Policies
+  with Direct Temporal-Spatial Conditioning to Enable Quadruped
+  Ball-Catching Under Strict Deadlines}\par\vspace{6pt}
+
+{\small\textbf{By} Yidong Zhu, Zibo Dai, Tongning Zhang, Leixin Chang, Hua Chen
+  (Zhejiang University; LimX Dynamics)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.06907 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A quadruped robot catching a thrown ball must predict where and when the ball lands
+from visual observations, then reach that position before the deadline. A new paper
+from Zhejiang University and LimX Dynamics argues that the standard velocity-tracking
+locomotion paradigm is fundamentally mismatched to this class of tasks, and proposes
+a unified framework that conditions an RL policy directly on spatial targets and
+temporal deadlines rather than velocity commands.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Velocity-tracking quadruped policies cannot meet strict temporal
+    deadlines for reaching precise positions in dynamic interaction tasks.
+  \item[Why it matters:] Dynamic interaction (catching, intercepting, dodging) is the
+    next frontier for legged robot agility; no existing policy architecture handles it.
+  \item[Method:] Vision module predicts landing point and time; RL policy is conditioned
+    on (position, deadline) rather than velocity commands.
+  \item[Result:] Ball-catching benchmark significantly outperforms velocity-tracking
+    decomposition baselines.
+  \item[Evidence:] Evaluated on a standardized ball-catching task with randomized
+    trajectory and timing.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Legged robots have progressed from laboratory curiosities to practical platforms
+over the past decade, largely driven by RL-based locomotion policies that excel at
+navigating diverse terrain. But the benchmark tasks that drove this progress---walking
+on uneven ground, stair climbing, recovering from pushes---share a common structure:
+they reward stable navigation with no hard temporal deadline.
+
+Dynamic interaction tasks are qualitatively different. A robot catching a ball,
+intercepting a rolling object, or dodging a thrown projectile must solve a joint
+\textbf{spatiotemporal problem}: arrive at a specific location by a specific time.
+Velocity-tracking policies, which accept a desired velocity vector and try to track
+it, have no native representation of temporal deadlines. Even if they could in
+principle navigate to any position, they cannot guarantee arrival by a deadline,
+making them unsuitable for dynamic interception.
+
+\section{Why Existing Approaches Fall Short}
+
+The standard decomposition for legged robot tasks is:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{High-level planner:} computes a path and velocity profile
+  \item \textbf{Low-level controller:} tracks the desired velocity command
+\end{itemize}
+
+This decomposition fails for time-constrained interception for two reasons.
+First, velocity-tracking introduces an abstraction layer that discards the
+temporal deadline: the planner must guess a velocity profile that achieves
+arrival by the deadline, but the tracking error of the low-level controller
+means the actual arrival time is unpredictable.
+
+Second, the two-level decomposition requires the planner to predict the
+controller's behavior, introducing compounding errors. In practice, systems
+that work well for slow, navigational tasks become brittle when deadlines
+are tight and the target is moving.
+
+\section{Core Mechanism}
+
+\textbf{Vision Module.}
+A neural vision module processes monocular camera images to predict:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item $\hat{\mathbf{p}} \in \mathbb{R}^3$: predicted landing position (world frame)
+  \item $\hat{\tau} \in \mathbb{R}_{>0}$: predicted time-to-landing (seconds)
+\end{itemize}
+The module is trained on ball-trajectory data with supervised regression.
+
+\textbf{Time-Conditioned RL Policy.}
+Rather than consuming velocity commands, the locomotion policy is conditioned on the
+pair $(\hat{\mathbf{p}}, \hat{\tau})$. This directly expresses the spatiotemporal
+constraint: reach position $\hat{\mathbf{p}}$ within $\hat{\tau}$ seconds. The
+policy must learn internally to compute appropriate gaits, step frequencies, and
+postures to meet both the spatial and temporal objectives simultaneously.
+
+\section{Technical Formulation}
+
+Let the robot state at time $t$ be $s_t$ and the action (joint torques or velocity
+targets) be $a_t$. The policy $\pi_\theta(a_t \mid s_t, \hat{\mathbf{p}}, \hat{\tau} - t)$
+is conditioned on the remaining time budget $\hat{\tau} - t$, which decreases with
+each timestep, providing an implicit urgency signal.
+
+The reward is:
+\[
+r_t = \lambda_{\mathrm{pos}}\,r_{\mathrm{pos}}(s_T, \hat{\mathbf{p}})
+    + \lambda_{\mathrm{time}}\,r_{\mathrm{time}}(T, \hat{\tau})
+    + \lambda_{\mathrm{stab}}\,r_{\mathrm{stab}}(s_t)
+\]
+where $T$ is the actual interception time, $r_{\mathrm{pos}}$ rewards proximity
+to the landing point, $r_{\mathrm{time}}$ penalizes arriving after the deadline,
+and $r_{\mathrm{stab}}$ encourages stable locomotion.
+
+The vision module and locomotion policy are trained jointly, with the RL reward
+backpropagating a signal to align vision predictions with achievable interception
+targets.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Simulation training:} The robot and ball physics are simulated with
+randomized launch parameters (speed, angle, direction) to cover diverse
+trajectory families. Domain randomization is applied to robot dynamics to
+improve sim-to-real transfer.
+
+\textbf{Curriculum:} Training begins with slow, predictable ball trajectories
+and gradually increases speed and variability as the policy improves.
+
+\textbf{Inference:} The vision module processes each incoming frame, updating
+$\hat{\mathbf{p}}$ and $\hat{\tau}$ in real time. The locomotion policy uses
+the latest prediction to compute joint targets at 50~Hz.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The policy's behavior near the deadline depends
+on learned heuristics rather than provable time-optimal control. However, the
+experimental results demonstrate that the time-conditioned formulation produces
+significantly more reliable deadline adherence than velocity-tracking baselines,
+suggesting the implicit urgency signal is effective in practice.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Ball-catching success rate:} The time-conditioned RL policy
+    significantly outperforms velocity-tracking decomposition baselines on
+    the proposed benchmark.
+  \item \textbf{Deadline adherence:} The policy learns to vary gait speed
+    continuously based on remaining time, rather than running at maximum
+    speed and stopping.
+  \item \textbf{Trajectory diversity:} Performance degrades gracefully with
+    increasing ball speed and trajectory variability.
+  \item \textbf{Sim-to-real:} The framework transfers to physical hardware
+    with domain randomization, demonstrating real-world viability.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Time conditioning vs.\ position-only conditioning.}
+Removing the time dimension and conditioning only on target position degrades
+success rate substantially, confirming that the temporal deadline is a necessary
+conditioning input rather than information the policy can infer from position alone.
+
+\textbf{Joint vs.\ separate training.}
+Training the vision module and locomotion policy separately (first vision, then RL
+with fixed vision) produces lower success rates than joint training, suggesting
+that the locomotion policy's behavior affects what landing predictions are achievable.
+
+\textbf{Curriculum vs.\ full distribution.}
+Training without curriculum (full ball-speed distribution from the start) results
+in slower convergence and lower asymptotic performance, particularly for fast
+trajectories.
+
+\section*{Reference}
+
+Yidong Zhu, Zibo Dai, Tongning Zhang, Leixin Chang, Hua Chen.
+\textbf{Spatiotemporal Agility: Time-Constrained Reinforcement Learning for
+Vision-Guided Dynamic Quadrupedal Interception}.
+arXiv:2608.06907, August 2026.
+\url{https://arxiv.org/abs/2608.06907}
+
+\end{document}
