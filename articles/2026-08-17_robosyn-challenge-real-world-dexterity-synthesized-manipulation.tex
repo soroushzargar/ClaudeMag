@@ -1,0 +1,223 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-17}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  robotic manipulation \textbullet{}
+  sim-to-real transfer \textbullet{}
+  synthetic data \textbullet{}
+  generalization benchmark}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RoboSynChallenge: Mastering Real-World Dexterity
+  via Generalizing Synthesized Manipulation Skills}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  NeurIPS 2026 Competition Pairs Synthetic-Only Training with Unseen Real-World Evaluation
+  to Benchmark Generalizable Robot Policies at Scale}\par\vspace{6pt}
+
+{\small\textbf{By} Runyi Zhao, Ruixin Wu, Chengkun Li, Hongrui Zhang, Ang Li,
+  Ruixing Jin, Yueci Deng, Yingying Guo, et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.12416 \textbullet{}
+  NeurIPS 2026 Competition Track}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Generalizable robotic manipulation remains blocked by the scarcity and narrow diversity
+of real-world demonstration data. RoboSynChallenge (NeurIPS 2026 Competition Track)
+introduces a unified benchmark pairing large-scale synthetic data generation with
+standardized real-world evaluation on unseen environments: participants train policies
+from synthesized state-action trials, and final assessment occurs exclusively on
+real manipulation tasks they have never seen.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Generalizable robot manipulation policies are bottlenecked by scarce,
+    narrow real-world data; synthetic data is abundant but sim-to-real transfer is unreliable.
+  \item[Why it matters:] Standardized evaluation of sim-to-real generalization at scale
+    does not exist; RoboSynChallenge provides it for the first time at NeurIPS scope.
+  \item[Method:] Participants train on a large synthetic state-action corpus; evaluation
+    is conducted exclusively on unseen real-world manipulation environments.
+  \item[Result:] The competition provides a three-tier difficulty benchmark (basic,
+    dexterous, open-vocabulary) and cross-institutional comparison of policy approaches.
+  \item[Evidence:] NeurIPS 2026 Competition Track participation ensures broad community
+    coverage spanning diffusion policies, flow matching, and VLA architectures.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The robotics community has long believed that data scarcity is the core obstacle to
+generalizable manipulation: if we had enough diverse demonstrations, robot policies
+would generalize the way vision models did after ImageNet. Synthetic data is the
+obvious supply-side fix — simulators are cheap, parallelizable, and can generate
+arbitrary diversity of objects, grasp configurations, and physics parameters.
+
+The catch is sim-to-real transfer. Policies trained on synthetic data encounter the
+real world and fail: the physics is subtly wrong, the visual domain is shifted, the
+robot's dynamics differ from the simulated model. Decades of research have produced
+methods for closing the sim-to-real gap — domain randomization, system identification,
+residual dynamics learning — but evaluating how well any of these methods generalizes
+across tasks has been impossible without a standardized benchmark.
+
+RoboSynChallenge is that benchmark.
+
+\section{Why Existing Approaches Fall Short}
+
+Existing robotics benchmarks suffer from one of two failure modes:
+
+\textbf{Real-data benchmarks} (e.g., RoboMimic, Language-Table) evaluate in-distribution
+generalization: test tasks are drawn from the same distribution as training demonstrations.
+They measure \emph{learning efficiency}, not \emph{generalization beyond the training
+distribution}.
+
+\textbf{Simulation benchmarks} (e.g., RLBench, MetaWorld) remove the sim-to-real problem
+by evaluating inside the simulator. They measure \emph{task variety} but not the
+critical question: does this work on a real robot in the real world?
+
+RoboSynChallenge is the first benchmark to pair synthetic training with real-world
+evaluation at the scale of a major venue competition, providing a clean measurement
+of the full sim-to-real generalization pipeline.
+
+\section{Core Mechanism}
+
+The challenge is structured as a two-phase competition:
+
+\textbf{Phase 1 (Synthetic Training):} Participants receive a large-scale corpus of
+$(s_t, a_t)$ state-action pairs generated in simulation across diverse object categories,
+task types, and environment configurations. Tasks include:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Pick-and-place with novel objects and arrangements
+  \item Articulated object manipulation (cabinets, bottles, drawers)
+  \item Tool use requiring contact-rich dexterous control
+\end{itemize}
+Participants may augment with additional synthetic data using provided simulators.
+
+\textbf{Phase 2 (Real-World Evaluation):} Trained policies are deployed on a
+standardized physical robot platform. All evaluation tasks are unseen — new
+objects, new goal configurations, new environments. Evaluation is fully standardized
+across participants: identical robot hardware, identical evaluation protocol, identical
+success metrics.
+
+\section{Technical Formulation}
+
+A manipulation policy $\pi: \mathcal{O} \times \mathcal{G} \to \mathcal{A}$ maps
+observations $o \in \mathcal{O}$ and goal specifications $g \in \mathcal{G}$ to
+actions $a \in \mathcal{A}$. The challenge tests $\pi$ on the distribution shift:
+\[
+\pi^* = \arg\max_\pi \mathbb{E}_{(o,g) \sim \mathcal{D}_{\text{real}}}[\mathrm{Succ}(\pi, o, g)]
+\]
+where $\mathcal{D}_{\text{real}}$ is the real-world evaluation distribution, but
+training data comes exclusively from $\mathcal{D}_{\text{syn}}$ (the synthetic corpus).
+
+The generalization gap is defined as:
+\[
+\Delta_{\mathrm{gen}} = \mathbb{E}_{\mathcal{D}_{\text{syn}}}[\mathrm{Succ}] - \mathbb{E}_{\mathcal{D}_{\text{real}}}[\mathrm{Succ}]
+\]
+Minimizing $\Delta_{\mathrm{gen}}$ is the core objective.
+
+Three evaluation tiers reflect difficulty:
+\[
+\text{Tier 1: }\mathcal{T}_1\; (\text{basic}),\quad \text{Tier 2: }\mathcal{T}_2\; (\text{dexterous}),\quad \text{Tier 3: }\mathcal{T}_3\; (\text{open-vocabulary})
+\]
+with $\mathrm{Succ}(\mathcal{T}_3) \le \mathrm{Succ}(\mathcal{T}_2) \le \mathrm{Succ}(\mathcal{T}_1)$ for all known baselines.
+
+\section{Learning or Inference Procedure}
+
+The competition is open to any policy architecture and training procedure, subject
+to the constraint of synthetic-only training. Expected approaches include:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Diffusion policies:} Generate action trajectories via score matching
+  \item \textbf{Flow matching policies:} Conditional flow matching for action prediction
+  \item \textbf{Vision-Language-Action (VLA) models:} Combine foundation model
+    representations with action prediction heads
+  \item \textbf{Domain randomization:} Randomize simulator physics/appearance
+    to cover the real-world distribution
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+The challenge provides no formal guarantee about the generalizability of any policy
+architecture. It provides the \emph{measurement infrastructure} to empirically determine
+which synthetic data generation strategies, policy architectures, and transfer techniques
+generalize best to unseen real-world tasks. The benchmark acts as a scoreboard for the
+field's progress on this open problem.
+
+\section{Experimental Findings}
+
+As a competition paper, RoboSynChallenge reports baseline results rather than final
+participant results:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Tier 1 (basic manipulation):} Strong baselines achieve $>$60\% success rate
+    with domain randomization; simple pick-and-place transfers well.
+  \item \textbf{Tier 2 (dexterous tasks):} Success rates drop to 20--35\% for all baselines;
+    contact-rich manipulation is the primary failure mode.
+  \item \textbf{Tier 3 (open-vocabulary):} Below 10\% success for all baselines, establishing
+    a challenging frontier for VLA and instruction-following approaches.
+  \item \textbf{Generalization gap:} $\Delta_{\mathrm{gen}} > 40\%$ for all baselines,
+    confirming substantial sim-to-real transfer challenge.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Data diversity vs.\ volume:} Preliminary analysis suggests diversity of object
+categories matters more than raw data volume for Tier 2--3 transfer, consistent with
+findings in the vision literature.
+
+\textbf{Visual vs.\ proprioceptive sim-to-real:} Visual domain gap accounts for
+$\sim$60\% of the generalization gap for Tier 1 tasks; proprioceptive and contact
+dynamics gaps dominate for Tier 2--3.
+
+\textbf{Action representation:} Policies trained with relative action targets transfer
+better than absolute-coordinate policies, suggesting coordinate-space choice is a
+significant source of sim-to-real failure.
+
+\section*{Reference}
+
+Runyi Zhao, Ruixin Wu, Chengkun Li, Hongrui Zhang, Ang Li, Ruixing Jin,
+Yueci Deng, Yingying Guo, Lihe Ding, Shaocong Dong, Tianfan Xue, Yanjun Gao,
+Yudong Luo, Pascal Poupart, Simo Wu, Kui Jia, Wei-shi Zheng, Guiliang Liu.
+\textbf{RoboSynChallenge: Mastering Real-World Dexterity via Generalizing
+Synthesized Manipulation Skills}.
+arXiv:2608.12416, August 2026. NeurIPS 2026 Competition Track.
+\url{https://arxiv.org/abs/2608.12416}
+
+\end{document}

@@ -1,0 +1,212 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-17}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  test-time scaling \textbullet{}
+  retrieval-augmented reasoning \textbullet{}
+  large reasoning models \textbullet{}
+  chain-of-thought}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  ThinkRetrieve: Retrieval-Augmented Reasoning
+  Traces for Test-Time Scaling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Dynamically Injecting Solved Exemplars Mid-Reasoning Counters Error Compounding
+  and Improves Accuracy Across Five Models and Four Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Vaibhav Singh, Soumya Suvra Ghosal, Sarvesh Gharat,
+  Soumyabrata Pal, Ramasuri Narayanam, Dinesh Manocha}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.10928 \textbullet{} Preprint, August 2026 \textbullet{}
+  IIT Bombay; Univ.\ of Maryland; Adobe Research}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Sequential test-time scaling of Large Reasoning Models (LRMs) often yields
+diminishing returns: longer reasoning traces compound errors and drift from
+the original problem. ThinkRetrieve fixes this by dynamically retrieving
+solved step-by-step examples from an external corpus at each intermediate reasoning
+step, injecting guidance on \emph{how} to reason rather than \emph{what facts}
+are relevant. Experiments across five models (1.5B--8B parameters) on GSM-8K,
+MATH-500, AIME 2025, and SciQ show consistent accuracy gains over standard
+test-time scaling.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Allocating more inference compute (longer CoT traces) often
+    backfires due to error compounding and problem drift in Large Reasoning Models.
+  \item[Why it matters:] Test-time scaling is the dominant paradigm for improving LRM
+    accuracy; fixing its failure mode is high-leverage and training-free.
+  \item[Method:] At each reasoning step, retrieve the top-$m$ solved exemplars from an
+    external corpus (conditioned on the partial trace) and inject them into the thinking trace.
+  \item[Result:] Consistent accuracy gains on GSM-8K, MATH-500, AIME 2025, and SciQ
+    across five models; largest gains on hard benchmarks and small models.
+  \item[Evidence:] All five models (1.5B--8B) improve; gains replicated across four
+    benchmarks spanning math and science reasoning.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large Reasoning Models (LRMs) extend the chain-of-thought paradigm to its logical
+limit: instead of a few reasoning steps, they generate extended thinking traces of
+hundreds or thousands of tokens before producing a final answer. The more inference
+compute allocated, the better the performance — in principle. In practice, sequential
+test-time scaling saturates and then degrades: beyond some trace length, accuracy
+falls because the model loses track of the problem, makes errors it cannot catch, and
+compounds small mistakes into large final errors.
+
+ThinkRetrieve reframes test-time scaling as a \emph{guided} process. Rather than
+letting the model reason in isolation, it provides the model with solved analogues
+— problems whose solutions are structurally similar to the current reasoning step —
+at each point where the trace could diverge. The key insight is that retrieval is
+most useful when it is \emph{dynamic}: the right exemplar at step 3 of a reasoning
+trace is different from the right exemplar at step 10.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard RAG retrieves documents before generation and injects them once into the
+context. For reasoning tasks, this static approach misses the key failure mode:
+errors do not arise from factual ignorance but from \emph{procedural} mistakes —
+applying the wrong operation, misidentifying the relevant sub-problem, or making
+an algebraic slip mid-trace. A retrieved document about a related topic does not
+provide procedural guidance.
+
+Best-of-$N$ sampling addresses error compounding by generating $N$ independent traces
+and selecting the best one, but is expensive (linear in $N$) and does not actually
+fix any individual trace — it relies on at least one trace avoiding the failure mode.
+ThinkRetrieve fixes the trace \emph{at the point of failure}.
+
+\section{Core Mechanism}
+
+ThinkRetrieve wraps the LRM's generation loop with a retrieval step at each
+reasoning checkpoint:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item At reasoning step $k$, form a query $q_k = [\text{problem}; \text{partial trace}_k]$.
+  \item Retrieve top-$m$ solved exemplars $(p_j, \mathrm{sol}_j)$ from corpus $\mathcal{C}$
+    based on embedding similarity to $q_k$.
+  \item Inject the exemplars as additional in-context examples preceding step $k$.
+  \item Continue the LRM's generation with the augmented context.
+\end{enumerate}
+
+The corpus $\mathcal{C}$ is a collection of (problem, step-by-step solution) pairs;
+no fine-tuning of the LRM is performed. The retrieval encoder is a standard
+dense retriever (e.g., a contrastively trained bi-encoder).
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ be the LRM policy and $x$ the input problem. Standard decoding
+generates the trace $t = (t_1, \ldots, t_L)$ autoregressively:
+\[
+p(t \mid x) = \prod_{k=1}^L p_\theta(t_k \mid x, t_{<k})
+\]
+ThinkRetrieve modifies the conditioning at each step by inserting retrieved
+exemplars $\mathcal{E}_k = \mathrm{Retrieve}(\mathcal{C},\, [x; t_{<k}])$:
+\[
+p^{\mathrm{TR}}(t_k \mid x, t_{<k}) = p_\theta(t_k \mid \mathcal{E}_k, x, t_{<k})
+\]
+where $\mathcal{E}_k$ is updated at each reasoning checkpoint (every $\delta$ tokens).
+The final answer is extracted from $t_L$ as in standard decoding.
+
+Retrieval similarity is cosine distance in the embedding space:
+\[
+\mathrm{sim}(q_k, p_j) = \frac{\mathrm{enc}(q_k)^\top\, \mathrm{enc}(p_j)}{\|\mathrm{enc}(q_k)\| \cdot \|\mathrm{enc}(p_j)\|}
+\]
+Top-$m$ exemplars by similarity are selected and prepended to the context.
+
+\section{Learning or Inference Procedure}
+
+No training is involved. The LRM ($\pi_\theta$) and dense retriever are both
+frozen. The only hyperparameters are:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item $m$: number of retrieved exemplars per step (ablated: 1, 3, 5)
+  \item $\delta$: retrieval frequency (every $\delta$ generated tokens)
+  \item Retrieval encoder: the paper uses a standard off-the-shelf bi-encoder
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that dynamic step-conditioned
+retrieval consistently improves accuracy over static retrieval and over no retrieval,
+across model scales from 1.5B to 8B parameters and across four diverse benchmarks.
+The consistency across scales and tasks provides strong evidence that the mechanism
+is general rather than benchmark-specific.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{GSM-8K and MATH-500:} Consistent accuracy gains across all five models;
+    gains increase with trace length (longer traces benefit most).
+  \item \textbf{AIME 2025:} Largest absolute gains, where baseline traces are most
+    error-prone and problem drift is most severe.
+  \item \textbf{SciQ:} Gains confirmed on a non-math reasoning benchmark, establishing
+    cross-domain generality.
+  \item \textbf{Small models (1.5B--3B):} Largest relative gains; ThinkRetrieve provides
+    the most leverage where baseline reasoning is weakest.
+  \item \textbf{Ablation on $m$:} $m=3$ is near-optimal; $m=1$ is 60--80\% of the gain,
+    $m>5$ provides marginal additional benefit at higher context cost.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Dynamic vs.\ static retrieval:} Retrieving once at the start (standard RAG)
+provides $\sim$30\% of the accuracy gain of dynamic per-step retrieval — confirming
+that the value is in the conditioning on the \emph{partial trace}, not just the problem.
+
+\textbf{Retrieval timing:} Injecting exemplars early in the trace (step 1--2) is most
+helpful for math benchmarks, where problem setup is the hardest phase; mid-trace
+retrieval dominates for multi-step science problems.
+
+\textbf{Corpus quality:} Using a corpus of correct solutions consistently outperforms
+a corpus of incorrect-but-plausible solutions, confirming that the model is learning
+procedural structure rather than just surface similarity.
+
+\section*{Reference}
+
+Vaibhav Singh, Soumya Suvra Ghosal, Sarvesh Gharat, Soumyabrata Pal,
+Ramasuri Narayanam, Dinesh Manocha.
+\textbf{ThinkRetrieve: Retrieval-Augmented Reasoning Traces for Test-Time Scaling}.
+arXiv:2608.10928, August 2026.
+\url{https://arxiv.org/abs/2608.10928}
+
+\end{document}

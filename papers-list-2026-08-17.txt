@@ -1,0 +1,82 @@
+ML Papers List — 2026-08-17
+Generated for ClaudeMag
+
+1. Answer First, Reason Later: Commitment Order in Diffusion LLMs [arXiv 2026]
+   Authors: Jewon Yeom, Jaewon Sok, Seonghyeon Park, Jeongjae Park, Hwiyeong Lee, Taesup Kim
+   Affiliation: Seoul National University
+   Venue/ID: arXiv:2608.05687
+   URL: https://arxiv.org/abs/2608.05687
+   Summary: Masked diffusion language models (dLLMs) promise order-free token generation as a
+   core advantage over autoregressive decoding. This paper reveals that, on reasoning tasks,
+   this freedom is the source of failure rather than strength. By logging every token commitment
+   during decoding of LLaDA-8B on GSM8K, the authors show that unconstrained pure decoding
+   commits the final answer at only 15–24% of the trajectory while half the reasoning region
+   is still masked. As the canvas grows, the model collapses to answer-only outputs on up to
+   90% of problems, skipping its own reasoning entirely. The paper introduces a constrained
+   decoding strategy that enforces reasoning-before-answer commitment order, recovering
+   substantial accuracy with minimal overhead.
+
+2. ThinkRetrieve: Retrieval-Augmented Reasoning Traces for Test-Time Scaling [arXiv 2026]
+   Authors: Vaibhav Singh, Soumya Suvra Ghosal, Sarvesh Gharat, Soumyabrata Pal,
+            Ramasuri Narayanam, Dinesh Manocha
+   Affiliation: IIT Bombay; University of Maryland College Park; Adobe Research
+   Venue/ID: arXiv:2608.10928
+   URL: https://arxiv.org/abs/2608.10928
+   Summary: Sequential test-time scaling of Large Reasoning Models frequently yields diminishing
+   or negative returns: longer reasoning traces exhibit increased uncertainty, error compounding,
+   and problem drift. ThinkRetrieve is a test-time framework that augments the reasoning traces
+   of LRMs with dynamically retrieved solved examples at each intermediate reasoning step.
+   Rather than injecting retrieved facts, it injects solved step-by-step solutions from an
+   external corpus, providing the model with guidance on how to reason at the precise moment it
+   needs it. Experiments across five reasoning models (1.5B–8B parameters) on GSM-8K, MATH-500,
+   AIME 2025, and SciQ demonstrate consistent accuracy improvements over standard test-time
+   scaling approaches.
+
+3. Procedural Fairness Failures in RLHF from Preference Averaging [arXiv 2026]
+   Authors: M P V S Gopinadh, Karthik Kamuju, Kummari Avinash, John Joshua,
+            Srinivasa Raju Rudraraju
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.10126 — ICLR 2026 Workshop on Algorithmic Fairness Across
+             Alignment Procedures and Agentic Systems (AFAA)
+   URL: https://arxiv.org/abs/2608.10126
+   Summary: Reinforcement Learning from Human Feedback (RLHF) aggregates heterogeneous
+   human preferences into a single reward model, implicitly assuming preference homogeneity.
+   When preferences are in fact heterogeneous, this aggregation induces a procedural fairness
+   failure: majority preference groups dominate reward learning while minority preferences are
+   systematically under-represented — even if the minority is individually coherent. The paper
+   defines procedural fairness in alignment and shows that standard RLHF violates it through
+   preference averaging. It proposes Preference-Aware RLHF (PA-RLHF), which separates
+   optimization across preference modes at the reward learning stage to preserve distinct
+   preference signals.
+
+4. RoboSynChallenge: Mastering Real-World Dexterity via Generalizing Synthesized Manipulation Skills [arXiv 2026]
+   Authors: Runyi Zhao, Ruixin Wu, Chengkun Li, Hongrui Zhang, Ang Li, Ruixing Jin,
+            Yueci Deng, Yingying Guo, Lihe Ding, Shaocong Dong, Tianfan Xue, Yanjun Gao,
+            Yudong Luo, Pascal Poupart, Simo Wu, Kui Jia, Wei-shi Zheng, Guiliang Liu
+   Affiliation: Multiple institutions
+   Venue/ID: arXiv:2608.12416 — NeurIPS 2026 Competition Track
+   URL: https://arxiv.org/abs/2608.12416
+   Summary: Generalizable robotic manipulation is severely bottlenecked by the scarcity and
+   narrow diversity of real-world demonstration data. RoboSynChallenge is a unified benchmark
+   and competition that evaluates manipulation policy generalizability across tasks, environments,
+   and difficulty levels. The challenge integrates large-scale synthetic data generation with
+   standardized real-world robotic evaluation: participants train on synthesized state-action
+   trials and are assessed exclusively on unseen real-world manipulation environments. This
+   design deliberately tests the sim-to-real transfer and compositional generalization of
+   learned policies beyond their training distribution.
+
+5. SIRIN: A Unified Toolkit for Detecting Contextual Hallucinations in Retrieval-Augmented and Memory-Grounded LLM Systems [arXiv 2026]
+   Authors: Julia Belikova, Rauf Parchiev, Mikhail Filimonov, Konstantin Polev,
+            Andrey Savchenko, Maksim Makarenko
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.00033
+   URL: https://arxiv.org/abs/2608.00033
+   Summary: Contextual hallucinations — fluent, plausible responses unsupported by the provided
+   evidence — are a critical reliability failure in retrieval-augmented and memory-grounded LLM
+   systems. SIRIN (Semantic Inconsistency Recognition and Inspection Nexus) is a unified toolkit
+   and interactive web UI that consolidates three detector paradigms: representation probing,
+   uncertainty estimation, and judge-style verification. It also addresses the complementary
+   task of pre-generation query answerability under one interface, configuration system, and
+   evaluation pipeline. SIRIN supports response- and span-level inspection in both white-box
+   (access to model internals) and black-box (API-only) settings, enabling systematic
+   benchmarking of hallucination detection methods.

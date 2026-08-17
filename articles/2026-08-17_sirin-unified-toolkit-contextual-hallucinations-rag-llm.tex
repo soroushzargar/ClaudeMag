@@ -1,0 +1,223 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-17}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  hallucination detection \textbullet{}
+  retrieval-augmented generation \textbullet{}
+  LLM reliability \textbullet{}
+  uncertainty estimation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SIRIN: A Unified Toolkit for Detecting
+  Contextual Hallucinations in RAG
+  and Memory-Grounded LLM Systems}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Three Detector Paradigms --- Representation Probing, Uncertainty Estimation,
+  and Judge-Style Verification --- Unified Under One Interface and Evaluation Pipeline}\par\vspace{6pt}
+
+{\small\textbf{By} Julia Belikova, Rauf Parchiev, Mikhail Filimonov,
+  Konstantin Polev, Andrey Savchenko, Maksim Makarenko}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.00033 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Contextual hallucinations --- fluent, plausible LLM responses that contradict the
+provided retrieved evidence --- are the dominant reliability failure in RAG systems.
+SIRIN (Semantic Inconsistency Recognition and Inspection Nexus) consolidates three
+detector paradigms under one unified toolkit, configuration system, and evaluation
+pipeline, supporting both white-box and black-box settings as well as pre-generation
+query answerability checks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Contextual hallucinations in RAG systems are invisible to standard
+    quality metrics and require comparing model output to retrieved context.
+  \item[Why it matters:] RAG is used in high-stakes applications; hallucination detection
+    is safety-critical but existing methods are fragmented across incompatible systems.
+  \item[Method:] Unify representation probing, uncertainty estimation, and judge-style
+    verification under one interface; add pre-generation query answerability.
+  \item[Result:] No single paradigm dominates; combining uncertainty + judge-style
+    verification improves precision; answerability filtering reduces hallucination rate.
+  \item[Evidence:] Benchmarked across standard RAG hallucination datasets in both
+    white-box and black-box settings.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Retrieval-augmented generation (RAG) addresses parametric hallucination by grounding
+LLM outputs in retrieved documents. But retrieval-grounded generation introduces its
+own failure mode: \textbf{contextual hallucination}, where the model generates a response
+that is fluent and internally coherent but contradicts or is unsupported by the
+specific retrieved evidence. Unlike parametric hallucination (confabulated facts),
+contextual hallucination requires detecting inconsistency between model output and
+the provided context --- a structured grounding task.
+
+The detection literature is fragmented. Representation probing requires model internals.
+Uncertainty estimation can work in grey-box settings. Judge-style verification works
+via API but is expensive. No unified system allows fair comparison across paradigms on
+the same inputs with the same evaluation protocol --- until SIRIN.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Representation probing} methods train a lightweight classifier on the model's
+internal activations to predict hallucination. They are fast and model-specific but
+require white-box access and labeled probe training data.
+
+\textbf{Uncertainty estimation} methods measure token-level or span-level prediction
+entropy as a proxy for hallucination risk. They are model-agnostic in principle but
+require access to logit distributions (grey-box) and can confuse \emph{uncertain}
+content with \emph{wrong} content.
+
+\textbf{Judge-style verification} uses a second LLM to verify each claim in the response
+against the retrieved context. It is the most model-agnostic and robust but requires
+additional LLM calls (cost) and is sensitive to judge model quality.
+
+Each paradigm has a different interface, codebase, and evaluation protocol, making
+cross-comparison impossible without SIRIN's unification layer.
+
+\section{Core Mechanism}
+
+SIRIN provides three core components:
+
+\textbf{1. Detector modules} implementing each paradigm:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \textit{Probe detector:} Trains a linear probe on activations from a
+    specified layer to classify hallucinated vs.\ grounded spans.
+  \item \textit{Uncertainty detector:} Computes semantic entropy, predictive entropy,
+    or contrastive uncertainty over the model's token distribution.
+  \item \textit{Judge detector:} Prompts a judge LLM to verify each factual claim
+    in the response against the retrieved context chunk-by-chunk.
+\end{itemize}
+
+\textbf{2. Answerability module:} Before generation, scores whether the retrieved
+context contains sufficient information to answer the query. If answerability is below
+threshold, the system abstains rather than generates a potentially hallucinated response.
+
+\textbf{3. Unified evaluation pipeline:} Standard datasets (TriviaQA-RAG, NQ-RAG,
+HaluEval-RAG), shared metrics (precision, recall, F1 at response and span level),
+and a comparison framework that runs multiple detectors on the same inputs.
+
+\section{Technical Formulation}
+
+Let $c$ be the retrieved context, $q$ the query, and $y$ the generated response.
+Contextual hallucination detection is a binary classification:
+\[
+d(y, c) = \begin{cases} 1 & \text{if } y \text{ is inconsistent with } c \\ 0 & \text{otherwise} \end{cases}
+\]
+
+\textbf{Probe detector:} Train $f_\phi: \mathbf{h} \to [0,1]$ where
+$\mathbf{h} = \mathrm{enc}_\theta(y, c)$ is the model's internal representation:
+\[
+d_{\mathrm{probe}}(y,c) = \mathbb{1}[f_\phi(\mathbf{h}) > \tau_p]
+\]
+
+\textbf{Uncertainty detector:} Estimate semantic entropy as:
+\[
+H_{\mathrm{sem}} = -\sum_{s \in S} p(s \mid c, q) \log p(s \mid c, q)
+\]
+where $S$ is the set of semantically distinct responses sampled via beam search or
+Monte Carlo sampling. High entropy signals hallucination risk.
+
+\textbf{Judge detector:} For each extracted claim $\hat{y}_i$:
+\[
+d_{\mathrm{judge}}(\hat{y}_i, c) = \mathrm{LLM}_{\mathrm{judge}}\bigl(``\text{Is }\hat{y}_i\text{ supported by }c\text{?}''\bigr)
+\]
+
+\textbf{Answerability:} Pre-generation query answerability score:
+\[
+a(q, c) = \mathrm{LLM}_{\mathrm{judge}}\bigl(``\text{Does }c\text{ contain enough info to answer }q\text{?}''\bigr)
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{White-box setting:} Probe detectors require one-time fine-tuning on a labeled
+hallucination dataset ($\sim$1k examples). Uncertainty detectors require multiple forward
+passes (5--20 samples) per query. No training for the judge detector.
+
+\textbf{Black-box setting:} Only the judge detector is applicable. SIRIN wraps the
+judge calls with batching and rate limiting for production deployment.
+
+\section{What the Guarantee Says}
+
+No single detector paradigm dominates across all settings. The key empirical guarantee
+is: combining uncertainty estimation + judge-style verification achieves higher
+precision than either alone, at moderate additional cost. Answerability filtering
+reduces hallucination rate by 15--25\% by preventing generation when context is insufficient.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Probe detector:} Best F1 in white-box settings; poor in black-box.
+  \item \textbf{Uncertainty detector:} Competitive in grey-box; highest recall but
+    lower precision than judge-style.
+  \item \textbf{Judge detector:} Most consistent across settings; best in black-box.
+  \item \textbf{Combination:} Uncertainty + judge achieves the best precision-recall
+    tradeoff across all datasets.
+  \item \textbf{Answerability filtering:} Reduces hallucination rate 15--25\%
+    by abstaining when context is insufficient.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Span vs.\ response level:} Span-level detection has higher recall but lower
+precision than response-level detection; the interactive UI benefits from span-level
+highlighting for analyst workflows.
+
+\textbf{Judge model quality:} Detection performance degrades gracefully as judge
+model size decreases; 7B judge models achieve $>$85\% of the performance of
+frontier judges at 10$\times$ lower cost.
+
+\textbf{Answerability threshold:} High thresholds ($a > 0.9$) maximize precision
+at the cost of high abstention rate; $a > 0.7$ is the practical operating point.
+
+\section*{Reference}
+
+Julia Belikova, Rauf Parchiev, Mikhail Filimonov, Konstantin Polev,
+Andrey Savchenko, Maksim Makarenko.
+\textbf{SIRIN: A Unified Toolkit for Detecting Contextual Hallucinations
+in Retrieval-Augmented and Memory-Grounded LLM Systems}.
+arXiv:2608.00033, August 2026.
+\url{https://arxiv.org/abs/2608.00033}
+
+\end{document}

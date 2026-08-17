@@ -1,0 +1,215 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-17}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  RLHF fairness \textbullet{}
+  preference heterogeneity \textbullet{}
+  reward modeling \textbullet{}
+  alignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Procedural Fairness Failures in RLHF
+  from Preference Averaging}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Standard RLHF Violates Procedural Fairness by Drowning Minority Preference Signals
+  in Aggregated Reward Models; PA-RLHF Separates Optimization Across Preference Modes}\par\vspace{6pt}
+
+{\small\textbf{By} M P V S Gopinadh, Karthik Kamuju, Kummari Avinash,
+  John Joshua, Srinivasa Raju Rudraraju}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.10126 \textbullet{}
+  ICLR 2026 Workshop on Algorithmic Fairness Across Alignment Procedures (AFAA)}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reinforcement Learning from Human Feedback (RLHF) aggregates heterogeneous annotator
+preferences into a single reward model, treating all annotators as draws from one
+distribution. A new paper shows this induces a \emph{procedural fairness failure}:
+majority preference groups dominate reward learning while minority preferences are
+systematically under-represented. Preference-Aware RLHF (PA-RLHF) remedies this by
+separating reward optimization across preference modes at the reward learning stage.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard RLHF averages heterogeneous preferences into a single reward
+    model, causing minority preference groups to be under-represented.
+  \item[Why it matters:] As LLMs are deployed across diverse populations, preference
+    homogeneity is a poor assumption — and its failure is invisible to standard metrics.
+  \item[Method:] Define procedural fairness for alignment; prove standard RLHF violates it;
+    propose PA-RLHF with per-group reward models.
+  \item[Result:] PA-RLHF improves procedural fairness metrics while maintaining outcome
+    quality (win rates, helpfulness) across all tested scenarios.
+  \item[Evidence:] Gains largest when inter-group preference divergence and population
+    size imbalance are greatest.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Human preferences are not homogeneous. Annotators employed in RLHF pipelines come from
+different cultural backgrounds, hold different values, and have different conceptions
+of what constitutes helpful, harmless, and honest AI behavior. Standard RLHF treats all
+annotator preferences as if they were noisy draws from a single underlying distribution,
+fitting a single aggregated reward model $r_\theta$ to the pooled data.
+
+When preferences are genuinely multi-modal — when subgroups of annotators hold coherently
+different values — this aggregation is not merely imprecise. It actively \emph{dilutes}
+minority preference signals in proportion to the size of the minority. Smaller groups
+contribute less to the aggregate loss, so the reward model learns to satisfy the majority
+and discard the minority. The paper calls this a \textbf{procedural fairness failure}:
+the process is unfair to minority groups, independent of whether the resulting policy
+happens to satisfy them by coincidence.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior work on fairness in RLHF has focused on \textbf{outcome fairness}: ensuring the
+final policy produces acceptable outputs for all subgroups. But outcome fairness can
+be achieved by coincidence (a policy that satisfies the majority may also happen to
+satisfy the minority on some tasks) and can be gamed by optimizing for population-level
+statistics. Outcome fairness does not address whether the reward learning \emph{process}
+treats all groups equitably.
+
+Existing personalized preference methods (per-user reward models, preference
+embeddings) require per-user data at inference time and scale poorly. PA-RLHF
+operates at the group level during reward training, requiring no per-user data
+after deployment.
+
+\section{Core Mechanism}
+
+Let $\mathcal{A}$ be the annotator pool, partitioned into $K$ preference groups
+$G_1, \ldots, G_K$ with group-specific preference distributions
+$\mathcal{D}_1, \ldots, \mathcal{D}_K$. The key steps of PA-RLHF are:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Preference clustering:} Identify latent groups $G_k$ using embedding-based
+    clustering of annotator preference vectors or label co-occurrence patterns.
+  \item \textbf{Per-group reward modeling:} Fit a separate reward model $r_{\theta_k}$
+    for each group $G_k$ using only that group's preference data.
+  \item \textbf{Fairness-weighted policy optimization:} Combine per-group reward signals
+    during PPO training using a fairness weighting $w_k$ that does not simply
+    equal the group's population share $\alpha_k = |G_k|/|\mathcal{A}|$.
+\end{enumerate}
+
+The fairness weighting $w_k$ is the key design choice: uniform weighting ($w_k = 1/K$)
+maximizes procedural equity; intermediate weightings balance procedural and outcome
+fairness objectives.
+
+\section{Technical Formulation}
+
+\textbf{Standard RLHF} fits:
+\[
+r_\theta = \arg\min_\theta \mathbb{E}_{(x,y_w,y_l) \sim \mathcal{D}}\!\left[-\log\,\sigma(r_\theta(x,y_w) - r_\theta(x,y_l))\right]
+\]
+where $\mathcal{D} = \sum_k \alpha_k \mathcal{D}_k$ is the mixture distribution.
+
+\textbf{PA-RLHF} fits $K$ per-group reward models:
+\[
+r_{\theta_k} = \arg\min_{\theta_k} \mathbb{E}_{(x,y_w,y_l) \sim \mathcal{D}_k}\!\left[-\log\,\sigma(r_{\theta_k}(x,y_w) - r_{\theta_k}(x,y_l))\right]
+\]
+and optimizes the policy with the fairness-weighted reward:
+\[
+r_{\mathrm{fair}}(x,y) = \sum_{k=1}^K w_k \cdot r_{\theta_k}(x,y), \quad \sum_k w_k = 1
+\]
+
+\textbf{Procedural fairness} is defined as: the gradient contribution of group $G_k$
+to the aggregate reward model should be proportional to its ``representation right''
+rather than its population size. Formally, standard RLHF satisfies this only when
+$\alpha_k = 1/K$ (equal group sizes), which is rarely the case in practice.
+
+\section{Learning or Inference Procedure}
+
+PA-RLHF requires one additional step versus standard RLHF:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Cluster annotators} into $K$ groups (one-time offline step).
+  \item \textbf{Train $K$ reward models} in parallel (same cost as standard training
+    when using parameter-efficient methods; $K \times$ cost otherwise).
+  \item \textbf{Run PPO} with $r_{\mathrm{fair}}$ as the reward signal.
+\end{enumerate}
+Inference is identical to standard RLHF — no per-user data is required.
+
+\section{What the Guarantee Says}
+
+The paper proves that standard RLHF is procedurally unfair whenever annotator
+group sizes differ ($\alpha_k \neq 1/K$) and group preferences are non-identical.
+PA-RLHF with uniform weighting ($w_k = 1/K$) is the unique solution that achieves
+procedural fairness under this definition. No guarantee is provided for outcome
+fairness — PA-RLHF may improve or maintain outcome metrics, but cannot guarantee it.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Procedural fairness:} PA-RLHF improves procedural fairness metrics
+    across all tested scenarios with heterogeneous annotator groups.
+  \item \textbf{Outcome quality:} Win rates and helpfulness metrics are maintained
+    or slightly improved relative to the standard RLHF baseline.
+  \item \textbf{Group imbalance sensitivity:} Gains grow with group size imbalance
+    ratio — the regime most common in real crowdsourced annotation datasets.
+  \item \textbf{Preference divergence sensitivity:} Gains also grow with inter-group
+    preference divergence, confirming the mechanism targets the right failure mode.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{How many groups $K$?} The paper tests $K \in \{2, 3, 5\}$; fairness gains
+are present for all values, with $K=3$ providing the best balance of fairness and
+computation overhead.
+
+\textbf{Fairness weighting $w_k$:} Uniform ($w_k = 1/K$) maximizes procedural
+fairness but can hurt outcome quality in extreme scenarios. Population-proportional
+($w_k = \alpha_k$) recovers standard RLHF. An intermediate value provides the
+best empirical outcome-fairness tradeoff.
+
+\textbf{What about outcome fairness?} The paper notes that procedural fairness and
+outcome fairness are not equivalent: PA-RLHF improves procedural fairness without
+guaranteeing outcome fairness, and a system can achieve outcome fairness while
+violating procedural fairness. Both matter and both need to be measured.
+
+\section*{Reference}
+
+M P V S Gopinadh, Karthik Kamuju, Kummari Avinash, John Joshua,
+Srinivasa Raju Rudraraju.
+\textbf{Procedural Fairness Failures in RLHF from Preference Averaging}.
+arXiv:2608.10126, August 2026.
+ICLR 2026 Workshop on Algorithmic Fairness Across Alignment Procedures and Agentic Systems.
+\url{https://arxiv.org/abs/2608.10126}
+
+\end{document}

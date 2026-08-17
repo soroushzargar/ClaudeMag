@@ -1,0 +1,202 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-17}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion language models \textbullet{}
+  masked decoding \textbullet{}
+  reasoning order \textbullet{}
+  test-time inference}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Answer First, Reason Later:
+  Commitment Order in Diffusion LLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Unconstrained Masked Decoding Commits Final Answers Before Reasoning Completes,
+  Collapsing to Answer-Only Outputs on Up to 90\% of Problems}\par\vspace{6pt}
+
+{\small\textbf{By} Jewon Yeom, Jaewon Sok, Seonghyeon Park, Jeongjae Park,
+  Hwiyeong Lee, Taesup Kim}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.05687 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Masked diffusion language models promise order-free generation as a core
+advantage over autoregressive decoding. A new study from Seoul National University
+shatters that assumption for reasoning tasks: logging every token commitment in
+LLaDA-8B on GSM8K reveals that unconstrained decoding commits the final answer
+at only 15--24\% of the trajectory, before half the reasoning region is written,
+collapsing to answer-only outputs on up to 90\% of problems as canvas size grows.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Diffusion LLMs generate tokens in arbitrary order, but reasoning tasks require
+    intermediate steps to precede the final answer — an ordering constraint the model violates.
+  \item[Why it matters:] dLLMs are increasingly proposed as reasoning engines; if their decoding
+    procedure systematically skips reasoning, the architecture is unreliable for this use case.
+  \item[Method:] Log every token commitment (masked $\to$ unmasked transition) during LLaDA-8B
+    decoding on GSM8K; analyze commitment position as a fraction of the decoding trajectory.
+  \item[Result:] Pure decoding commits the answer at 15--24\% of the trajectory; constrained
+    ordering recovers substantial accuracy without retraining.
+  \item[Evidence:] Collapse to answer-only outputs reaches 90\% of problems at large canvas size;
+    commitment trajectory visualizations confirm answer-first ordering.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Masked diffusion language models (dLLMs) generate text by starting from a fully
+masked token sequence and iteratively unmasking tokens over multiple diffusion steps.
+Unlike autoregressive (AR) models, which are constrained to generate left-to-right,
+dLLMs may unmask any position in any order. Proponents argue this flexibility enables
+superior global coherence and parallel generation.
+
+For reasoning tasks, however, this flexibility has a fatal cost. A reasoning trace
+has inherent logical structure: the intermediate steps should be generated \emph{before}
+the final answer, because the answer should be justified by preceding computation, not
+the reverse. When a dLLM commits the answer token before writing the reasoning steps,
+it is, in effect, guessing — and the reasoning region becomes post-hoc decoration for
+a decision already made.
+
+\section{Why Existing Approaches Fall Short}
+
+Standard dLLM decoding (``pure'' diffusion) selects which tokens to unmask at each
+step based on model confidence, without any constraint on the semantic identity of
+the tokens being committed. The model may unmask the final answer position early
+because the answer is high-confidence given the problem statement alone — before
+the chain-of-thought region provides any additional information.
+
+Prior work on improving dLLM reasoning has focused on training objectives (RLVR,
+supervised fine-tuning on CoT data) or on post-hoc verification. None has examined
+the \emph{order} in which tokens are committed during decoding, which this paper
+identifies as the proximate cause of failure.
+
+\section{Core Mechanism}
+
+The authors introduce \textbf{commitment order logging}: at each diffusion step, they
+record which output position transitions from masked to unmasked, forming a complete
+commitment trajectory. For a generation with $T$ positions and $S$ decoding steps:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Each step $s$ produces a set $C_s \subseteq [T]$ of newly unmasked positions.
+  \item The answer region $\mathcal{A} \subset [T]$ and reasoning region $\mathcal{R} \subset [T]$
+    are identified by position in the output template.
+  \item The ``answer commitment step'' $s^* = \min\{s : C_s \cap \mathcal{A} \neq \emptyset\}$
+    is the fraction $s^*/S$ of the trajectory at which the final answer is first committed.
+\end{itemize}
+
+The \textbf{constrained decoding} fix enforces that positions in $\mathcal{A}$ remain
+masked until a threshold fraction $\tau$ of the trajectory has elapsed, releasing the
+answer region only after substantial reasoning has been committed.
+
+\section{Technical Formulation}
+
+Let $\mathbf{x}_0$ be the target output and $\mathbf{x}_s$ the partially masked sequence
+at step $s$, with $\mathbf{x}_S$ fully masked. Pure reverse diffusion selects tokens
+to unmask according to:
+\[
+p_\theta(\mathbf{x}_{s-1} \mid \mathbf{x}_s) \propto \prod_{i \in [T]} p_\theta(x_i \mid \mathbf{x}_s)^{\mathbb{1}[x_s^{(i)} = \texttt{[MASK]}]}
+\]
+Commitment at step $s$ selects the top-$k$ unmasked positions by $p_\theta(x_i \mid \mathbf{x}_s)$.
+
+Constrained decoding modifies the selection by adding a region-based gate:
+\[
+p^{\mathrm{con}}_\theta(x_i \mid \mathbf{x}_s) = p_\theta(x_i \mid \mathbf{x}_s) \cdot \mathbb{1}\!\left[i \notin \mathcal{A} \;\text{ or }\; \frac{s}{S} > \tau\right]
+\]
+where $\tau \in (0,1)$ is the threshold fraction. No change to model weights is required;
+the constraint is purely at inference time.
+
+\section{Learning or Inference Procedure}
+
+No training is involved. Both pure decoding and constrained decoding are evaluated
+at inference time on LLaDA-8B, a masked diffusion language model with 8 billion
+parameters. GSM8K provides 1,319 test-set math word problems as the evaluation
+benchmark. The commitment threshold $\tau$ is tuned on a small held-out validation set.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that answer-first commitment
+is the dominant failure mode of pure dLLM decoding on reasoning tasks, and that
+constraining the answer region during early decoding consistently recovers accuracy.
+The correlation between canvas size and collapse rate (peaking at 90\% answer-only
+outputs) establishes that the failure is deterministic as generation length grows,
+not stochastic.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Commitment timing:} Pure decoding commits the answer at 15--24\% of
+    the decoding trajectory on average.
+  \item \textbf{Collapse rate:} Up to 90\% of problems produce answer-only outputs
+    (zero reasoning steps) as canvas size grows.
+  \item \textbf{Constrained decoding:} Enforcing reasoning-before-answer commitment
+    recovers substantial GSM8K accuracy with threshold $\tau = 0.5$.
+  \item \textbf{Scale sensitivity:} The gap between constrained and unconstrained
+    decoding widens with output length, confirming scale-dependent failure.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Why does pure decoding answer first?}
+The answer token has high local confidence given the problem statement alone
+(the model ``knows'' plausible answer formats). The reasoning region is globally
+coherent only \emph{after} intermediate steps are committed — but those steps are
+low-confidence before being written, so the decoding procedure deprioritizes them.
+
+\textbf{Why does collapse worsen with canvas size?}
+Longer outputs have more reasoning positions that must be committed before the
+answer is released. As the reasoning region grows, the denominator of the
+commitment problem grows — making early, spurious answer commitment
+increasingly likely under unconstrained selection.
+
+\textbf{Threshold sensitivity:} Accuracy peaks around $\tau = 0.4$--$0.6$ with
+a shallow optimum; extreme values ($\tau \to 0$ or $\tau \to 1$) recover the
+failure modes of pure decoding or fully blocked answer generation respectively.
+
+\section*{Reference}
+
+Jewon Yeom, Jaewon Sok, Seonghyeon Park, Jeongjae Park, Hwiyeong Lee, Taesup Kim.
+\textbf{Answer First, Reason Later: Commitment Order in Diffusion LLMs}.
+arXiv:2608.05687, August 2026.
+\url{https://arxiv.org/abs/2608.05687}
+
+\end{document}
