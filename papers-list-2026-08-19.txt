@@ -1,0 +1,87 @@
+ML Papers List — 2026-08-19
+Generated for ClaudeMag
+
+1. Fewer Tokens, Smaller Cache: Reward-Coordinated Efficient Reasoning [arXiv 2026]
+   Authors: Qiyuan Zhu, Dezhi Li, Pengyu Cheng, Tianle Chen, Jiacheng Wang, Ruijie Shen,
+            Hao Gu, Sida Lin, Zirui Liu, Jiacheng Liu, Sirui Han
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.04771
+   URL: https://arxiv.org/abs/2608.04771
+   Summary: Large Reasoning Models (LRMs) excel on complex tasks through long chain-of-thought
+   reasoning, but their lengthy intermediate steps cause severe overthinking that inflates
+   inference cost. KV-cache compression is a common remedy, yet existing approaches apply a
+   uniform policy across the entire trajectory and evaluate compression solely by what is
+   removed from the cache. This paper makes two observations: (1) a reasoning state's
+   tolerance to context loss varies along the trajectory, and process reward tracks this
+   variation — deleting tokens at high-reward steps preserves accuracy far better than random
+   deletion; (2) compression is not free on the generation side, since a smaller cache causes
+   the model to generate more tokens, partly canceling the saving. The paper introduces
+   Reward-Coordinated Efficient Reasoning (RCER), which jointly coordinates both sides under a
+   single process reward signal to simultaneously reduce tokens generated and cache size.
+
+2. Towards Physics of Multimodal Pretraining: Knowledge Flow, Modality Synergy, Early Unification, and Recipes [arXiv 2026]
+   Authors: Junlin Han, Shengbang Tong, David Fan, Minghao Chen, Philip Torr,
+            Filippos Kokkinos, Mike Lewis
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.05000
+   URL: https://arxiv.org/abs/2608.05000
+   Summary: Despite momentum in multimodal pretraining, the design space and fundamental
+   mechanisms of how modalities interact during unified training remain underexplored. This
+   paper provides empirical clarity through systematic exploration and identifies four key
+   findings: (1) Language, visual understanding, and visual generation transfer knowledge
+   across modalities with distinct asymmetric patterns; (2) Data complexity largely determines
+   whether modalities are synergistic, with shared attention and normalization layers (with
+   modality-specific feed-forward layers) promoting synergy; (3) Unifying modalities from
+   early stages is more effective than late alignment or sequential training, uncovering a
+   "vision laziness" phenomenon where delayed integration causes models to rely on language
+   priors; (4) Efficient pretraining recipes achieve strong generative performance using only
+   5% of the compute budget, validated by training multiple 13.5B MoE models on 2T tokens.
+
+3. XYZFlow: Scaling Multidimensional Shortcut Flows for Efficient Generative Modeling [arXiv 2026]
+   Authors: Jinxiu Liu, Xuanming Liu, Kangfu Mei, Yandong Wen, Weiyang Liu
+   Affiliation: CUHK; Westlake University; Johns Hopkins University
+   Venue/ID: arXiv:2608.12276
+   URL: https://arxiv.org/abs/2608.12276
+   Summary: High-fidelity image generation faces a fundamental trade-off between speed and
+   quality. Diffusion models produce strong visuals but require costly iterative sampling;
+   existing efficient methods mainly distill pretrained models into few-step samplers, a
+   challenging process that depends heavily on teacher-model quality. XYZFlow rethinks
+   efficient generation through multidimensional scaling of flow matching. Unlike single-step
+   mappings, XYZFlow enhances expressivity by making probability paths more identifiable and
+   learnable through structured multidimensional conditioning using both temporal (denoising
+   history) and spatial (sequential patch) dimensions. The paper shows that autoregressive
+   modeling can be viewed as implicit flow straightening, where richer context reduces
+   trajectory ambiguity and enables high-quality generation in fewer function evaluations.
+
+4. Sparse Prototype Code Underlies Classification and Prediction Across Modalities [arXiv 2026]
+   Authors: Yehonatan Avidan, Daniel D. Lee, Haim Sompolinsky
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.15632
+   URL: https://arxiv.org/abs/2608.15632
+   Summary: Neural representations have become a central tool for studying the internal
+   mechanisms of modern AI models, yet their complex high-dimensional structure makes them
+   difficult to interpret. This paper discovers that classification tasks give rise to a
+   universal representational geometry, shared across state-of-the-art models in vision,
+   audio, and language processing. The key structure is that within-class variability is not
+   random in representation space — its classifier-relevant component has strong and structured
+   correlations with the class's own centroid and with the centroids of competing classes.
+   The paper characterizes this geometry as a "Sparse Prototype Code" and shows that it is
+   shared across diverse architectures and modalities, providing a unified framework for
+   understanding why deep networks generalize and what distinguishes high-performing
+   representations.
+
+5. Temporal GRPO: Beyond Trajectory-Level Credit in Vision-Language-Action Reinforcement Learning [arXiv 2026]
+   Authors: Yao Zhou, Hang Gao, Fengge Wu, Changwen Zheng, Wenwen Qiang
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.13026
+   URL: https://arxiv.org/abs/2608.13026
+   Summary: Reinforcement learning for Vision-Language-Action (VLA) models typically assigns
+   credit at the trajectory level — the entire action sequence receives the same reward signal.
+   This coarse assignment fails to identify which specific actions within a trajectory
+   contributed to success or failure, leading to slow convergence and suboptimal policies.
+   Temporal GRPO extends the Group Relative Policy Optimization (GRPO) algorithm with a
+   temporal credit assignment mechanism that decomposes trajectory-level rewards into
+   step-level credit signals. By conditioning credit assignment on the temporal context of
+   each action within the manipulation sequence, Temporal GRPO provides more informative
+   gradient signals to the VLA policy, improving sample efficiency and final performance on
+   robotic manipulation benchmarks.

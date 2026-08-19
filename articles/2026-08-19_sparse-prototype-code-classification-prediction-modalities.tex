@@ -1,0 +1,231 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  representational geometry \textbullet{}
+  classification \textbullet{}
+  prototype theory \textbullet{}
+  universal representations}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Sparse Prototype Code Underlies Classification
+  and Prediction Across Modalities}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Universal Geometry of Within-Class Variability, Aligned With Class
+  Centroids and Competing Classes, Emerges Across Vision, Audio,
+  and Language Models}\par\vspace{6pt}
+
+{\small\textbf{By} Yehonatan Avidan, Daniel D.\ Lee, Haim Sompolinsky}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.15632 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Why do deep networks trained on classification tasks learn representations that
+generalize so broadly? This paper identifies a universal representational geometry
+--- the Sparse Prototype Code --- that appears across state-of-the-art models in
+vision, audio, and language. The key discovery: within-class variability in
+representation space is not random. Its classifier-relevant component aligns
+strongly with the class prototype centroid and with the centroids of a sparse
+set of competing classes. This structure explains inter-class confusion patterns,
+predicts transferability, and provides a unified framework for understanding why
+classification training produces broadly useful representations.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The geometric structure of learned representations is poorly
+    understood, limiting principled model design and analysis.
+  \item[Why it matters:] A universal geometry across modalities would explain
+    why classification training generalizes and enable principled comparison
+    of representations.
+  \item[Method:] Spectral analysis of within-class covariance matrices in
+    final representation spaces of vision, audio, and language models.
+  \item[Result:] Sparse Prototype Code geometry confirmed across all tested
+    architectures and modalities; predicts confusion patterns and transferability.
+  \item[Evidence:] 33 pages, 13 figures, 14 tables spanning ViT, ResNet,
+    CLIP, wav2vec, BERT, and GPT-class models.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Deep learning models trained on classification tasks have proven surprisingly
+versatile: representations learned to classify ImageNet transfer to medical imaging,
+satellite imagery, and fine-grained recognition; representations learned on
+language classification transfer to generation, translation, and reasoning.
+The mechanism behind this broad transferability is not well understood.
+
+The dominant hypothesis is that classification forces networks to learn
+disentangled, semantically meaningful features. But this is vague: what
+geometric structure do these features have in representation space? This paper
+provides a precise characterization: the Sparse Prototype Code. It shows
+that this structure is not specific to one modality or architecture but is
+a universal consequence of training on classification tasks.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Neural collapse theory} (Papyan et al., 2020) characterizes the
+geometry of the final layer at the end of training: class means collapse
+to the vertices of a simplex equiangular tight frame (ETF). This is a
+useful characterization of inter-class geometry but does not address
+\emph{within-class} variability — the spread of examples around each class
+mean. Neural collapse predicts that within-class variability vanishes at
+convergence, which is not the case for practical models trained on realistic
+data.
+
+\textbf{CKA and representation similarity} methods compare representations
+between models but do not characterize the intrinsic geometry of a single
+model's representation space.
+
+\textbf{Prototype theory} in cognitive science posits that categories are
+organized around prototypical examples, but does not make quantitative
+predictions about the geometric structure of computational model representations.
+
+The Sparse Prototype Code bridges these gaps by providing a quantitative,
+testable geometric characterization of within-class variability.
+
+\section{Core Mechanism}
+
+For a model $f_\theta$ and class $c$, let $\mu_c = \mathbb{E}_{x \sim p(x|c)}[f_\theta(x)]$
+be the class centroid and $\Sigma_c = \mathbb{E}_{x \sim p(x|c)}[(f_\theta(x) - \mu_c)(f_\theta(x) - \mu_c)^\top]$
+be the within-class covariance.
+
+The paper performs spectral analysis of $\Sigma_c$, decomposing it as
+$\Sigma_c = U_c \Lambda_c U_c^\top$. The key finding is that the leading
+eigenvectors $u_1, u_2, \ldots$ of $\Sigma_c$ align strongly with class
+centroids:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item $u_1 \approx \mu_c / \|\mu_c\|$ (the class prototype direction)
+  \item $u_2, \ldots, u_k \approx \mu_{c_j} / \|\mu_{c_j}\|$ for a sparse
+    set of competing classes $\{c_j\}_{j=1}^{k}$, with $k \ll C$ (where
+    $C$ is the total number of classes)
+\end{enumerate}
+
+The eigenvalue spectrum is sparse: a small number of eigenvalues are large
+(aligned with prototype and competing-class directions) and the remaining
+eigenvalues are small (random variability). This sparsity is the defining
+feature of the Sparse Prototype Code.
+
+\section{Technical Formulation}
+
+Formally, define the \emph{prototype alignment} of class $c$:
+\[
+  A_{\text{proto}}(c) = \frac{u_1^\top \mu_c}{\|\mu_c\|}
+\]
+and the \emph{competing-class alignment} of class $c$ with class $c'$:
+\[
+  A_{\text{comp}}(c, c') = \max_{j \geq 2} \frac{u_j^\top \mu_{c'}}{\|\mu_{c'}\|}
+\]
+
+The Sparse Prototype Code hypothesis states:
+\[
+  A_{\text{proto}}(c) \approx 1 \quad \text{for all } c
+\]
+\[
+  \sum_{c' \neq c} \mathbf{1}[A_{\text{comp}}(c,c') > \tau] = k(c) \ll C
+\]
+where $k(c)$ is a sparse count of strongly competing classes.
+
+The paper verifies both conditions across all tested models and modalities.
+
+\section{Learning or Inference Procedure}
+
+The analysis is purely empirical and requires no training. For each model:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Extract final-layer representations for all examples in the test set.
+  \item Compute class centroids $\{\mu_c\}$.
+  \item Compute within-class covariance matrices $\{\Sigma_c\}$.
+  \item Perform eigendecomposition of each $\Sigma_c$.
+  \item Measure alignment of leading eigenvectors with class centroids.
+\end{enumerate}
+All steps are straightforward linear algebra; no optimization is involved.
+
+\section{What the Guarantee Says}
+
+The paper provides a theoretical derivation showing that the Sparse Prototype
+Code is the \emph{optimal} within-class geometry for a linear classifier that
+minimizes cross-entropy loss while maintaining within-class coherence. That is,
+gradient descent on classification loss with weight decay provably induces the
+Sparse Prototype Code in the final layer in the limit of large data and a
+sufficiently expressive model. This is not a finite-sample guarantee but
+provides a theoretical grounding for the empirical observations.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Vision (ViT, ResNet, CLIP):} Prototype alignment $A_{\text{proto}} > 0.95$
+    for all classes in all models. Average competing-class count $k(c) = 3$--$8$
+    out of 1000 classes (ImageNet). Competing classes match human-annotated
+    confusable categories.
+  \item \textbf{Audio (wav2vec):} Same geometry emerges in the audio representation
+    space for AudioSet classification. Competing classes are acoustically similar
+    sounds (e.g., ``bark'' and ``growl'').
+  \item \textbf{Language (BERT, GPT-class):} Sparse Prototype Code confirmed in
+    text classification tasks. Competing classes correspond to semantically
+    adjacent categories (e.g., ``positive'' and ``mildly positive'' sentiment).
+  \item \textbf{Transferability prediction:} Models with higher prototype alignment
+    and lower competing-class count transfer better to new tasks (Pearson $r = 0.78$).
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Does the geometry require classification training?} Models trained with
+contrastive losses (CLIP, SimCLR) show partial but weaker Sparse Prototype Code
+structure, with higher competing-class count and lower prototype alignment.
+Supervised classification induces stronger structure.
+
+\textbf{Does architecture matter?} The geometry is consistent across ViT and
+ResNet at matched model capacity, suggesting it is a property of the training
+objective rather than the architecture.
+
+\textbf{Depth:} The Sparse Prototype Code is weakest in early layers and
+strongest in the final representation layer, consistent with hierarchical
+abstraction during training.
+
+\section*{Reference}
+
+Yehonatan Avidan, Daniel D.\ Lee, Haim Sompolinsky.
+\textbf{Sparse Prototype Code Underlies Classification and Prediction Across Modalities}.
+arXiv:2608.15632, August 2026.
+\url{https://arxiv.org/abs/2608.15632}
+
+\end{document}

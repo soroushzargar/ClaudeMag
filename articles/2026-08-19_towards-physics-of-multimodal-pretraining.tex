@@ -1,0 +1,239 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal pretraining \textbullet{}
+  knowledge transfer \textbullet{}
+  modality synergy \textbullet{}
+  vision laziness}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Towards Physics of Multimodal Pretraining:
+  Knowledge Flow, Modality Synergy, Early
+  Unification, and Recipes}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Systematic Empirical Study Reveals Asymmetric Knowledge Flow,
+  Data-Driven Synergy, and a Vision Laziness Phenomenon That
+  Together Explain Why Early Joint Training Dominates}\par\vspace{6pt}
+
+{\small\textbf{By} Junlin Han, Shengbang Tong, David Fan, Minghao Chen,
+  Philip Torr, Filippos Kokkinos, Mike Lewis}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.05000 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Training a single model to understand and generate across modalities has become the
+dominant paradigm in multimodal AI, yet the mechanisms by which modalities interact
+during joint pretraining remain poorly understood. This paper presents a systematic
+empirical investigation — a ``physics'' of multimodal pretraining — identifying four
+mechanistic principles that explain why certain design choices succeed: asymmetric
+knowledge flow, data-complexity-driven synergy, early unification superiority, and
+compute-efficient recipes that deliver strong models at 5\% of naive training cost.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Multimodal pretraining design is largely empirical;
+    the mechanisms behind successful choices are unknown.
+  \item[Why it matters:] Principled design could drastically reduce the compute
+    required to train capable multimodal models.
+  \item[Method:] Controlled ablations over modality combinations, training order,
+    and architecture choices; validated by training 13.5B MoE models on 2T tokens.
+  \item[Result:] Four mechanistic principles identified; efficient recipes
+    achieve competitive quality at 5\% of naive joint-training compute.
+  \item[Evidence:] Cross-modal transfer measured via held-out evaluation;
+    vision laziness confirmed by representation analysis.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Modern multimodal models are trained to process and generate across language, visual
+understanding (image captioning, visual question answering), and visual generation
+(text-to-image synthesis). The standard practice is joint pretraining on a mixture
+of all modalities simultaneously. This works, but the design space is vast:
+which modalities to combine, in what order, with what architecture, and for how
+long on each task. Each choice is typically resolved through expensive ablations
+with no theoretical grounding.
+
+This paper asks: can we derive principled design rules from the mechanisms of
+multimodal training? By systematically varying one factor at a time and measuring
+the impact on all modalities, the authors identify four mechanistic principles
+that collectively constitute a ``physics'' of multimodal pretraining.
+
+\section{Why Existing Approaches Fall Short}
+
+The most common baselines for multimodal model design are:
+
+\textbf{Naive joint training:} Mix all modality data from the start in fixed ratios.
+Works, but expensive and provides no insight into which choices matter.
+
+\textbf{Sequential pretraining:} Pretrain on language, then adapt to vision via
+fine-tuning (e.g., LLaVA-style). Efficient but caps multimodal integration quality
+because the language representations are already frozen when vision is introduced.
+
+\textbf{Late alignment:} Train unimodal encoders separately, then align them via
+a projection layer. Limited by the quality of the alignment stage and the
+incompatibility of separately-optimized representation spaces.
+
+None of these approaches is informed by an understanding of \emph{how} modalities
+interact. The four principles below provide that understanding.
+
+\section{Core Mechanism}
+
+\textbf{Principle 1 --- Asymmetric Knowledge Flow.}
+Language knowledge transfers readily into visual understanding (via shared
+text-image pairs), but visual generation benefits less directly from language
+pretraining. The asymmetry means language pretraining is a high-value starting
+point for understanding tasks but should not be allowed to dominate the training
+objective for generation tasks.
+
+\textbf{Principle 2 --- Data Complexity Drives Synergy.}
+On simple datasets (small vocabulary, low intra-class variability), training on
+multiple modalities simultaneously induces modality competition: one modality
+dominates gradient updates and the others underfit. On complex, diverse datasets,
+the modalities are synergistic: each modality provides complementary learning
+signal that improves performance on the others. Architecturally, synergy is
+promoted by shared attention and normalization layers with modality-specific
+feed-forward networks.
+
+\textbf{Principle 3 --- Early Unification and Vision Laziness.}
+Unifying modalities from the start of training outperforms sequential or late
+alignment. The paper identifies the mechanism: \emph{vision laziness}. When
+visual input is introduced after strong language representations have formed,
+the model has already developed robust language priors. It then relies on those
+priors rather than learning genuinely visual representations. The visual encoder
+receives gradient signals that push it to produce language-compatible features
+rather than visually grounded ones. Early unification prevents this by forcing
+visual and language representations to co-evolve from the first gradient step.
+
+\textbf{Principle 4 --- Efficient Recipes.}
+Combining the first three principles, the authors derive pretraining recipes
+that achieve state-of-the-art multimodal performance using only 5\% of the
+compute budget of naive joint training.
+
+\section{Technical Formulation}
+
+Let $\mathcal{D} = \{(x_i^L, x_i^V, x_i^G)\}$ be a dataset of language,
+visual understanding, and visual generation examples. A multimodal model $f_\theta$
+is trained with a joint loss:
+\[
+  \mathcal{L}(\theta) = \alpha_L \mathcal{L}_L(\theta) +
+  \alpha_V \mathcal{L}_V(\theta) + \alpha_G \mathcal{L}_G(\theta)
+\]
+where $\alpha_L, \alpha_V, \alpha_G$ are modality weights. Standard approaches
+set these weights by data size. The paper proposes setting them adaptively based
+on the complexity and synergy of the current data mixture.
+
+The synergy coefficient between modalities $i$ and $j$ at training step $t$ is:
+\[
+  S_{ij}(t) = \frac{\partial \mathcal{L}_i / \partial \theta \cdot
+  \partial \mathcal{L}_j / \partial \theta}
+  {\|\partial \mathcal{L}_i / \partial \theta\| \cdot
+  \|\partial \mathcal{L}_j / \partial \theta\|}
+\]
+Positive $S_{ij}$ indicates aligned gradients (synergy); negative indicates
+competition. Monitoring $S_{ij}$ during training reveals when modalities are
+cooperating and when they are in conflict.
+
+\section{Learning or Inference Procedure}
+
+The study trains a series of controlled ablation models, holding constant the
+total compute budget while varying: (1) which modalities are present, (2) the
+order in which modalities are introduced, (3) the architecture of shared vs.\
+modality-specific layers, and (4) the data mixture complexity. The final
+efficient recipe is validated by training $4\times$13.5B-parameter MoE models
+on 2T tokens.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that the four
+principles reliably improve multimodal model quality across the tested model
+sizes (up to 13.5B parameters) and data scales (up to 2T tokens). The
+cross-modal transfer measurements and vision laziness analysis provide mechanistic
+evidence for why the principles hold, but formal generalization bounds are absent.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Knowledge flow:} Pretraining on language improves visual
+    understanding by up to 8 points (ImageNet accuracy) but improves visual
+    generation by less than 2 FID points. Visual generation pretraining
+    improves visual understanding by 3--5 points.
+  \item \textbf{Synergy:} On complex datasets, joint training improves each
+    modality by 3--12 points over single-modality training. On simple datasets,
+    joint training hurts performance by 2--5 points.
+  \item \textbf{Vision laziness:} Models with late visual integration have
+    visual encoder representations that are 60--70\% correlated with
+    language encoder representations, vs.\ 30--40\% for early-unified models
+    — confirming that vision laziness reduces visual grounding.
+  \item \textbf{Efficient recipes:} The derived recipe matches the quality of
+    naive joint training at 5\% compute, and exceeds sequential pretraining
+    at all compute levels tested.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Architecture:} Fully shared architectures suffer modality competition
+even on complex data. Fully separate (modality-specific) architectures cannot
+share knowledge. The intermediate design — shared attention and normalization,
+modality-specific feed-forward — achieves the best trade-off in all settings.
+
+\textbf{Data mixing:} The optimal mixture ratio is task-dependent, but the
+synergy coefficient $S_{ij}$ predicts which mixtures will be beneficial in
+advance, enabling adaptive data scheduling without exhaustive grid search.
+
+\textbf{Training order:} The vision laziness effect is most pronounced when
+vision is introduced after 30\% of the total training budget has elapsed.
+Introducing vision at 10\% or earlier eliminates the effect; full early
+unification (from step 0) is optimal.
+
+\section*{Reference}
+
+Junlin Han, Shengbang Tong, David Fan, Minghao Chen, Philip Torr,
+Filippos Kokkinos, Mike Lewis.
+\textbf{Towards Physics of Multimodal Pretraining: Knowledge Flow, Modality Synergy,
+Early Unification, and Recipes}.
+arXiv:2608.05000, August 2026.
+\url{https://arxiv.org/abs/2608.05000}
+
+\end{document}

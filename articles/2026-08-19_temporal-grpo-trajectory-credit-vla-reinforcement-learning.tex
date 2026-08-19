@@ -1,0 +1,238 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language-action models \textbullet{}
+  credit assignment \textbullet{}
+  robotic manipulation \textbullet{}
+  GRPO}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Temporal GRPO: Beyond Trajectory-Level Credit
+  in Vision-Language-Action Reinforcement Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Decomposing Trajectory Rewards Into Step-Level Signals Improves
+  Sample Efficiency and Task Success in Robotic Manipulation
+  with VLA Policies}\par\vspace{6pt}
+
+{\small\textbf{By} Yao Zhou, Hang Gao, Fengge Wu,
+  Changwen Zheng, Wenwen Qiang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.13026 \textbullet{} Preprint, August 2026 \textbullet{}
+  Robotics (cs.RO)}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reinforcement learning for Vision-Language-Action (VLA) models assigns a single
+trajectory-level reward to the entire action sequence, treating every step as
+equally responsible for success or failure. This coarse credit assignment
+conflates critical actions (precise contact) with inconsequential ones (stable
+approach), producing an uninformative gradient signal that slows learning.
+Temporal GRPO extends Group Relative Policy Optimization with a temporal credit
+decomposition mechanism, distributing trajectory rewards to individual steps
+based on their temporal context, and demonstrates improved sample efficiency and
+task success on robotic manipulation benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Trajectory-level RL credit assignment for VLA models fails to
+    distinguish the contribution of individual actions to task outcomes.
+  \item[Why it matters:] VLA manipulation tasks have long action horizons where
+    a few critical steps determine success; coarse credit wastes gradient budget.
+  \item[Method:] Decompose trajectory reward into step-level credits conditioned
+    on temporal position and local state transitions within the GRPO framework.
+  \item[Result:] Improved sample efficiency and task success rate over standard
+    GRPO on multi-step robotic manipulation benchmarks.
+  \item[Evidence:] Gains replicated across multiple manipulation tasks; ablations
+    confirm temporal conditioning is the key driver.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-Language-Action (VLA) models are large multimodal policies that take
+images of the scene and a language instruction as input and output a sequence
+of robot actions. They have achieved impressive results on diverse manipulation
+tasks by combining the knowledge of large pretrained vision-language models
+with task-specific RL fine-tuning.
+
+The RL fine-tuning phase typically uses algorithms like GRPO, which generates
+groups of $G$ trajectories from the current policy, computes a binary reward
+(did the task succeed?), and uses the relative ranking within the group to
+compute policy gradient updates. Every action in a successful trajectory
+receives a positive update; every action in a failed trajectory receives a
+negative update.
+
+This trajectory-level assignment is coarse. A grasping task with 80 action
+steps may succeed or fail based on a single step — the precise contact between
+the gripper and the object. Temporal GRPO identifies that step and concentrates
+gradient signal on it, leaving the uninformative steps with near-zero gradient.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard GRPO} assigns trajectory reward uniformly across all steps:
+\[
+  \nabla \mathcal{L} = \frac{1}{G}\sum_{g=1}^G \hat{A}_g \cdot
+  \sum_{t=1}^T \nabla \log \pi_\theta(a_{g,t} | s_{g,t})
+\]
+where $\hat{A}_g = R_g - \text{baseline}$ is the group-relative advantage.
+Every step $t$ in trajectory $g$ receives the same weight $\hat{A}_g$.
+
+\textbf{Dense reward shaping} assigns step-level rewards via a hand-designed
+function (e.g., distance to goal, object height). This works for simple tasks
+but requires domain expertise and does not generalize across task families.
+
+\textbf{Hindsight reward assignment} assigns credit based on outcome
+retrospectively but does not distinguish which actions were causally important
+for that outcome.
+
+Temporal GRPO avoids hand-designed rewards and operates within the standard
+GRPO framework, requiring only a temporal credit decomposition function that
+is learned from the trajectory data.
+
+\section{Core Mechanism}
+
+Temporal GRPO decomposes the trajectory-level advantage $\hat{A}_g$ into
+step-level advantages $\hat{a}_{g,t}$ using a temporal credit function $c(t, T, s_{g,t})$
+that depends on:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Temporal position $t/T$:} Early steps (approach) and late
+    steps (contact, post-grasp) receive different baseline credit weights.
+  \item \textbf{State transition:} The change in scene state $\Delta s_{g,t} = s_{g,t+1} - s_{g,t}$
+    identifies steps where significant state changes occurred (contact, placement).
+    High-change steps receive higher credit.
+\end{itemize}
+
+The group-relative baseline is computed at the step level: for step $t$ across
+all $G$ trajectories, the baseline is the mean step-level credit over the group:
+\[
+  \hat{a}_{g,t} = c(t, T, s_{g,t}) \cdot \hat{A}_g - \bar{c}_t
+\]
+where $\bar{c}_t = \frac{1}{G}\sum_{g'=1}^G c(t, T, s_{g',t}) \cdot \hat{A}_{g'}$.
+
+\section{Technical Formulation}
+
+The Temporal GRPO policy gradient objective is:
+\[
+  \mathcal{L}_{\text{TG}}(\theta) = -\frac{1}{G}\sum_{g=1}^G \sum_{t=1}^T
+  \hat{a}_{g,t} \cdot \log \pi_\theta(a_{g,t} \mid s_{g,t})
+\]
+with credit function:
+\[
+  c(t, T, s_{g,t}) = w_{\text{pos}}(t/T) \cdot w_{\text{trans}}(\|\Delta s_{g,t}\|)
+\]
+where $w_{\text{pos}}$ is a learned position-dependent weight function (modeled
+as a shallow MLP) and $w_{\text{trans}}$ is a monotone function of state
+transition magnitude.
+
+The position weight $w_{\text{pos}}$ is trained jointly with $\pi_\theta$ via
+a meta-learning objective that maximizes the correlation between step-level
+advantage and final task success probability:
+\[
+  \mathcal{L}_{\text{meta}}(w) = -\text{Corr}\left(\hat{a}_{g,t},\,
+  P(\text{success} \mid s_{g,1:t})\right)
+\]
+where $P(\text{success} \mid s_{g,1:t})$ is estimated by a lightweight success
+predictor trained on the same trajectory data.
+
+\section{Learning or Inference Procedure}
+
+Training alternates between two updates:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Policy update:} Sample $G$ trajectories from $\pi_\theta$,
+    compute $\hat{a}_{g,t}$ using current $w_{\text{pos}}$, update $\theta$
+    via $\mathcal{L}_{\text{TG}}$.
+  \item \textbf{Credit function update:} Update $w_{\text{pos}}$ via
+    $\mathcal{L}_{\text{meta}}$ using the current trajectory data.
+\end{enumerate}
+The success predictor is updated with every new trajectory batch. At inference,
+the VLA policy $\pi_\theta$ is used directly; no credit function is needed.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that temporal credit
+decomposition consistently improves sample efficiency (fewer trajectories to
+reach a target success rate) and asymptotic task success rate over standard GRPO,
+across the tested manipulation tasks. The meta-learning correlation objective
+provides a principled basis for learning the credit function, but convergence
+properties are empirical.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Sample efficiency:} Temporal GRPO reaches 80\% task success
+    in 40--55\% fewer environment interactions than standard GRPO across
+    grasping, placing, and stacking tasks.
+  \item \textbf{Asymptotic success:} Final success rates improve by 5--12
+    percentage points on complex long-horizon tasks (4+ subtasks).
+  \item \textbf{Long-horizon advantage:} Improvement scales with task horizon.
+    Short tasks (1--2 steps) show minimal gain; tasks with 6+ action phases
+    show the largest improvements.
+  \item \textbf{Contact step analysis:} The credit function concentrates
+    $>$60\% of the total trajectory credit on the 2--5 contact steps in a
+    typical 80-step grasp trajectory, confirming that temporal credit is
+    identifying the causally important steps.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Position weighting only} (removing state-transition weighting) captures
+60--70\% of the full benefit, confirming that temporal position is the dominant
+signal. The state-transition term adds the remainder.
+
+\textbf{Fixed vs.\ learned position weight:} A hand-designed position weight
+(e.g., linear ramp emphasizing later steps) achieves 80\% of the benefit of the
+learned weight on structured manipulation tasks, suggesting the timing pattern is
+partially predictable from task structure.
+
+\textbf{Group size $G$:} Temporal GRPO achieves the same accuracy as standard
+GRPO with $G=8$ using $G=4$, halving the rollout cost for the same gradient quality.
+
+\section*{Reference}
+
+Yao Zhou, Hang Gao, Fengge Wu, Changwen Zheng, Wenwen Qiang.
+\textbf{Temporal GRPO: Beyond Trajectory-Level Credit in Vision-Language-Action
+Reinforcement Learning}.
+arXiv:2608.13026, August 2026.
+\url{https://arxiv.org/abs/2608.13026}
+
+\end{document}

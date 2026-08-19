@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  flow matching \textbullet{}
+  efficient generative models \textbullet{}
+  image synthesis \textbullet{}
+  multidimensional conditioning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  XYZFlow: Scaling Multidimensional Shortcut
+  Flows for Efficient Generative Modeling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Adding Temporal History and Spatial Context to Flow Matching
+  Straightens Trajectories, Enabling High-Quality Generation
+  in Fewer Steps Without a Teacher Model}\par\vspace{6pt}
+
+{\small\textbf{By} Jinxiu Liu, Xuanming Liu, Kangfu Mei,
+  Yandong Wen, Weiyang Liu}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.12276 \textbullet{} Preprint, August 2026 \textbullet{}
+  CUHK; Westlake University; Johns Hopkins University}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Diffusion models produce state-of-the-art images but require dozens of iterative
+sampling steps. The standard acceleration path --- distilling a slow teacher into
+a few-step student --- inherits the teacher's quality ceiling and demands careful
+training. XYZFlow takes a different route: it redesigns flow matching itself by
+conditioning probability paths on denoising history (temporal dimension Y) and
+neighboring spatial patches (spatial dimension Z), in addition to the standard
+denoising time (dimension X). Richer conditioning straightens the flow trajectory,
+enabling high-quality generation in far fewer steps with no teacher model required.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Flow/diffusion models require many sampling steps for high quality;
+    distillation-based speedups depend on teacher quality and are hard to train.
+  \item[Why it matters:] Efficient generation is critical for interactive and
+    high-throughput image synthesis applications.
+  \item[Method:] Extend flow matching to three conditioning dimensions: denoising
+    time (X), denoising history (Y), and spatial patch context (Z).
+  \item[Result:] Higher quality per function evaluation than distilled few-step
+    models; no teacher model required; quality improves monotonically with conditioning.
+  \item[Evidence:] FID and CLIP-score improvements over 1--4 step baselines across
+    multiple image benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Flow matching learns a continuous-time transformation that maps noise
+$z \sim \mathcal{N}(0, I)$ to data $x \sim p_{\text{data}}$ via a
+probability path $(p_t)_{t \in [0,1]}$. Standard flow matching parameterizes
+this path along a single temporal dimension $t$ (the denoising time), yielding
+a velocity field $v_\theta(z, t)$ that must integrate to transform noise into
+data in a finite number of steps.
+
+The core challenge is trajectory curvature: curved probability paths require
+many small integration steps for accurate traversal. Straight paths can be
+traversed in fewer steps with larger step sizes. Existing efficient methods
+reduce curvature after the fact via distillation, but this is computationally
+expensive and inherits the teacher model's limitations.
+
+XYZFlow introduces two additional conditioning dimensions that straighten the
+path \emph{by design} during training: the denoising history (accumulated context
+from prior steps) and the spatial context (generated patches in neighboring regions).
+By conditioning on more of the world state at each step, the model's uncertainty
+about the optimal next step decreases, and the induced trajectory becomes straighter.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{One/two-step distillation} (Consistency Models, LCM, TurboFlow) trains a
+student model to match the teacher's output in one or two steps. Quality is bounded
+by the teacher, and the distillation objective is sensitive to hyperparameters. The
+student also cannot generalize beyond the teacher's mode coverage.
+
+\textbf{Adversarial diffusion distillation} (ADD, DMD) adds a discriminator to
+the distillation loss, improving one-step quality but further complicating training
+and introducing GAN instabilities.
+
+\textbf{Autoregressive generation} achieves efficiency through sequential patch
+prediction but sacrifices the parallelism of diffusion-based approaches and requires
+discrete tokenization.
+
+XYZFlow achieves the efficiency gains of distilled models without a teacher,
+and the expressivity gains of autoregressive models without discrete tokenization.
+
+\section{Core Mechanism}
+
+XYZFlow's velocity field is conditioned on three quantities at each step:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{X --- denoising time $t$:} Standard conditioning on current
+    noise level, shared with all flow matching models.
+  \item \textbf{Y --- denoising history $h_t = (z_{t_1}, z_{t_2}, \ldots)$:}
+    A memory of the partial trajectory, conditioning on states at a set of
+    prior denoising times $t_1 > t_2 > \cdots > t$. This non-Markovian
+    conditioning allows the model to exploit accumulated context about
+    the direction of the trajectory.
+  \item \textbf{Z --- spatial context $s_i$:} During spatial dimension
+    generation (sequential patch prediction), conditioning on the set
+    of already-generated patches $s_{<i}$ provides spatial consistency
+    that reduces uncertainty about each new patch's target state.
+\end{itemize}
+
+The velocity field is:
+\[
+  v_\theta(z_t, t, h_t, s_{<i}) \approx \nabla_{z_t} \log p_t(z_t \mid h_t, s_{<i})
+\]
+with richer conditioning providing a more informative gradient direction at each step.
+
+\section{Technical Formulation}
+
+Standard flow matching minimizes the conditional flow matching loss:
+\[
+  \mathcal{L}_{\text{FM}}(\theta) = \mathbb{E}_{t, z_0, z_1}
+  \left[\|v_\theta(z_t, t) - (z_1 - z_0)\|^2\right]
+\]
+where $z_t = (1-t)z_0 + tz_1$ is the linear interpolation path.
+
+XYZFlow extends this to the multidimensional conditioned loss:
+\[
+  \mathcal{L}_{\text{XYZ}}(\theta) = \mathbb{E}_{t, z_0, z_1, h_t, s_{<i}}
+  \left[\|v_\theta(z_t, t, h_t, s_{<i}) - (z_1 - z_0)\|^2\right]
+\]
+
+The key theoretical result is that the \emph{optimal} velocity $v^*(z_t, t, h_t, s_{<i})$
+is straighter (lower curvature) than $v^*(z_t, t)$ whenever the conditioning
+variables $h_t$ and $s_{<i}$ are informative about the target $z_1$.
+This follows from the variance decomposition:
+\[
+  \mathbb{E}[\|z_1 - z_0\|^2] \geq \mathbb{E}[\|z_1 - \mathbb{E}[z_1 \mid h_t, s_{<i}, z_t]\|^2]
+\]
+The residual uncertainty under conditioning is lower, implying the conditioned
+target is closer to the true target at each step.
+
+\section{Learning or Inference Procedure}
+
+Training follows standard flow matching: sample pairs $(z_0, z_1)$, sample
+time $t$, compute $z_t$, retrieve history $h_t$ from prior steps of the
+current trajectory, retrieve spatial context $s_{<i}$ from previously
+generated patches, and minimize $\mathcal{L}_{\text{XYZ}}$.
+
+At inference, generation proceeds in two nested loops:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Temporal loop:} Take $N_T$ denoising steps ($N_T = 2$--$8$
+    for efficient generation, vs.\ $50$--$1000$ for standard diffusion).
+    Maintain history $h_t$ across steps.
+  \item \textbf{Spatial loop:} At each denoising step, generate patches
+    sequentially, conditioning each patch on the already-generated patches.
+    $N_S$ patches are generated per step.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The paper proves that, under perfect conditioning, the XYZFlow velocity field
+induces a straighter trajectory than standard flow matching, requiring fewer
+integration steps for the same approximation error. The practical guarantee is:
+for a fixed number of function evaluations (NFE), XYZFlow achieves lower FID
+than unconditioned flow matching and distilled models at matched NFE.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Quality vs.\ NFE:} At NFE$=2$, XYZFlow outperforms LCM and
+    TurboFlow by 3--5 FID points on ImageNet-256 and COCO.
+  \item \textbf{No teacher required:} XYZFlow trained from scratch matches
+    or exceeds the quality of distilled models trained from a strong teacher.
+  \item \textbf{Monotonic improvement:} Adding Y conditioning over X improves
+    FID by 2--3 points; adding Z conditioning further improves by 1--2 points.
+    X $<$ XY $<$ XYZ holds consistently across NFE settings.
+  \item \textbf{Scaling:} Quality scales gracefully with NFE; there is no
+    saturation plateau seen in distilled models at 2--4 steps.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{History length:} Conditioning on 2--3 prior states (vs.\ just $t-1$)
+captures most of the benefit; conditioning on the full history provides
+marginal additional gain at higher memory cost.
+
+\textbf{Spatial patch order:} Raster-scan order outperforms random order,
+confirming that spatial locality in the conditioning signal matters.
+
+\textbf{Architecture:} Cross-attention over history states outperforms
+concatenation for integrating the Y and Z conditioning signals.
+
+\section*{Reference}
+
+Jinxiu Liu, Xuanming Liu, Kangfu Mei, Yandong Wen, Weiyang Liu.
+\textbf{XYZFlow: Scaling Multidimensional Shortcut Flows for Efficient Generative Modeling}.
+arXiv:2608.12276, August 2026.
+\url{https://arxiv.org/abs/2608.12276}
+
+\end{document}

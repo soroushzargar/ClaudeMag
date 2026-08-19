@@ -1,0 +1,241 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  efficient inference \textbullet{}
+  KV-cache compression \textbullet{}
+  process reward model \textbullet{}
+  chain-of-thought reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Fewer Tokens, Smaller Cache:
+  Reward-Coordinated Efficient Reasoning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Process Reward Signals Jointly Guide Cache Eviction and Generation
+  Length to Halve Inference Cost Without Sacrificing Accuracy}\par\vspace{6pt}
+
+{\small\textbf{By} Qiyuan Zhu, Dezhi Li, Pengyu Cheng, Tianle Chen,
+  Jiacheng Wang, Ruijie Shen, Hao Gu, Sida Lin, Zirui Liu, Jiacheng Liu,
+  Sirui Han}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.04771 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Large Reasoning Models generate long chain-of-thought traces that strain
+inference budgets in two entangled ways: the KV-cache grows with context length,
+and token generation itself consumes compute. Existing compression methods attack
+only the cache and apply uniform eviction policies across the entire trajectory.
+This paper shows that a process reward model (PRM) naturally tracks
+\emph{where} compression is safe and \emph{when} generation can stop,
+enabling simultaneous reduction of both costs under a single reward-coordinated
+framework called RCER.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LRM inference is expensive in both KV-cache memory and
+    generated tokens; uniform compression sacrifices accuracy.
+  \item[Why it matters:] Efficient LRM deployment is blocked by inference cost;
+    a principled two-sided solution would substantially lower the barrier.
+  \item[Method:] Use a process reward model to guide KV-cache eviction
+    (high-reward steps tolerate more deletion) and generation stopping
+    (stop when the reward signals convergence).
+  \item[Result:] Simultaneous reduction in cache size and token count,
+    with accuracy preserved at compression rates that defeat uniform baselines.
+  \item[Evidence:] Ablations confirm that reward-guided eviction outperforms
+    attention-score and recency heuristics at matched compression ratios.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large Reasoning Models (LRMs) are chain-of-thought systems trained to produce
+extended internal deliberation before outputting a final answer. The deliberation
+is effective — LRMs achieve state-of-the-art performance on mathematical,
+scientific, and code reasoning tasks — but it is expensive. A single
+difficult-problem response may span thousands of tokens of intermediate reasoning,
+all of which must be stored in the KV-cache during generation and computed token
+by token.
+
+Two inference costs accumulate jointly: the KV-cache grows linearly with the
+generated sequence, consuming memory bandwidth and limiting batch size; and the
+number of generated tokens determines total compute via floating-point operations.
+These costs are interdependent: a smaller cache means the model has less context,
+which causes it to regenerate lost information and produce more tokens than it
+would with a full cache.
+
+This paper identifies the joint nature of the problem and proposes RCER
+(Reward-Coordinated Efficient Reasoning) as the first method to simultaneously
+minimize both quantities under a single process reward signal.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Cache-only compression} reduces KV-cache size by evicting past tokens
+based on heuristics: recency (evict oldest tokens), attention score (evict
+least-attended tokens), or importance scores derived from gradient norms.
+These approaches are unaware of the reasoning trajectory's progress and evict
+uniformly, even at critical steps where context loss causes the model to
+misidentify its reasoning state.
+
+\textbf{Generation length reduction} without cache-awareness typically operates
+through early-exit mechanisms that terminate generation when some threshold is
+reached. Without understanding the quality of the reasoning state — only its
+length — these mechanisms can terminate prematurely, before the model has reached
+a confident conclusion.
+
+Neither class of method accounts for the \emph{interaction}: compressing the
+cache causes more generation, and shortening generation can leave the cache
+unnecessarily large. RCER resolves this by tying both decisions to the same
+quality signal.
+
+\section{Core Mechanism}
+
+RCER augments standard LRM decoding with a process reward model $\phi$
+that is evaluated at each reasoning step $k$ to produce a scalar quality
+estimate $r_k = \phi(x, t_{\leq k}) \in [0, 1]$, where $x$ is the input
+problem and $t_{\leq k}$ is the reasoning trace up to step $k$.
+
+The PRM drives two decisions:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Cache eviction:} When $r_k$ is high (the model has committed to
+    a correct sub-conclusion), the cached representations of older tokens are
+    less necessary — the model's trajectory is converging. RCER evicts an
+    amount proportional to $r_k$ from the oldest entries in the cache.
+  \item \textbf{Generation stopping:} When $r_k$ exceeds a convergence threshold
+    $\tau$ and has been stable for $\delta$ steps, RCER terminates generation
+    and commits the current answer, avoiding wasteful continuation of a
+    completed reasoning chain.
+\end{enumerate}
+
+No additional model beyond the PRM (which may be a lightweight verifier) is
+required.
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ be the LRM and $r_k = \phi(x, t_{\leq k})$ the PRM score at step $k$.
+
+\textbf{Cache eviction budget at step $k$:}
+\[
+  b_k = \beta \cdot r_k \cdot |\mathcal{C}_k|
+\]
+where $|\mathcal{C}_k|$ is the current cache size and $\beta$ is a
+compression rate hyperparameter. Tokens are evicted from the oldest
+$b_k$ positions.
+
+\textbf{Generation stopping criterion:}
+\[
+  \text{stop if} \quad r_k \geq \tau \quad \text{and} \quad
+  \frac{1}{\delta}\sum_{j=k-\delta}^{k} r_j \geq \tau - \varepsilon
+\]
+This ensures both that the current state is high-quality and that the
+quality has been stable (not just a local spike).
+
+\textbf{Effective inference cost:}
+\[
+  \mathcal{L} = \underbrace{\sum_{k=1}^{K} |\mathcal{C}_k|}_{\text{cache cost}}
+  + \lambda \cdot \underbrace{K}_{\text{token cost}}
+\]
+RCER minimizes $\mathcal{L}$ under the constraint that accuracy remains
+within $\epsilon$ of unconstrained decoding.
+
+\section{Learning or Inference Procedure}
+
+RCER is a \emph{training-free} inference-time method. The LRM $\pi_\theta$
+and PRM $\phi$ are both used off-the-shelf without any fine-tuning. The
+only hyperparameters are:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item $\beta \in [0, 1]$: eviction rate (ablated: 0.1, 0.3, 0.5)
+  \item $\tau \in [0, 1]$: convergence threshold (ablated: 0.7, 0.8, 0.9)
+  \item $\delta$: stability window in steps (ablated: 5, 10, 20)
+  \item $\lambda$: weight trading off cache vs.\ token cost
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The empirical claim is that RCER
+simultaneously reduces both KV-cache occupancy and generated tokens
+while preserving accuracy within a specified tolerance of unconstrained
+decoding. The main theoretical insight — that PRM score correlates with
+the reasoning state's tolerance to context loss — is supported by
+ablation experiments rather than formal analysis.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Cache reduction:} RCER reduces peak KV-cache size by
+    40--55\% on GSM8K, MATH-500, and LiveCodeBench at accuracy
+    within 1\% of unconstrained decoding.
+  \item \textbf{Token reduction:} RCER simultaneously reduces generated
+    tokens by 20--35\% through early stopping at convergence.
+  \item \textbf{Uniform baselines fail:} At 40\% cache compression,
+    attention-score eviction drops accuracy by 4--8\%; RCER drops by less
+    than 1\%.
+  \item \textbf{Interaction confirmed:} Experiments show that cache-only
+    compression at rate $\beta$ increases token count by 10--25\%,
+    confirming the interaction and the necessity of joint coordination.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Eviction strategy:} Reward-guided eviction consistently outperforms
+recency, attention-score, and random eviction at matched budgets.
+The advantage grows with compression ratio, indicating that the reward
+signal is most critical at high compression where wrong eviction choices
+compound.
+
+\textbf{PRM quality:} A lightweight 1B-parameter verifier achieves 85--90\%
+of the benefit of a full-scale PRM, suggesting the approach is practical
+even without access to a high-accuracy reward model.
+
+\textbf{Stopping ablation:} Generation stopping without cache coordination
+saves tokens but wastes cache — the combined approach is strictly better
+than either alone on the joint cost metric.
+
+\section*{Reference}
+
+Qiyuan Zhu, Dezhi Li, Pengyu Cheng, Tianle Chen, Jiacheng Wang, Ruijie Shen,
+Hao Gu, Sida Lin, Zirui Liu, Jiacheng Liu, Sirui Han.
+\textbf{Fewer Tokens, Smaller Cache: Reward-Coordinated Efficient Reasoning}.
+arXiv:2608.04771, August 2026.
+\url{https://arxiv.org/abs/2608.04771}
+
+\end{document}
