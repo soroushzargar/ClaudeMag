@@ -1,0 +1,88 @@
+ML Papers List — 2026-08-24
+Generated for ClaudeMag
+
+1. SAPO: Single-Rollout Autoregressive Policy Optimization for Agentic Reinforcement Learning [arXiv 2026]
+   Authors: Dayang Liang, Lang Feng, Bo An, Yunlong Liu
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.19842
+   URL: https://arxiv.org/abs/2608.19842
+   Summary: Agentic reinforcement learning for LLMs faces a memory-compute dilemma: methods
+   like PPO require a separate critic model, doubling memory, while group-relative methods like
+   GRPO avoid a critic but provide only sequence-level credit and depend on large rollout
+   groups. SAPO resolves both problems by exploiting the autoregressive structure of LLMs to
+   produce policy and value predictions at distinct causal boundaries within a single shared
+   backbone, independently optimizing PPO objectives and auxiliary on-policy SARSA objectives.
+   A trajectory-level generalized advantage estimator combines lambda-returns with batch
+   normalization to stabilize training on long-horizon tasks. On ALFWorld and WebShop with
+   Qwen2.5-1.5B/7B, SAPO outperforms PPO and GRPO by mean +15.1 and +12.1 percentage
+   points respectively, while eliminating the separate critic memory cost and reducing
+   per-iteration runtime by 33.2% over PPO.
+
+2. tau0-VLA: a Hierarchical Robot Foundation Model with World-Model-Guided Test-Time Computation [arXiv 2026]
+   Authors: (SII Research team)
+   Affiliation: SII Research
+   Venue/ID: arXiv:2608.16885
+   URL: https://arxiv.org/abs/2608.16885
+   Summary: Long-horizon robot manipulation requires reliable skill execution and coherent
+   subtask sequencing over extended trajectories. Most hierarchical vision-language-action
+   (VLA) models make high-level decisions with a single forward pass, leaving no mechanism to
+   allocate additional computation to ambiguous or high-stakes choices. tau0-VLA addresses this
+   by formulating high-level subtask generation as a compute-scalable inference problem: a
+   memory-augmented high-level policy monitors token-confidence statistics, and when confidence
+   is low it triggers a propose-predict-evaluate loop in which the proposal model generates
+   candidate subtasks, a world model predicts terminal observations, and a value model scores
+   outcomes. Trained on 40,115 hours of heterogeneous real-world manipulation data, allocating
+   additional test-time computation substantially improves next-subtask prediction accuracy,
+   with gains directly translating to higher closed-loop success on long-horizon tasks.
+
+3. Le Critique: Privileged Value Functions for LLM Reinforcement Learning [arXiv 2026]
+   Authors: Siddarth Venkatraman, Matthieu Dinot, Laurence Aitchison
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.16739
+   URL: https://arxiv.org/abs/2608.16739
+   Summary: Group-relative methods like GRPO reduce gradient variance in LLM reinforcement
+   learning by sampling multiple rollouts per prompt, but they provide only sequence-level
+   credit assignment and are bottlenecked by straggler rollouts that reduce throughput and
+   increase off-policyness. Learned value functions theoretically address both problems, but
+   accurate value estimation from the policy's own context is difficult for LLMs. Le Critique
+   proposes Privileged Value Functions (PVF), which give the critic access to information
+   beyond the standard token context (such as partial ground-truth or privileged task state)
+   during training only, enabling more accurate token-level advantage estimates without
+   contaminating the policy's inference context. The paper also introduces TETHER, an adaptive
+   baseline that smoothly interpolates between group-relative and value-based advantages
+   depending on critic reliability.
+
+4. ComplexityWorld: Benchmarking Vision-Language Models on Verifiable Visual Decision Making [arXiv 2026]
+   Authors: Not specified
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.07584
+   URL: https://arxiv.org/abs/2608.07584
+   Summary: Vision-language models have made rapid progress in visual perception and
+   increasingly support real-world tasks requiring images. Many such tasks demand more than
+   recognizing image contents: a model must use visual evidence to make a complete decision
+   whose components jointly satisfy global constraints. ComplexityWorld introduces a benchmark
+   of 390 tasks across 39 domain-inspired visual worlds and 29 decision categories. Each task
+   is generated from a hidden structured specification, rendered as a visual scene, and scored
+   by an executable verifier that accepts any feasible solution. Under direct inference, all
+   evaluated models except GPT-5.6-Sol remain below 40% verifier acceptance rate (VAR), while
+   GPT-5.6-Sol reaches 75.6%. Performance improves substantially when decision information is
+   made explicit in structured form, but varies sharply across equivalent visual presentations,
+   revealing that current VLMs struggle to reliably extract and satisfy visual constraints.
+
+5. How Do VLMs Behave When Blind or Misled? Behavioral Evaluation of VLMs on Scientific Figures [arXiv 2026]
+   Authors: Paul Osemudiame Oamen, Owusu-Banahene Osei, Ananya Mukherjee, Christian Greisinger,
+            Steffen Eger, Pius Onobhayedo, Wei Zhao
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.13267
+   URL: https://arxiv.org/abs/2608.13267
+   Summary: Existing VLM benchmarks emphasize perception and reasoning accuracy while giving
+   limited attention to behavioral reliability under uncertainty — how models behave when visual
+   evidence is missing or misleading. This paper introduces SciFigBench, a diagnostic benchmark
+   for scientific figure understanding that jointly evaluates perception, reasoning, and
+   behavioral reliability. The benchmark contains 250 figures with high-quality human
+   annotations across three evaluation aspects (600+ annotation hours) and extends these via
+   image transformations, reasoning questions, resistance probes, caption-bias probes, and
+   selective-blur targets, producing over 34,000 evaluation setups. Findings reveal that VLMs
+   frequently confabulate answers when visual information is blurred or absent, and are
+   systematically biased by figure captions even when captions contradict the visual content,
+   raising serious reliability concerns for scientific AI assistants.

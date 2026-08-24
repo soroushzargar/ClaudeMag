@@ -1,0 +1,246 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-24}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language models \textbullet{}
+  benchmark \textbullet{}
+  visual decision making \textbullet{}
+  constraint satisfaction}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  ComplexityWorld: Benchmarking Vision-Language
+  Models on Verifiable Visual Decision
+  Making}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  390 Tasks Across 39 Visual Worlds Show That Most VLMs Cannot
+  Extract Constraints from Images and Satisfy Them Jointly ---
+  Only One Model Exceeds 75\%}\par\vspace{6pt}
+
+{\small\textbf{By} ComplexityWorld Authors}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.07584 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Many real-world AI tasks require more than perceiving what an image
+contains: a model must use visual evidence to make a decision whose
+components jointly satisfy global constraints. ComplexityWorld
+introduces a benchmark of 390 tasks across 39 domain-inspired visual
+worlds and 29 decision categories, each scored by an executable
+verifier that accepts any feasible solution. Under direct visual
+inference, all evaluated VLMs except GPT-5.6-Sol fall below 40\%
+verifier acceptance rate (VAR), while GPT-5.6-Sol reaches 75.6\%.
+A 23-point gap between visual and structured-text conditions reveals
+that the dominant failure mode is visual constraint extraction, not
+reasoning.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLM benchmarks test perception and QA accuracy but
+    not the ability to make constraint-satisfying decisions from visual
+    evidence, leaving a large deployment-relevant gap unmeasured.
+  \item[Why it matters:] Real-world tasks (scheduling, logistics,
+    design) require visually-grounded constraint satisfaction; current
+    evaluations do not capture whether models can do this.
+  \item[Method:] Generate 390 tasks from hidden structured
+    specifications rendered as visual scenes; use executable verifiers
+    rather than LLM judges to score feasibility.
+  \item[Result:] Only GPT-5.6-Sol exceeds 40\% VAR (reaching 75.6\%);
+    all other models remain below 40\%.
+  \item[Evidence:] Same tasks in structured-text form achieve $+23$ pp
+    average VAR, isolating visual extraction as the key failure mode.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-language models have advanced rapidly on perception tasks ---
+they can accurately describe image contents, count objects, and answer
+factual questions about visual scenes. This progress has driven
+optimism about deploying VLMs in real-world decision support: assisting
+with medical imaging, factory floor monitoring, logistics planning,
+and scientific data analysis.
+
+These real-world tasks share a property that standard benchmarks do
+not test: they require making a \emph{decision} from visual evidence,
+where the decision must satisfy multi-part constraints. A scheduling
+assistant reviewing a visual calendar cannot merely describe meetings;
+it must identify conflicts, dependencies, and resource constraints
+from the visual layout and produce a feasible schedule satisfying
+all of them simultaneously.
+
+This class of problem --- \emph{visual constraint-satisfying decision
+making} --- is distinct from visual perception and from verbal
+reasoning, and it is largely unmeasured by current evaluation suites.
+ComplexityWorld is the first systematic benchmark for this capability.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Perception benchmarks} (VQA, object counting, scene
+description) test whether models correctly identify what is present
+in an image. They do not test whether models can extract structured
+decision-relevant information from visual representations of
+constraints.
+
+\textbf{Verbal reasoning benchmarks} (GSM8K, logical reasoning
+datasets) test constraint satisfaction in text, but cannot assess
+whether visual extraction precedes and enables correct reasoning.
+
+\textbf{Prior VLM decision-making benchmarks} have used LLM-as-judge
+evaluation, which is susceptible to hallucination and cannot
+distinguish a feasible from a plausible-sounding infeasible solution.
+ComplexityWorld's verifier-based evaluation avoids these issues.
+
+\section{Core Mechanism}
+
+\textbf{Task generation pipeline:} Each task starts from a
+\emph{hidden structured specification} $\mathcal{S}$ that defines:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item A set of objects, resources, or agents with attributes
+  \item A set of hard constraints over decision variables
+  \item A decision space (assignments, routes, orderings, partitions)
+\end{itemize}
+The specification is rendered into a visual scene $I$ using a
+domain-appropriate renderer (grid-based for scheduling, graph-based
+for routing, CAD-based for spatial arrangement). An executable
+verifier $\mathcal{V}$ checks whether any response $r$ satisfies
+all constraints in $\mathcal{S}$.
+
+\textbf{Key design choices:}
+The verifier accepts \emph{any} feasible solution, not just the
+canonical one, avoiding benchmark contamination and penalizing models
+solely for constraint violations rather than stylistic deviation.
+
+\section{Technical Formulation}
+
+Let $\mathcal{S} = (X, C, \mathcal{D})$ be a task specification with
+decision variables $X = \{x_1, \ldots, x_n\}$, constraints
+$C = \{c_1, \ldots, c_m\}$ over $X$, and domain $\mathcal{D}$.
+
+A response $r$ parsed from the model's text output is a partial or
+complete assignment $\hat{X} = \{\hat{x}_1, \ldots, \hat{x}_n\}$.
+Verifier acceptance:
+\[
+  \text{Accept}(r, \mathcal{S}) = \mathbf{1}\!\left[
+    \bigwedge_{j=1}^m c_j(\hat{X}) = \text{TRUE}\right]
+\]
+The verifier acceptance rate (VAR) for model $M$ over task set $\mathcal{T}$:
+\[
+  \text{VAR}(M) = \frac{1}{|\mathcal{T}|}\sum_{i \in \mathcal{T}}
+    \text{Accept}(M(I_i), \mathcal{S}_i)
+\]
+The visual constraint extraction gap is measured by the difference
+between structured-text and visual-scene performance:
+\[
+  \Delta_\text{VCE}(M) = \text{VAR}(M, \text{structured})
+    - \text{VAR}(M, \text{visual})
+\]
+
+\section{Learning or Inference Procedure}
+
+ComplexityWorld is an evaluation benchmark, not a training procedure.
+Models are evaluated zero-shot with a standardized prompt that
+specifies the task domain, output format, and response constraints.
+No few-shot examples are provided in the main evaluation; ablations
+with $k=1,3,5$ in-context examples show improvement but do not
+close the gap with structured-text performance.
+
+\section{What the Guarantee Says}
+
+The verifier is formally specified for each domain using executable
+constraint logic. Verifier correctness is validated by human experts
+who confirm that feasibility checks match domain semantics.
+This guarantees that VAR measures genuine constraint satisfaction,
+not LLM-judge agreement with plausible-sounding responses.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Direct visual inference VAR:} GPT-5.6-Sol
+    reaches 75.6\%; all other models remain below 40\%.
+  \item \textbf{Visual constraint extraction gap:} Average
+    $\Delta_\text{VCE} = +23.1$ pp when the same task is
+    given in structured text vs.\ as a visual scene.
+  \item \textbf{Presentation sensitivity:} Changing visual style
+    (color scheme, font, layout) while keeping constraints identical
+    shifts VAR by up to 18 pp for the same model, revealing
+    brittleness in visual feature extraction.
+  \item \textbf{Category variation:} Routing and scheduling domains
+    are hardest (mean VAR $<25\%$); assignment and partitioning
+    domains are easier (mean VAR $\sim$38\%).
+  \item \textbf{Open vs.\ proprietary models:} Best open-weight
+    model achieves 31.4\% VAR; best proprietary model (GPT-5.6-Sol)
+    achieves 75.6\%, a gap of 44.2 pp.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{In-context examples:} Adding $k=5$ in-context (image, decision)
+examples improves VAR by 6.2 pp on average, but narrows the
+visual--structured gap by only 1.3 pp, confirming that the bottleneck
+is visual extraction, not few-shot learning of the decision format.
+
+\textbf{Chain-of-thought prompting:} Requiring models to reason
+step-by-step before producing a decision improves VAR by 4.8 pp
+on average, with larger gains on routing ($+8.1$ pp) and scheduling
+($+7.3$ pp) tasks that have natural sequential decision structure.
+
+\textbf{Constraint complexity:} VAR decreases sharply with the
+number of constraints $m$: from 52\% at $m=2$ to 21\% at $m=6$
+for a representative model, suggesting exponential constraint
+combinatorics as the dominant difficulty driver.
+
+\textbf{Error analysis:} Manual inspection of 200 failures reveals
+three failure modes: misreading a constraint value from the image
+(43\%), correctly extracting constraints but producing an infeasible
+assignment (38\%), and producing a feasible partial assignment that
+misses some variables (19\%).
+
+\section*{Reference}
+
+ComplexityWorld Authors.
+\textbf{ComplexityWorld: Benchmarking Vision-Language Models
+on Verifiable Visual Decision Making.}
+arXiv:2608.07584, August 2026.
+\url{https://arxiv.org/abs/2608.07584}
+
+\end{document}

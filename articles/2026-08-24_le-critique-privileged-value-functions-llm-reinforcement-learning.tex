@@ -1,0 +1,271 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-24}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  LLM reinforcement learning \textbullet{}
+  credit assignment \textbullet{}
+  value functions \textbullet{}
+  privileged information}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Le Critique: Privileged Value Functions
+  for LLM Reinforcement Learning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Critics with Access to Task-Privileged Context Provide
+  Token-Level Advantages Without Contaminating the Policy,
+  Beating GRPO with Fewer Rollouts}\par\vspace{6pt}
+
+{\small\textbf{By} Siddarth Venkatraman, Matthieu Dinot,
+  Laurence Aitchison}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.16739 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Group-relative methods like GRPO reduce gradient variance by sampling
+multiple rollouts per prompt, but they assign reward only at sequence
+level and are bottlenecked by straggler rollouts that reduce throughput
+and inflate off-policyness. Learned value functions solve both problems
+in principle, but training an accurate critic from the policy's own
+context is notoriously hard. \textit{Le Critique} introduces Privileged
+Value Functions (PVF), which give the critic access to task-privileged
+information (ground-truth answer, rubric, execution state) unavailable
+to the policy at inference time, enabling precise token-level advantage
+estimates from a single rollout. An adaptive interpolation baseline
+(TETHER) gracefully degrades to group-relative methods when the critic
+is unreliable.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] GRPO provides only sequence-level credit and suffers
+    from straggler bottlenecks; standard value functions are hard to
+    train from the policy's own context.
+  \item[Why it matters:] Token-level credit assignment could dramatically
+    accelerate LLM RL by identifying which reasoning steps actually
+    contribute to task success.
+  \item[Method:] Privileged Value Functions give critics access to
+    task-privileged context (e.g., the ground-truth) during training
+    only; TETHER adaptively interpolates between PVF and group baselines
+    depending on estimated critic reliability.
+  \item[Result:] $+4.2$ accuracy points on GSM8K/MATH vs.\ GRPO at the
+    same training budget; $2.3\times$ faster convergence than PPO.
+  \item[Evidence:] Ablations confirm that privileged context is essential;
+    PVF without privileged information underperforms GRPO, while TETHER
+    provides robustness when critic quality varies.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning for LLMs improves model behavior on tasks with
+scalar reward: math problem solving, code generation, instruction
+following. The central challenge is efficient credit assignment: which
+tokens in a response contributed to earning the reward, and by how much?
+
+Credit assignment is easy when reward is dense (every token gets a
+signal) or when rollouts are very short (a one-step response). For
+multi-step reasoning, answer construction, or long tool-use sequences,
+credit is sparse and long-delayed. The community has largely converged
+on two approaches, each with a critical flaw.
+
+\textbf{GRPO} avoids a critic by constructing a group of $G$ rollouts
+and using group statistics as a baseline. The flaw: every token in a
+response receives the same advantage, regardless of whether it was
+a key reasoning step or filler text.
+
+\textbf{PPO with a critic} provides token-level advantages but requires
+training a separate model $V_\phi$ that can accurately predict return
+from the policy's token context. The flaw: the context available to
+the critic (the tokens generated so far) is the same context available
+to the policy --- and the policy's context does not contain enough
+information to reliably predict long-horizon return.
+
+Le Critique's insight: the critic does not need to be limited to what
+the \emph{policy} can see.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Sequence-level baselines (GRPO, REINFORCE++):} Assigning
+the same advantage to all tokens in a 200-token reasoning chain means
+the model cannot distinguish a critical deduction that led to the
+correct answer from a redundant step that happened to precede it.
+On math reasoning tasks, early reasoning steps (problem setup, variable
+definition) are causally most important, but they receive the same
+credit as conclusion steps under group-relative methods.
+
+\textbf{Standard value functions (PPO):} The policy's context at step
+$t$ contains the problem statement and all tokens generated so far.
+This context does not directly contain the ground-truth answer, the
+rubric used for scoring, or whether the model is ``on track'' toward
+the correct solution. Trained on this incomplete information, critics
+tend to be poorly calibrated: they predict high value for
+high-confidence-but-wrong responses and fail to distinguish correct
+from incorrect intermediate reasoning.
+
+\section{Core Mechanism}
+
+\textbf{Privileged Value Functions (PVF):} The critic $V_\phi(s_t, p_t)$
+receives both the standard policy context $s_t$ (the token sequence)
+and a privileged context $p_t$ available in the training environment
+but not to the policy during inference. For math reasoning, $p_t$
+might include the ground-truth answer and intermediate solution steps;
+for code generation, it might include the test case outputs.
+
+The privileged context is concatenated before the model's context
+window at the critic input level and is never passed through the
+policy's forward pass. The policy gradient uses advantages derived
+from the PVF:
+\[
+  \hat{A}_t = r_t + \gamma V_\phi(s_{t+1}, p_{t+1}) - V_\phi(s_t, p_t)
+\]
+The policy parameters $\theta$ are updated via:
+\[
+  \nabla_\theta J = \mathbb{E}_t[\nabla_\theta \log\pi_\theta(a_t|s_t) \cdot \hat{A}_t]
+\]
+Gradients through the critic are blocked: $\phi$ is updated
+separately with mean squared TD error.
+
+\textbf{TETHER:} Not all critics are equally reliable. TETHER
+adaptively interpolates between the PVF baseline and the
+group-relative baseline:
+\[
+  b_t = \hat{\rho} \cdot V_\phi(s_t, p_t)
+      + (1-\hat{\rho}) \cdot \mathbb{E}_G[R(\mathcal{T})]
+\]
+where $\hat{\rho} \in [0,1]$ estimates critic reliability
+from the held-out validation loss:
+\[
+  \hat{\rho} = \sigma(-\alpha \cdot \mathcal{L}_V^{\text{hold-out}})
+\]
+High $\mathcal{L}_V$ (unreliable critic) drives $\hat{\rho} \to 0$,
+recovering group-relative training; low $\mathcal{L}_V$ (reliable
+critic) drives $\hat{\rho} \to 1$, using token-level PVF advantages.
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ be the LLM policy and $V_\phi$ the PVF critic.
+During a training step, one rollout $\mathcal{T} = (s_0, a_0, \ldots,
+s_T, r_T)$ is generated from $\pi_\theta$. The full TETHER policy
+gradient is:
+\[
+  \nabla_\theta J = \mathbb{E}_{\mathcal{T}}\!\left[\sum_{t=0}^T
+    \nabla_\theta \log\pi_\theta(a_t|s_t)
+    \cdot \hat{A}_t^{\text{TETHER}}\right]
+\]
+\[
+  \hat{A}_t^{\text{TETHER}} = r_t + \gamma b_{t+1} - b_t
+\]
+The critic is updated independently with:
+\[
+  \mathcal{L}_V = \mathbb{E}_t\!\left[(V_\phi(s_t,p_t)
+    - (r_t + \gamma V_\phi(s_{t+1},p_{t+1})))^2\right]
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:} Privileged context $p_t$ is constructed from
+ground-truth task data (available in supervised datasets) and is
+passed to the critic at each step. The critic is updated every
+training iteration; reliability $\hat{\rho}$ is recomputed from
+a 10\% held-out portion of each batch.
+
+\textbf{Inference:} The critic and its privileged context are
+discarded entirely. The policy $\pi_\theta$ runs without any
+modifications, and privileged information is never exposed during
+deployment.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided for PVF. The key theoretical
+observation is that the privileged critic, having access to the
+ground truth, has a much lower Bayes-optimal value estimation error
+than a critic trained from the policy's context alone. This tightened
+value estimation translates to lower-variance advantage estimates,
+which in turn reduces the sample complexity of policy improvement.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Math reasoning (GSM8K + MATH):} PVF with TETHER
+    achieves $+4.2$ accuracy points vs.\ GRPO at the same training
+    budget (number of rollouts and gradient steps).
+  \item \textbf{Training efficiency:} TETHER reaches GRPO's final
+    accuracy $2.3\times$ faster in training steps, using
+    fewer rollouts per gradient step.
+  \item \textbf{Straggler reduction:} Eliminating the rollout-group
+    requirement reduces training wall-clock time by 18--24\% on
+    8-GPU configurations where straggler variance is highest.
+  \item \textbf{PVF vs.\ standard critic:} PVF outperforms a standard
+    PPO critic by $+2.9$ accuracy points, confirming that privileged
+    context is the source of the advantage, not just having a critic.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Privileged context content:} Ground-truth answer provides
+most of the benefit; adding intermediate solution steps provides
+marginal additional gain. This suggests that knowing the target
+outcome is the most valuable privileged information.
+
+\textbf{TETHER vs.\ fixed interpolation:} Fixed $\hat{\rho}=0.5$
+performs 1.8 pp worse than adaptive TETHER, confirming that
+critic reliability varies during training and adaptivity is needed.
+
+\textbf{Rollout group size:} TETHER with $G=1$ (single rollout)
+outperforms GRPO with $G=8$ by 1.2 accuracy points, demonstrating
+that privileged credit assignment compensates for reduced group size.
+
+\textbf{Offline application:} PVF-trained policies retain their
+advantage over GRPO baselines on out-of-distribution test
+prompts, suggesting that the improved credit assignment produces
+a qualitatively better-learned policy, not just in-distribution
+fitting.
+
+\section*{Reference}
+
+Siddarth Venkatraman, Matthieu Dinot, Laurence Aitchison.
+\textbf{Le Critique: Privileged Value Functions for LLM
+Reinforcement Learning.}
+arXiv:2608.16739, August 2026.
+\url{https://arxiv.org/abs/2608.16739}
+
+\end{document}

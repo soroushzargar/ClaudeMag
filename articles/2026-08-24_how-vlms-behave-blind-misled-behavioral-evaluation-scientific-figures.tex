@@ -1,0 +1,267 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-24}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  VLM evaluation \textbullet{}
+  behavioral reliability \textbullet{}
+  scientific figure understanding \textbullet{}
+  confabulation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  How Do VLMs Behave When Blind or Misled?
+  Behavioral Evaluation of VLMs on Scientific
+  Figures}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  SciFigBench Reveals That VLMs Confabulate Data Values When Figures
+  Are Blurred and Defer to Incorrect Captions Over Visual
+  Evidence}\par\vspace{6pt}
+
+{\small\textbf{By} Paul Osemudiame Oamen, Owusu-Banahene Osei,
+  Ananya Mukherjee, Christian Greisinger, Steffen Eger,
+  Pius Onobhayedo, Wei Zhao}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.13267 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+AI assistants for scientific reading increasingly interpret research
+figures, but standard benchmarks test only accuracy on clean images.
+SciFigBench stress-tests VLMs on 250 scientific figures across 34,000+
+evaluation setups probing perception, reasoning, and behavioral
+reliability under uncertainty. The findings are alarming: VLMs
+confabulate specific data values in 62--84\% of cases when critical
+figure elements are blurred, and defer to incorrect captions over
+accurate visual evidence 41--67\% of the time. Models ranked highest
+on standard accuracy correlate poorly with behavioral reliability
+($\rho = 0.31$), indicating that safe scientific deployment cannot be
+inferred from existing evaluations.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard VLM benchmarks measure accuracy on clean
+    figures but not behavioral reliability when visual evidence is
+    missing or misleading --- a critical gap for scientific AI
+    assistants.
+  \item[Why it matters:] Scientific AI tools are being deployed for
+    literature review and data extraction; a model that fabricates
+    values for blurred axes or trusts wrong captions poses real risks.
+  \item[Method:] 250 expert-annotated figures extended via image
+    transformations, resistance probes, caption-bias probes, and
+    selective-blur targets, producing 34,000+ evaluation setups.
+  \item[Result:] VLMs confabulate on 62--84\% of blur conditions;
+    caption-bias rate 41--67\%; standard accuracy rank correlates
+    poorly with behavioral reliability ($\rho = 0.31$).
+  \item[Evidence:] Resistance probe failures (71\% compliance
+    with false premises) confirm that models do not systematically
+    detect their own visual limitations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+AI assistants for scientific literature are arriving rapidly: systems
+that can summarize papers, extract data from figures, answer questions
+about experimental results, and assist peer reviewers. These systems
+rely on VLMs that have demonstrated strong performance on standard
+visual question answering benchmarks.
+
+Standard accuracy evaluations present VLMs with clean, fully-readable
+figures and ask questions with unambiguous ground-truth answers. This
+measures one important capability --- accurate perception and reasoning
+--- but ignores a second capability that is equally important for
+scientific use: \emph{knowing what you cannot see}.
+
+When a research figure has a blurred axis label, a partially occluded
+data series, or a misleading caption inserted during an adversarial
+or unintentional editing step, a reliable scientific AI assistant
+should express appropriate uncertainty. Instead, SciFigBench finds
+that current VLMs confidently fabricate specific data values, comply
+with false premises, and defer to textual context over visual evidence.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard VQA and figure understanding benchmarks} evaluate
+on clean images with unambiguous ground truth. They do not assess:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Whether models appropriately express uncertainty when evidence
+    is missing (rather than guessing)
+  \item Whether models are biased by captions that contradict visual
+    content
+  \item Whether models detect fine-grained degradation of specific
+    visual elements (e.g., one axis blurred while another is intact)
+\end{itemize}
+
+\textbf{Hallucination benchmarks} typically test factual grounding
+in natural images (``is there a cat in the image?'') rather than
+quantitative data extraction from structured scientific visualizations.
+
+SciFigBench fills the gap by systematically varying the \emph{state}
+of the visual evidence rather than just the questions asked about it.
+
+\section{Core Mechanism}
+
+\textbf{Base figures:} 250 scientific figures collected from STEM
+research papers across biology, physics, chemistry, computer science,
+and medicine. Each figure receives expert annotations identifying:
+key data values, axis labels, trend directions, visual element
+identities, and figure captions.
+
+\textbf{Evaluation setups (>34,000 total):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt,label=(\arabic*)]
+  \item \textbf{Image transformations:} Gaussian blur, label removal,
+    color-region masking applied to specific elements while leaving
+    others intact.
+  \item \textbf{Reasoning questions:} Quantitative (``What is the
+    value at $x=3$?'') and qualitative (``Which series shows the
+    steeper slope?'').
+  \item \textbf{Resistance probes:} Model is told (falsely) that
+    a specific value can be read from a blurred region --- tests
+    whether it complies or refuses.
+  \item \textbf{Caption-bias probes:} Figure paired with a caption
+    that states a trend opposite to what the graph shows --- tests
+    whether model trusts visual evidence or caption.
+  \item \textbf{Selective-blur targets:} Single data elements blurred
+    while the rest of the figure is intact --- tests fine-grained
+    awareness of local information availability.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+The \textbf{behavioral reliability score (BRS)} for model $M$ on
+perturbation condition set $\mathcal{P}$:
+\[
+  \text{BRS}(M) = \frac{1}{|\mathcal{P}|}\sum_{c \in \mathcal{P}}
+    \frac{1}{|Q_c|}\sum_{q \in Q_c}
+    \mathbf{1}[M(f_c, q) \text{ is behaviorally appropriate}]
+\]
+where $f_c$ is figure $f$ under perturbation $c$, $Q_c$ is the
+question set for condition $c$, and ``behaviorally appropriate''
+means the model expresses uncertainty or refuses when evidence
+is unavailable, and trusts visual evidence over conflicting captions.
+
+The \textbf{caption-bias score (CBS)}:
+\[
+  \text{CBS}(M) = \mathbb{E}_{(f,q)}\!\left[\mathbf{1}\!\left[
+    M(f, q, \text{cap}_\text{wrong}) \neq M(f, q, \text{no cap})
+  \right]\right]
+\]
+where $\text{cap}_\text{wrong}$ is a caption that contradicts visual
+truth.
+
+The \textbf{refusal rate (RR)} on resistance probes:
+\[
+  \text{RR}(M) = \mathbb{E}_{(f,q,\text{probe})}\!\left[
+    \mathbf{1}[M \text{ declines to provide value}]
+  \right]
+\]
+
+\section{Learning or Inference Procedure}
+
+SciFigBench is an evaluation benchmark with no training component.
+Models are evaluated zero-shot with a standardized system prompt
+that instructs them to answer to the best of their ability. No
+special uncertainty-elicitation instructions are provided in the
+main evaluation; ablations with explicit uncertainty instructions
+show modest improvement but do not eliminate confabulation.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. Ground truth annotations were
+produced by domain experts (PhD students and faculty in the
+respective fields) with inter-annotator agreement verified via
+Cohen's kappa ($\kappa > 0.82$ across all annotation types).
+Behavioral appropriateness judgments are rule-based (not LLM-judge)
+wherever possible: refusal is detected by keyword matching over
+standardized response categories.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Confabulation under blur:} VLMs provide specific
+    numerical answers 62--84\% of the time when the asked-about
+    visual element is blurred, nearly unchanged from clean conditions.
+  \item \textbf{Caption bias:} Models align with the contradictory
+    caption over correct visual evidence 41--67\% of the time.
+    Larger models show more bias, not less.
+  \item \textbf{Resistance probe compliance:} Models comply with false
+    premises (generate values from blurred regions) 71\% of the time.
+    Refusal rate is below 15\% for all evaluated models.
+  \item \textbf{Rank-reliability correlation:} Spearman $\rho = 0.31$
+    between standard accuracy rank and BRS rank, indicating that
+    accuracy evaluations do not predict behavioral reliability.
+  \item \textbf{Domain variation:} Biology and chemistry figures show
+    higher caption-bias rates than computer science figures, possibly
+    due to differences in training data figure-caption co-occurrence.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Uncertainty elicitation:} Prompting models to ``express
+uncertainty when you cannot read a value'' reduces confabulation
+from 74\% to 52\% --- improvement, but not elimination. Models still
+confabulate more than half the time despite explicit instruction.
+
+\textbf{Blur severity:} Confabulation rate is surprisingly stable
+across blur intensities from mild ($\sigma=2$) to severe ($\sigma=20$).
+This suggests models are generating values from semantic expectations
+rather than partially visible pixel information.
+
+\textbf{Caption-bias by model size:} The largest evaluated models
+(7B--70B parameters) exhibit more caption bias than smaller models
+(1B--3B), consistent with larger models placing more weight on
+linguistic context relative to visual evidence during generation.
+
+\textbf{Selective vs.\ global blur:} When only a single axis label
+is blurred while the rest of the figure is intact, confabulation
+rate (78\%) slightly exceeds the global-blur rate (74\%), suggesting
+models do not notice fine-grained local information loss.
+
+\section*{Reference}
+
+Paul Osemudiame Oamen, Owusu-Banahene Osei, Ananya Mukherjee,
+Christian Greisinger, Steffen Eger, Pius Onobhayedo, Wei Zhao.
+\textbf{How Do VLMs Behave When Blind or Misled? Behavioral
+Evaluation of VLMs on Scientific Figures.}
+arXiv:2608.13267, August 2026.
+\url{https://arxiv.org/abs/2608.13267}
+
+\end{document}

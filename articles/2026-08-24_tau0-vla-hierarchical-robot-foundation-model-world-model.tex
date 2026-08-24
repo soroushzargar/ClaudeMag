@@ -1,0 +1,262 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-24}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  robot foundation model \textbullet{}
+  world model \textbullet{}
+  test-time compute \textbullet{}
+  vision-language-action}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  $\tau_0$-VLA: a Hierarchical Robot Foundation
+  Model with World-Model-Guided Test-Time
+  Computation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  When the Policy Is Unsure, a World Model Simulates Candidates
+  and a Value Model Picks the Winner---Scaling Test-Time
+  Compute for Long-Horizon Robot Manipulation}\par\vspace{6pt}
+
+{\small\textbf{By} SII Research}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.16885 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Long-horizon robot manipulation requires executing dozens of subtasks
+reliably and sequencing them coherently. Most hierarchical
+vision-language-action (VLA) models make high-level decisions with a
+single forward pass, leaving no mechanism to allocate more computation
+to difficult or ambiguous choices. $\tau_0$-VLA introduces
+confidence-gated test-time compute: when token-level confidence falls
+below a threshold, the model triggers a propose--predict--evaluate loop
+in which a world model simulates outcomes and a value model selects
+the best subtask. Trained on 40,115 hours of real-world manipulation
+data, $\tau_0$-VLA achieves $+14.2$ pp in long-horizon success rate
+over its single-pass baseline.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Hierarchical VLA models commit to subtask decisions in
+    one forward pass with no mechanism to spend more compute on hard
+    decisions, causing failures on ambiguous or novel long-horizon tasks.
+  \item[Why it matters:] Long-horizon manipulation is the frontier of
+    robot capability; scaling test-time compute for planning, not just
+    reasoning, could unlock qualitatively new task categories.
+  \item[Method:] Monitor token-confidence of the high-level policy;
+    when below threshold, invoke a world-model propose--predict--evaluate
+    loop to score candidate subtasks by predicted outcome quality.
+  \item[Result:] $+14.2$ pp closed-loop success on long-horizon tasks;
+    $+9.8$ pp subtask prediction accuracy with 8 candidates vs.\ 1.
+  \item[Evidence:] World model prediction quality correlates with value
+    model accuracy ($r = 0.81$); ablations confirm the loop only
+    activates for genuinely hard decisions ($78\%$ precision).
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Hierarchical robot control separates the problem of \emph{what to do}
+(the high-level policy, which generates subtask goals like
+``pick up the cup'' or ``open the drawer'') from \emph{how to do it}
+(the low-level skill executor, which produces motor commands).
+This separation is powerful: the high-level policy can reason about
+task semantics, while the low-level policy handles motor precision.
+
+The bottleneck is the high-level policy's decision quality. On a
+familiar task, a single forward pass is sufficient. But on a novel
+combination of objects, or after an unexpected intermediate state caused
+by imprecise skill execution, the high-level policy may be genuinely
+uncertain about the right next subtask. A wrong high-level decision
+cascades through all subsequent skill execution and can be unrecoverable.
+
+$\tau_0$-VLA makes high-level planning compute-scalable by adapting
+the number of forward passes to the confidence of the decision.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Single-pass hierarchical VLAs} (e.g., SayCan, UniFS) generate
+subtask goals with one forward pass through a vision-language model.
+This is fast but brittle: the model either outputs the correct subtask
+or it does not, with no opportunity to explore alternatives.
+
+\textbf{Tree search methods} (e.g., Monte Carlo Tree Search applied to
+robot planning) require executing candidate subtasks in a real or
+simulated environment to estimate their value, which is prohibitively
+expensive for physical manipulation tasks.
+
+\textbf{LLM-based replanning} repeats the forward pass with
+rephrased prompts when a subtask fails, but this is reactive rather
+than proactive: it corrects after failure rather than anticipating it.
+It also requires a binary success/failure signal, which may not be
+available for subtasks that partially succeed.
+
+$\tau_0$-VLA's key contribution is \emph{proactive} uncertainty
+detection plus \emph{simulated} candidate evaluation — avoiding the
+cost of physical trial-and-error.
+
+\section{Core Mechanism}
+
+Three modules work together:
+
+\textbf{Memory-augmented high-level policy $\pi_\text{high}$:} A
+transformer that reads the current RGB observation $o_t$ and an
+execution memory $m_t$ (a compressed representation of past subtasks
+and their outcomes), and generates subtask $s_t$ autoregressively.
+
+\textbf{Confidence monitor:} After generating $s_t$, compute the
+mean log-probability of the generated tokens as a confidence score:
+\[
+  c_t = \exp\!\left(\frac{1}{|s_t|}\sum_{i=1}^{|s_t|}
+    \log\pi_\text{high}(s_t^{(i)} | o_t, m_t, s_t^{(<i)})\right)
+\]
+If $c_t \geq \tau_c$, commit to $s_t$. If $c_t < \tau_c$, trigger
+the extended loop.
+
+\textbf{Propose--predict--evaluate loop:} Generate $K$ candidate
+subtasks via nucleus sampling, predict the terminal observation
+induced by each, and score with a value model:
+\[
+  s^* = \arg\max_{k \in [K]} V\!\left(s^k, \hat{o}_{t+1}^k, m_t\right)
+\]
+
+\section{Technical Formulation}
+
+Let the world model $\mathcal{W}_\psi$ predict the terminal RGB
+observation after executing subtask $s^k$ from state $(o_t, m_t)$:
+\[
+  \hat{o}_{t+1}^k = \mathcal{W}_\psi(o_t, m_t, s^k)
+\]
+The value model $V_\nu$ estimates task progress from the predicted
+terminal state and memory:
+\[
+  V_\nu(s^k, \hat{o}_{t+1}^k, m_t) \in [0, 1]
+\]
+representing the estimated probability of ultimate task success
+given this subtask choice.
+
+The selected subtask is:
+\[
+  s^* = \arg\max_{k=1}^K V_\nu(s^k, \hat{o}_{t+1}^k, m_t)
+\]
+
+The execution memory update after executing $s^*$:
+\[
+  m_{t+1} = \text{GRU}_\omega(m_t, [s^*; \text{success}_t])
+\]
+where $\text{success}_t \in \{0, 1\}$ is the low-level success
+signal and GRU$_\omega$ is a gated recurrent unit that compresses
+history into a fixed-size memory vector.
+
+\section{Learning or Inference Procedure}
+
+\textbf{High-level policy training:} Supervised next-subtask
+prediction over real demonstration trajectories with cross-entropy
+loss. No RL is used for the high-level policy.
+
+\textbf{World model training:} Diffusion-based next-observation
+prediction conditioned on $(o_t, m_t, s^k)$. Trained on
+$(o_t, s_t, o_{t+1})$ triples extracted from demonstrations.
+
+\textbf{Value model training:} Trained on $(o_t, m_t, s_t,
+\text{task\_success})$ tuples where task\_success is the
+binary outcome of the full trajectory. Positive examples have the
+correct subtask; negatives use counterfactual subtasks sampled from
+the policy distribution.
+
+\textbf{Data:} 40,115 hours of real-world manipulation data across
+tabletop, kitchen, and dexterous manipulation domains.
+
+\section{What the Guarantee Says}
+
+No formal guarantees are provided. The key empirical claim is that
+the confidence score $c_t$ is well-calibrated: low-confidence
+decisions are harder (lower subtask accuracy at $c_t < \tau_c$ vs.\
+$c_t \geq \tau_c$), and additional compute on low-confidence steps
+provides the largest gains.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Long-horizon closed-loop success:} $+14.2$ pp over
+    single-pass policy, averaged across 6 task categories.
+  \item \textbf{Subtask prediction accuracy:} $+9.8$ pp improvement
+    by increasing $K$ from 1 to 8 candidates on held-out tasks.
+  \item \textbf{Confidence calibration:} Low-confidence decisions
+    ($c_t < \tau_c$) have 31\% lower single-pass subtask accuracy
+    than high-confidence decisions, validating the trigger.
+  \item \textbf{World model quality:} Spearman correlation $r=0.81$
+    between world model prediction quality and value model accuracy,
+    validating the end-to-end pipeline.
+  \item \textbf{Compute efficiency:} The propose--predict--evaluate
+    loop triggers on $\sim$22\% of steps, keeping average inference
+    overhead below $2.4\times$ the single-pass baseline.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Confidence threshold $\tau_c$:} Lower thresholds trigger
+the loop more frequently, improving accuracy but increasing latency.
+The optimal $\tau_c = 0.72$ triggers on 22\% of steps for best
+cost-accuracy tradeoff.
+
+\textbf{Number of candidates $K$:} Gains diminish beyond $K=8$;
+marginal improvement from $K=4$ to $K=8$ is less than half the
+improvement from $K=1$ to $K=4$.
+
+\textbf{World model vs.\ no prediction:} Selecting the highest
+policy-probability candidate (no world model) without predicting
+outcomes achieves only $+3.1$ pp over the baseline, vs.\ $+14.2$ pp
+with world-model-scored selection.
+
+\textbf{Memory ablation:} Replacing the GRU memory with no-context
+(Markov) decision making reduces long-horizon success by 11.4 pp,
+confirming that history compression is essential.
+
+\section*{Reference}
+
+SII Research.
+\textbf{$\tau_0$-VLA: a Hierarchical Robot Foundation Model with
+World-Model-Guided Test-Time Computation.}
+arXiv:2608.16885, August 2026.
+\url{https://arxiv.org/abs/2608.16885}
+
+\end{document}
