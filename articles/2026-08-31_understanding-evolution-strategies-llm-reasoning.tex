@@ -1,0 +1,250 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-31}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  evolution strategies \textbullet{}
+  LLM post-training \textbullet{}
+  pass@k \textbullet{}
+  solution diversity}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Understanding Evolution Strategies for LLM
+  Reasoning: Broader Coverage than GRPO}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Population-Based Weight-Space Optimization Preserves Output
+  Diversity That RL Post-Training Collapses}\par\vspace{6pt}
+
+{\small\textbf{By} Yunpeng Ba, Zhi Zheng, Yue Xie, Jiaqing Li,
+  Xialiang Tong, Tao Zhong, Mingxuan Yuan, Zhichao Lu,
+  Xuyang Wu, Zhenkun Wang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.27351 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Post-training LLMs with reinforcement learning — most commonly via
+GRPO — improves single-sample accuracy (pass@1) but systematically
+narrows the model's output distribution, reducing solution diversity
+across multiple samples. This paper formalises why Evolution Strategies
+(ES), a gradient-free optimizer that perturbs \emph{weights} rather than
+policy outputs, avoids this collapse: ES maintains the distributional
+breadth that RL destroys. On reasoning benchmarks, ES matches GRPO on
+pass@1 while outperforming it by up to $+14.2$ pp on pass@32.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RL post-training (GRPO) improves pass@1 by concentrating
+    output probability mass, but this collapses pass@k diversity — the
+    opposite of what discovery-oriented applications need.
+  \item[Why it matters:] In math, science, and code, generating $k$
+    diverse candidate solutions and checking the best is often more
+    effective than optimising a single best guess.
+  \item[Method:] Evolution Strategies perturb model weights via isotropic
+    Gaussian noise, estimate a smoothed reward gradient over a population,
+    and update parameters without ever conditioning on per-prompt output
+    distributions — so entropy cannot collapse.
+  \item[Result:] ES matches GRPO within 1--2 pp on pass@1; outperforms
+    by $+6.3$ pp (MATH-500) to $+14.2$ pp (AMC/AIME) on pass@32.
+  \item[Evidence:] ES-trained models retain 94\% of base model output
+    entropy vs.\ 71\% for GRPO; unique solution fingerprints are 2.3$\times$
+    more frequent at $k{=}8$.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Post-training is now the dominant mechanism for improving LLM reasoning.
+Group Relative Policy Optimisation (GRPO) and its relatives reward
+high-scoring outputs and penalise low-scoring ones, using group
+statistics as a variance-reduction baseline. The resulting policy
+update increases the log-probability of high-advantage outputs — and
+in doing so, mechanically compresses the output distribution.
+
+For pass@1 tasks — pick the single best answer — this is fine.
+For pass@k tasks — check at least one of $k$ samples — compressed
+distributions are harmful: the model generates variations of the
+same high-reward solution rather than exploring the solution space.
+
+Evolution Strategies sidestep this entirely by never touching output
+distributions. Instead, ES evaluates perturbed \emph{weight} vectors
+and updates the base parameters in the direction of higher-reward
+perturbations. The output distribution at any fixed $\theta$ is
+unchanged by the ES mechanism; only the weight location shifts.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{GRPO} samples $G$ rollouts per prompt, computes group-relative
+advantages $\hat{A}_i = (R_i - \bar{R})/\sigma_R$, and applies:
+\[
+  \nabla_\theta \mathcal{L}_\text{GRPO} = -\sum_i \hat{A}_i
+    \nabla_\theta \log \pi_\theta(a_i | x)
+\]
+This directly increases $\log \pi_\theta(a_i|x)$ for high-reward
+outputs, reducing $H(\pi_\theta(\cdot|x))$ each step. Over training,
+output entropy converges to a low plateau regardless of the base model's
+initial diversity. Ablations confirm this: GRPO trained for $T$ steps
+reduces entropy to 71\% of the base model's, independent of $T$
+beyond early training.
+
+\textbf{PPO} has the same problem: the clipped probability-ratio
+objective $\min(\rho_t \hat{A}_t,\, \text{clip}(\cdot)\hat{A}_t)$
+increases log-probabilities of advantaged actions, compressing
+distribution mass similarly.
+
+\textbf{SFT} also concentrates distributions, but only on
+demonstration patterns — it does not optimise diversity directly.
+
+\section{Core Mechanism}
+
+ES treats the model as a black box and optimises in weight space.
+At iteration $t$, with current parameters $\theta_t$:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $N$ noise vectors $\epsilon_i \sim \mathcal{N}(0, I)$
+  \item Evaluate perturbed models: $R_i = R(\theta_t + \sigma \epsilon_i)$
+  \item Update:
+    $\theta_{t+1} = \theta_t + \frac{\alpha}{N\sigma}\sum_i R_i \epsilon_i$
+\end{enumerate}
+
+The update is an unbiased estimate of
+$\nabla_\theta \mathbb{E}_\epsilon[R(\theta + \sigma\epsilon)]$,
+the gradient of the \emph{smoothed} objective.
+
+Crucially, neither the update rule nor the reward evaluation
+conditions on any per-prompt output distribution $\pi_\theta(\cdot|x)$.
+Output entropy is regulated by the landscape of weight perturbations,
+not forced to collapse by logit reinforcement.
+
+\section{Technical Formulation}
+
+The ES gradient estimate over population size $N$ is:
+\[
+  \hat{g}_\text{ES} = \frac{1}{N\sigma}\sum_{i=1}^N R_i \epsilon_i
+\]
+with variance $\text{Var}(\hat{g}) = \frac{\mathbb{E}[R^2]}{N\sigma^2}$,
+decreasing in $N$. The paper shows that the smoothed objective
+$F_\sigma(\theta) = \mathbb{E}_\epsilon[R(\theta + \sigma\epsilon)]$
+satisfies:
+\[
+  F_\sigma(\theta) \geq F_0(\theta) - \frac{\sigma^2}{2}L_R
+\]
+where $L_R$ is the Lipschitz constant of $R$, bounding the gap
+between the smoothed and original objectives.
+
+For a fixed prompt $x$, the output entropy $H(\pi_{\theta+\sigma\epsilon}(\cdot|x))$
+averages over the perturbation distribution rather than being
+targeted directly. The expected entropy after one update is:
+\[
+  \mathbb{E}[H(\pi_{\theta+\hat{g}}(\cdot|x))] \approx H(\pi_\theta(\cdot|x))
+    + O(\alpha \sigma \|\nabla H\|)
+\]
+compared to the GRPO decrease of $O(\alpha \sum_i \hat{A}_i)$
+per step, which is systematically negative for positive-reward outputs.
+
+\section{Learning or Inference Procedure}
+
+Training with ES proceeds as:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item For each iteration, sample a batch of reasoning problems
+  \item Sample $N=32$ noise vectors, evaluate all perturbed models in
+    parallel on the same batch
+  \item Compute ES gradient and update $\theta$
+  \item Anneal $\sigma$ by a factor of 0.995 per iteration
+\end{enumerate}
+
+No rollout groups, no critics, no probability-ratio clipping.
+At inference, only $\theta$ is used; the noise ensemble is discarded.
+
+\section{What the Guarantee Says}
+
+The paper proves that ES converges to a stationary point of the
+smoothed objective $F_\sigma$ at rate $O(1/\sqrt{T})$ under standard
+smoothness assumptions. The output-entropy preservation result is
+proven for a single gradient step and validated empirically over
+full training runs.
+
+\section{Experimental Findings}
+
+Evaluated with Qwen2.5-7B on MATH-500, AMC/AIME, and LiveCodeBench:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{pass@1:} ES within 1--2 pp of GRPO across all benchmarks
+  \item \textbf{pass@8:} ES outperforms GRPO by $+6.3$ pp (MATH-500),
+    $+11.4$ pp (AMC/AIME), $+8.7$ pp (LiveCodeBench)
+  \item \textbf{pass@32:} Advantages grow further; AMC/AIME gap reaches
+    $+14.2$ pp
+  \item \textbf{Output entropy:} ES retains 94\% of base model entropy;
+    GRPO retains only 71\%
+  \item \textbf{Solution diversity:} 2.3$\times$ more unique solution
+    fingerprints under ES at $k{=}8$
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Population size $N$:} Larger $N$ reduces gradient variance
+and improves both pass@1 and pass@k, with diminishing returns beyond
+$N{=}32$. Smaller $N$ ($<$16) produces unstable training.
+
+\textbf{Perturbation scale $\sigma$:} Larger $\sigma$ increases
+exploration (better pass@k) at the cost of slower convergence on
+pass@1. $\sigma{=}0.05$ provides a good balance.
+
+\textbf{Comparison to SFT:} SFT with demonstration data improves
+pass@1 comparably to GRPO but also degrades pass@k, confirming
+that distribution narrowing is a general property of supervised
+objectives, not just RL.
+
+\textbf{Compute cost:} ES requires $N$ forward passes per iteration
+vs.\ $G$ for GRPO. At $N{=}G{=}32$, wall-clock time is comparable
+because GRPO requires both forward and backward passes while ES
+requires only forward passes (no gradient through the model).
+
+\section*{Reference}
+
+Yunpeng Ba, Zhi Zheng, Yue Xie, Jiaqing Li, Xialiang Tong, Tao Zhong,
+Mingxuan Yuan, Zhichao Lu, Xuyang Wu, Zhenkun Wang.
+\textbf{Understanding Evolution Strategies for LLM Reasoning:
+Broader Reasoning Coverage than GRPO.}
+arXiv:2608.27351, August 2026.
+\url{https://arxiv.org/abs/2608.27351}
+
+\end{document}

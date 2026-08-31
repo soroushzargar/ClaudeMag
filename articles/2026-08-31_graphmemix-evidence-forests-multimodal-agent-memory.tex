@@ -1,0 +1,265 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-31}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agent memory \textbullet{}
+  multimodal retrieval \textbullet{}
+  graph neural networks \textbullet{}
+  long-horizon agents}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  GraphMemix: Query-Aware Evidence Forests
+  for Long-Term Multimodal Agent Memory}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Learned Forest-Construction Policy Adapts Multi-Hop
+  Retrieval to Query Intent Without Ground-Truth Path Supervision}\par\vspace{6pt}
+
+{\small\textbf{By} Geng Li, Yuhao Wang, Dong Li,
+  Jianye Hao, Yuxin Peng}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.26983 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Long-horizon multimodal agents accumulate heterogeneous memories —
+images, video clips, text segments — and must retrieve relevant
+evidence across modalities for each new query. Flat dense retrieval
+handles heterogeneity but misses multi-hop dependencies; graph memory
+captures dependencies but cannot adapt its retrieval structure to
+query intent. GraphMemix resolves this by learning a lightweight
+policy that dynamically constructs a query-aware evidence forest
+from a persistent heterogeneous memory graph, improving retrieval
+accuracy by up to $+11.3\%$ over dense retrieval on long-horizon
+benchmarks at sub-second query latency.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Multimodal agents need memory retrieval that handles
+    cross-modal heterogeneity and multi-hop reasoning simultaneously;
+    neither dense retrieval nor static graph schemas do both.
+  \item[Why it matters:] As agents operate over longer interaction
+    histories with diverse modalities, memory retrieval quality becomes
+    a primary bottleneck for task completion.
+  \item[Method:] Heterogeneous memory graph with a GNN-based forest
+    construction policy that selects which edges to expand, conditioned
+    on query embedding; trained with sparse REINFORCE rewards.
+  \item[Result:] $+$7.2\% on EgoSchema-Long, $+$11.3\% on MMAgent-Bench,
+    $+$6.8 F1 on MultiModal-NarrativeQA vs.\ dense retrieval.
+  \item[Evidence:] Removing query-conditioned forest construction (using
+    static BFS) degrades by $-$4.3\% on average; cross-modal aggregation
+    removes another $-$3.1\%.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The memory requirements of AI agents have evolved dramatically.
+Early agents had short context windows and static knowledge.
+Contemporary multimodal agents are deployed in long-horizon settings
+where they accumulate interaction histories spanning hours: images
+from visited locations, video clips of observed events, text segments
+from conversations and documents.
+
+Effective agents must retrieve relevant evidence from this growing
+memory on demand, for queries that are themselves multimodal and
+diverse in intent. A query like ``where did I see the red toolbox?''
+requires matching a text query to visual memories. A query like
+``what sequence of events led to the error in step 7?'' requires
+chaining multiple memory entries through causal links.
+
+GraphMemix addresses this joint challenge with a single memory
+architecture that adapts its retrieval structure to each query.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Dense retrieval:} Embedding-based similarity search (DPR,
+FAISS) retrieves independent top-$k$ nodes from the memory pool.
+This handles modality diversity (using shared embedding spaces) but
+treats all retrievals as independent — missing multi-hop chains where
+the relevant evidence at step 2 depends on what was retrieved at
+step 1.
+
+\textbf{Static graph memory:} Systems that maintain a persistent
+knowledge graph (MemGraph, SAGE, GAM) capture dependencies between
+memory items as typed edges and support multi-hop traversal. However,
+their traversal strategy — usually breadth-first or heuristic
+depth-first — is fixed regardless of query intent. A depth-first
+strategy appropriate for causal chain tracing is suboptimal for
+gathering diverse evidence across parallel memory threads.
+
+\textbf{Hybrid systems:} Retrieving from a dense index and then
+expanding via graph edges (retrieve-then-expand) partially addresses
+this, but the expansion policy is not conditioned on the query,
+limiting adaptation.
+
+\section{Core Mechanism}
+
+GraphMemix maintains a \textbf{heterogeneous memory graph}
+$G = (V, E)$:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Nodes} $V$: memory items typed by modality (text
+    segment, image, video clip summary)
+  \item \textbf{Edges} $E$: typed relations — temporal (A before B),
+    co-occurrence (A and B observed together), causal (A caused B),
+    spatial (A located near B), and co-reference (A and B refer
+    to the same entity)
+\end{itemize}
+
+For each incoming query $q$, the system constructs a
+\textbf{query-aware evidence forest} in three steps:
+
+\textbf{Step 1 — Seed retrieval:} A dual-encoder retrieves top-$k$
+seed nodes $S \subset V$ by cross-modal similarity between the
+query embedding $h_q$ and node embeddings $\{h_v\}$.
+
+\textbf{Step 2 — Forest construction:} A GNN-based policy
+$\pi_\phi$ selects which outgoing edges to expand from each seed,
+constructing a tree of depth $d$ rooted at each seed. The policy
+decision at node $v$ for edge $(v, u)$ is:
+\[
+  P_\phi(u | v, q) = \sigma\left(W_\phi [h_v \| h_u \| h_q \| r_{vu}]\right)
+\]
+where $r_{vu}$ is the relation type embedding. The top-$b$ expansions
+(branch factor) are selected; the policy is applied recursively for
+$d$ layers.
+
+\textbf{Step 3 — Evidence aggregation:} Nodes across all trees
+(deduplicated) are encoded by a cross-modal transformer. A relevance
+scorer ranks them, and the top-$m$ are passed to the agent.
+
+\section{Technical Formulation}
+
+The forest for query $q$ from seed set $S$ is:
+\[
+  \mathcal{F}(q, S) = \bigcup_{s \in S} T_\phi(s, q, d, b)
+\]
+where $T_\phi$ is the tree built by the policy from seed $s$ with
+depth $d$ and branch factor $b$. Complexity is
+$O(|S| \cdot b^d \cdot c_\phi)$ where $c_\phi$ is the GNN forward
+pass cost — tractable for $|S|=5, b=3, d=2$ ($\leq$45 policy calls
+per query).
+
+The policy is trained with REINFORCE using downstream task accuracy
+$R$ as the reward signal and a baseline $\hat{R}$ from dense
+retrieval:
+\[
+  \nabla_\phi \mathcal{J} = \mathbb{E}\left[(R - \hat{R})
+    \sum_{e \in \mathcal{F}} \nabla_\phi \log P_\phi(e)\right]
+\]
+
+No ground-truth paths through the graph are required; the policy
+learns which edge types to expand under which query conditions from
+task-level reward alone.
+
+The cross-modal aggregation transformer uses cross-attention between
+text and non-text nodes at each depth level, with modality-type
+embeddings injected via learned positional offsets.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-train seed encoder with contrastive cross-modal loss
+  \item Train forest policy with REINFORCE on each benchmark,
+    using 80\% of instances for training
+  \item Fine-tune cross-modal aggregation transformer on evidence
+    re-ranking objective
+\end{enumerate}
+
+\textbf{Inference:} Given query $q$, retrieve seeds ($\sim$10ms),
+run forest construction policy ($\sim$50ms for $|S|=5, b=3, d=2$
+on an A100), aggregate and rank evidence ($\sim$270ms). Total:
+$\sim$0.32s per query for a 10K-node graph.
+
+\section{What the Guarantee Says}
+
+No formal convergence guarantees are provided for the REINFORCE
+training. Empirically, the policy training converges in 3--5
+epochs on all three benchmarks. The system provides no worst-case
+latency guarantee, but median latency is 0.32s and 99th percentile
+is 1.1s on a 10K-node graph.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{EgoSchema-Long:} $+$7.2\% accuracy vs.\ dense retrieval;
+    $+$4.1\% vs.\ best static graph baseline
+  \item \textbf{MMAgent-Bench:} $+$11.3\% task completion vs.\ dense
+    retrieval; $+$6.8\% vs.\ static graph
+  \item \textbf{MultiModal-NarrativeQA:} $+$6.8 F1 vs.\ dense retrieval;
+    $+$3.9 F1 vs.\ static graph
+  \item \textbf{Latency:} 0.32s median; scales sub-linearly with graph
+    size to 100K nodes
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Query-conditioned vs.\ static forest construction:}
+Replacing the policy with static BFS expansion degrades by $-$4.3\%
+on average — confirming that query-aware adaptation of tree structure
+is the primary driver of improvement.
+
+\textbf{Cross-modal aggregation:} Replacing the cross-modal transformer
+with modality-specific encoders (no cross-attention) degrades by
+$-$3.1\%, confirming that cross-modal evidence fusion adds value
+beyond independent retrieval.
+
+\textbf{Depth $d$ and branch factor $b$:} $d{=}2, b{=}3$ is optimal;
+$d{=}3$ slightly improves multi-hop tasks but increases latency by
+3$\times$. $b{=}1$ (DFS) is best for causal-chain tasks; $b{=}5$
+(broad BFS) is best for evidence-gathering tasks; the policy learns
+to approximate this per-query adaptively.
+
+\textbf{Reward baseline:} Using dense retrieval performance as
+REINFORCE baseline substantially stabilises policy training
+compared to a constant baseline (variance reduced by 4.1$\times$).
+
+\section*{Reference}
+
+Geng Li, Yuhao Wang, Dong Li, Jianye Hao, Yuxin Peng.
+\textbf{GraphMemix: Query-Aware Evidence Forests for Long-Term
+Multimodal Agent Memory.}
+arXiv:2608.26983, August 2026.
+\url{https://arxiv.org/abs/2608.26983}
+
+\end{document}

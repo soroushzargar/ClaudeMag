@@ -1,0 +1,246 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-31}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video generation \textbullet{}
+  visual reasoning \textbullet{}
+  benchmark \textbullet{}
+  diffusion models}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  VGI-Bench: Probing Visual Intelligence
+  in Video Generation Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  27 Tasks and 810 Instances Reveal That Even the Strongest
+  Video Generator Fails Half the Time on Visually Grounded Reasoning}\par\vspace{6pt}
+
+{\small\textbf{By} Xuan He et al.\ (23 authors)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.19583 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Video generation models have surpassed human perceptual quality ratings
+on many production metrics, but can they \emph{reason visually}
+through their generated frames? VGI-Bench probes this question with
+27 tasks spanning physics, spatial logic, counting, and rule-following,
+each scored by an executable verifier that accepts any feasible
+solution. The answer is sobering: Seedance 2.0, the strongest evaluated
+model, achieves 51.0\%; denoising trajectory analysis reveals that
+models commit to visual hypotheses early and almost never self-correct.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing video generation benchmarks reward perceptual
+    plausibility rather than visually grounded reasoning; current models
+    may look good while failing to satisfy physical or logical constraints.
+  \item[Why it matters:] Video generation is increasingly used for
+    simulation, planning, and reasoning augmentation; measuring visual
+    intelligence is essential to evaluate genuine utility.
+  \item[Method:] 27 tasks $\times$ 810 instances with a two-level taxonomy;
+    executable verifiers accept any feasible solution (not just ground truth);
+    inputs designed for video model visual priors.
+  \item[Result:] Seedance 2.0 achieves 51.0\% Verifier Acceptance Rate (VAR);
+    most models score below 40\%; denoising analysis shows no self-correction.
+  \item[Evidence:] Physical constraint tasks are hardest (38\%);
+    failure modes: physical collapse (31\%), rule violation (28\%),
+    object inconsistency (24\%).
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Video generation models are no longer merely artists. They are
+increasingly deployed as simulators for planning, world-model probes,
+and reasoning-augmented generation — roles that require genuine visual
+intelligence, not just surface realism.
+
+Recent work has suggested that video generation models may exhibit
+emergent visual reasoning: given a visual prompt depicting an initial
+state, can the model generate a video that evolves the scene in a
+physically and logically correct manner toward a goal? This would
+indicate that the model has learned not just to hallucinate plausible
+footage, but to solve visual problems through generation.
+
+VGI-Bench is the first benchmark designed to test this hypothesis
+systematically, with tasks that have verifiable solutions and inputs
+matched to the visual priors of contemporary video generators.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Plausibility vs.\ correctness:} Existing benchmarks (VBench,
+FID/FVD-based metrics) measure perceptual quality — whether generated
+videos look realistic. A video can be perfectly realistic while showing
+physically incorrect dynamics or failing to satisfy an explicit
+constraint. Perceptual metrics cannot measure whether the model solved
+the visual problem.
+
+\textbf{Input misalignment:} Benchmarks designed for discriminative
+VLMs use image-caption pairs as input, which do not match the
+generation-conditioned visual priors of diffusion video models. Inputs
+must be designed as visual scenes appropriate for the model's training
+distribution.
+
+\textbf{Benchmark saturation:} Benchmarks with simple visual tasks
+are rapidly saturated by frontier models, providing no differentiation
+above a certain capability threshold.
+
+\section{Core Mechanism}
+
+VGI-Bench specifies tasks via \textbf{hidden structured programs}
+that define:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item An initial visual scene (rendered as an image prompt)
+  \item A goal specification or constraint set
+  \item An executable verifier that accepts any feasible solution
+\end{itemize}
+
+The verifier is key: it does not compare to a fixed ground-truth
+video. Instead it takes the final frame (or frame sequence) and
+checks whether the specification is satisfied. This allows diverse
+valid solutions and avoids rewarding models that happen to generate
+the same pixels as a reference.
+
+The \textbf{two-level taxonomy} crosses:
+\begin{description}[leftmargin=0pt,itemsep=2pt,parsep=0pt,font=\small\bfseries]
+  \item[Task domain (9):] Physics simulation, spatial arrangement,
+    counting, pattern completion, causal reasoning, rule-following,
+    logical deduction, navigation, object tracking
+  \item[Skill tag (5):] Constraint satisfaction, state tracking,
+    multi-step planning, self-correction, multi-object coordination
+\end{description}
+
+The 27 tasks are chosen from the $9 \times 5$ crossing to maximise
+domain and skill diversity while maintaining calibrated difficulty
+(tasks are neither trivial for current models nor completely unsolvable).
+
+\section{Technical Formulation}
+
+Let $\mathcal{P}$ be the space of structured specifications and
+$f: \mathcal{P} \rightarrow \mathcal{S}$ a rendering function that
+maps a specification to a visual scene. A video model $G$ generates
+a video $v = G(f(p))$ conditioned on the rendered scene.
+
+The verifier $\mathcal{V}: v \times p \rightarrow \{0, 1\}$ checks
+whether video $v$ satisfies specification $p$. The
+\textbf{Verifier Acceptance Rate (VAR)} over $M$ instances is:
+\[
+  \text{VAR}(G) = \frac{1}{M}\sum_{i=1}^M \mathcal{V}(G(f(p_i)),\, p_i)
+\]
+
+The benchmark evaluates each model with a single generation per
+instance (no rejection sampling), to measure default generation
+quality rather than best-of-$k$ performance.
+
+\section{Learning or Inference Procedure}
+
+No training occurs within the benchmark. Models generate videos
+from image prompts using their standard inference pipeline (text
+conditioning is minimal — only a brief, non-task-specific caption
+is provided to avoid information leakage).
+
+\textbf{Denoising trajectory analysis:} For diffusion-based models,
+VGI-Bench provides a methodology for inspecting intermediate denoising
+steps using a frozen VLM evaluator at regular intervals (every 10\%
+of denoising steps). This reveals whether the model establishes the
+correct visual structure early or corrects errors later in denoising.
+
+\section{What the Guarantee Says}
+
+The verifier acceptance criterion is a sufficient condition for
+correctness on each task (any feasible solution is accepted), making
+VAR a lower bound on true task-solving rate. The paper validates
+verifier accuracy against human ratings: verifier agreement with
+human binary correctness judgments is 94.2\% across a 200-instance
+subset.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Seedance 2.0:} 51.0\% VAR (strongest model tested)
+  \item \textbf{Wan-2.1, Kling-2.0, others:} Below 40\% VAR
+  \item \textbf{Per-domain:} Physics constraints hardest
+    (Seedance 2.0: 38\%); counting/arrangement most accessible
+    (Seedance 2.0: 67\%)
+  \item \textbf{Per-skill:} Multi-step planning tasks show largest
+    cross-model spread, confirming they are capability-differentiating
+  \item \textbf{Denoising trajectories:} Models set visual structure
+    in first $\sim$20\% of denoising steps; later steps add detail
+    without correcting structural errors; self-correction rate: $<$4\%
+    of initially incorrect states across all models
+\end{itemize}
+
+\textbf{Failure mode breakdown:}
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Physical collapse (gravity, collision violations): 31\%
+  \item Rule violation (incorrect step in evolving system): 28\%
+  \item Object/state inconsistency (identity drift): 24\%
+  \item Correct terminal state, incorrect trajectory: 17\%
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Text conditioning:} Adding task-specific text prompts (hint
+at the constraint) improves VAR by $+7.4$ pp on average, but models
+remain far from ceiling, suggesting limited text-to-visual reasoning
+integration.
+
+\textbf{Best-of-$k$ generation:} Best-of-8 using the verifier as an
+oracle oracle selector improves Seedance 2.0 to 66.2\% VAR, showing
+that partial capability exists but is unreliably expressed in a single
+generation.
+
+\textbf{Taxonomy analysis:} Skill tag ``constraint satisfaction''
+is the weakest across models (mean VAR 32\%); ``counting and arrangement''
+is the strongest (mean VAR 51\%). This suggests that spatial counting
+and arrangement has been inadvertently trained, while hard constraint
+satisfaction has not.
+
+\section*{Reference}
+
+Xuan He et al.
+\textbf{VGI-Bench: Probing Visual Intelligence in Video
+Generation Models.}
+arXiv:2608.19583, August 2026.
+\url{https://arxiv.org/abs/2608.19583}
+
+\end{document}

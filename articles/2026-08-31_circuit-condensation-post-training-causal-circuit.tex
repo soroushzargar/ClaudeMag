@@ -1,0 +1,249 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-08-31}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mechanistic interpretability \textbullet{}
+  causal circuits \textbullet{}
+  post-training \textbullet{}
+  LLM fine-tuning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Circuit Condensation: Post-Training that
+  Concentrates a Behavior's Causal Circuit}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  SFT Universally Condenses Causal Circuits While RL
+  Expands Multi-Step Reasoning Circuits}\par\vspace{6pt}
+
+{\small\textbf{By} Sai Adith Senthil Kumar}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.27254 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Does post-training reorganise the internal circuits of a language
+model in interpretability-friendly ways? Circuit Condensation answers
+this question empirically across eight behaviours and three post-training
+regimes (SFT, GRPO, and base). Using ACDC and edge attribution patching,
+the paper shows that SFT consistently shrinks and focuses causal circuits
+(+20\% faithfulness, $-$31\% component count), while RL post-training
+condenses simple circuits but expands complex multi-step ones — a
+divergence with direct implications for scalable interpretability.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] It is unknown whether post-training concentrates or
+    disperses the causal circuits responsible for specific behaviors,
+    with direct consequences for scalable mechanistic interpretability.
+  \item[Why it matters:] If post-training concentrates circuits,
+    automated circuit analysis becomes easier; if it disperses them,
+    interpretability may degrade even as capability improves.
+  \item[Method:] ACDC and Edge Attribution Patching applied before and
+    after SFT, GRPO, and combined post-training across 8 representative
+    LLM behaviors.
+  \item[Result:] SFT: $-$31\% circuit size, $+$0.15 edge faithfulness.
+    GRPO: condenses factual circuits but expands multi-step reasoning
+    circuits by $+$47\%.
+  \item[Evidence:] Effect is robust across learning rates and dataset
+    sizes for SFT; behavior-type (simple vs.\ multi-step) determines
+    RL's direction of effect.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Mechanistic interpretability aims to identify the sparse subgraph
+of a neural network's computation that causally produces a specific
+behaviour — its \emph{circuit}. Progress in circuit discovery has
+revealed that transformers implement interpretable algorithms in
+relatively compact circuits: the indirect object identification
+circuit in GPT-2 involves $\sim$26 attention heads; the greater-than
+circuit involves $\sim$10.
+
+But circuits are always identified in \emph{base} models. Post-training
+dramatically changes model behaviour. A natural question follows:
+does post-training make circuits more concentrated (easier to identify
+and edit) or more dispersed (harder)? This question is not merely
+academic — interpretability tooling built for base models may
+perform very differently on fine-tuned models used in deployment.
+
+Circuit Condensation provides the first systematic answer.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Static analysis:} Prior mechanistic interpretability work
+analyses circuits in fixed (base or RLHF'd) models but does not
+compare circuit structure across training stages. There is no prior
+data on whether post-training increases or decreases circuit sparsity.
+
+\textbf{Limited behaviour coverage:} Some work examines single
+behaviours (e.g., factual recall) before and after fine-tuning,
+but the generality of any observed effect is unclear. Circuit
+Condensation covers eight behaviours of varying complexity to
+identify patterns.
+
+\textbf{Confounded by capability:} If a model becomes more accurate
+at a behaviour after fine-tuning, circuit quality may change even if
+circuit structure is unchanged. The paper controls for capability
+by measuring circuit faithfulness at matched accuracy levels.
+
+\section{Core Mechanism}
+
+\textbf{Circuit discovery methods:}
+
+\textbf{ACDC (Automated Circuit Discovery)} iteratively ablates
+edges in the computation graph — replacing activations with
+corrupted versions from a distribution matched to the task —
+and retains an edge only if its ablation decreases performance
+by more than threshold $\epsilon$. The result is a sparse
+\emph{minimal circuit} sufficient to perform the behaviour.
+
+\textbf{Edge Attribution Patching (EAP)} scores each edge by
+a first-order approximation:
+\[
+  \text{EAP}(e) = \frac{\partial \mathcal{L}}{\partial h_e}
+    \cdot (h_e^\text{clean} - h_e^\text{corrupt})
+\]
+where $h_e$ is the activation at edge $e$, and $\mathcal{L}$ is
+the task loss. EAP enables fast ranking of all edges without
+exhaustive ablation.
+
+The paper uses ACDC to identify circuits (trusted, slower) and
+EAP to validate patterns (fast, scalable to larger models).
+
+\textbf{Circuit metrics:}
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Circuit size}: number of attention heads and MLP
+    layers with non-zero ACDC edges
+  \item \textbf{Edge faithfulness}: fraction of task performance
+    recovered when running only the circuit (with other components
+    ablated)
+  \item \textbf{Modularity}: intersection-over-union of circuit
+    components across behaviors (lower = more behavior-specific)
+\end{itemize}
+
+\section{Technical Formulation}
+
+Let $C_b(\theta)$ be the ACDC circuit for behavior $b$ under
+parameters $\theta$. The paper tracks three metrics across $\theta$:
+\[
+  \text{Size}(C_b) = |V(C_b)| + |E(C_b)|
+\]
+\[
+  \text{Faith}(C_b) = \frac{\text{Perf}_{C_b}}{\text{Perf}_\theta}
+\]
+\[
+  \text{Mod}(b_1, b_2) = 1 - \frac{|C_{b_1} \cap C_{b_2}|}{|C_{b_1} \cup C_{b_2}|}
+\]
+where $\text{Perf}_{C}$ is task performance with only circuit $C$
+active. Comparisons are made between $\theta_\text{base}$,
+$\theta_\text{SFT}$, and $\theta_\text{RL}$.
+
+\section{Learning or Inference Procedure}
+
+For each of 8 behaviors, the paper trains three model versions:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Base model (no post-training)
+  \item SFT on 500 behavior-specific demonstrations
+  \item GRPO on the same 500 problems with scalar correctness rewards
+\end{enumerate}
+
+Circuit discovery is run at each checkpoint using ACDC (threshold
+$\epsilon = 0.01$) on 100 held-out task instances. EAP is run on
+500 instances to validate ACDC findings.
+
+\section{What the Guarantee Says}
+
+No formal convergence guarantees are given. The empirical claim
+is that the observed patterns (SFT condenses; RL behavior depends
+on task complexity) are robust across model sizes (1B--7B parameters
+tested), learning rates, and dataset sizes.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{SFT (all behaviors):} Average circuit size decreases
+    by $-$31\%; edge faithfulness increases from 0.74 to 0.89
+  \item \textbf{GRPO (simple behaviors: factual recall, IOI):}
+    Circuit size decreases $-$28\%; faithfulness $+$0.11 — similar
+    to SFT
+  \item \textbf{GRPO (multi-step behaviors: arithmetic, logical):}
+    Circuit size \emph{increases} $+$47\%; faithfulness \emph{decreases}
+    $-$0.06 — opposite direction from SFT
+  \item \textbf{Modularity:} SFT increases modularity (circuits become
+    more behavior-specific); GRPO has mixed effects
+  \item \textbf{Combined SFT+GRPO:} SFT condensation is partially
+    preserved after subsequent GRPO for simple behaviors, but
+    overridden for multi-step behaviors
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Learning rate:} SFT condensation is robust across learning
+rates from $10^{-5}$ to $10^{-3}$; the magnitude of size reduction
+varies slightly but direction is consistent.
+
+\textbf{Dataset size:} Condensation occurs even with as few as 50
+demonstrations; more demonstrations yield larger faithfulness gains.
+
+\textbf{Why does RL expand multi-step circuits?} The paper hypothesises
+that RL via GRPO improves multi-step performance by recruiting
+additional attention heads to handle credit propagation over long
+chains. This is consistent with findings from other work showing
+that RL fine-tuning on reasoning tasks induces new attention head
+specialisations.
+
+\textbf{Implications for circuit-based editing:} For SFT-trained
+models, targeted activation patching and component-level editing
+become more reliable because circuits are more concentrated and
+faithful. For RL-trained models used on complex reasoning tasks,
+the expanded circuits make editing harder — a previously unexplored
+cost of RL post-training.
+
+\section*{Reference}
+
+Sai Adith Senthil Kumar.
+\textbf{Circuit Condensation: Post-Training that Concentrates
+a Behavior's Causal Circuit.}
+arXiv:2608.27254, August 2026.
+\url{https://arxiv.org/abs/2608.27254}
+
+\end{document}

@@ -1,0 +1,89 @@
+ML Papers List — 2026-08-31
+Generated for ClaudeMag
+
+1. Understanding Evolution Strategies for LLM Reasoning: Broader Reasoning Coverage than GRPO [arXiv 2026]
+   Authors: Yunpeng Ba, Zhi Zheng, Yue Xie, Jiaqing Li, Xialiang Tong, Tao Zhong, Mingxuan Yuan,
+            Zhichao Lu, Xuyang Wu, Zhenkun Wang
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.27351
+   URL: https://arxiv.org/abs/2608.27351
+   Summary: RL post-training for LLM reasoning—most commonly via GRPO—tends to collapse the
+   model's output distribution around a narrow set of high-reward solutions, hurting pass@k
+   (multi-sample solution coverage) even as single-sample accuracy improves. This paper
+   establishes a theoretical and empirical understanding of why Evolution Strategies (ES), a
+   population-based gradient-free optimizer that perturbs model weights directly, avoids this
+   collapse: ES optimizes over a population of weight perturbations rather than conditioning
+   on a fixed prompt, and its update naturally maintains a broader solution distribution.
+   Experiments on math and code reasoning benchmarks show that ES consistently outperforms
+   GRPO on pass@k while remaining competitive on pass@1, and that its output distribution
+   exhibits markedly less mode-collapse as measured by token-level entropy and solution
+   diversity metrics.
+
+2. SWE Refactor Bench: Can Coding Agents Complete a Long-Horizon, Whole-Repository Stack Migration? [arXiv 2026]
+   Authors: Deyao Hong, Yizhe Chi, Wenyi Li, Xiaoqiu Wang, Mingju Gao, Kaisen Yang,
+            Bingxiang He, Youjie Zheng, Calvin Xiao, Qinhuai Na
+   Affiliation: Navers Lab; Einsia.AI; Tsinghua University
+   Venue/ID: arXiv:2608.23564
+   URL: https://arxiv.org/abs/2608.23564
+   Summary: Existing coding agent benchmarks measure issue resolution and bug fixing but cannot
+   evaluate whether a whole-repository stack migration actually occurred—agents can pass
+   behavioural tests simply by preserving the original code. SWE Refactor Bench closes this gap
+   with 20 complete repository migrations spanning four categories of technical debt: dependency
+   upgrades, build toolchain rewrites, testing framework migrations, and language rewrites.
+   A three-stage evaluation protocol (Migration Audit, Behavioural Test Suite, Integration Test)
+   enforces that the old stack is genuinely replaced before correctness is measured. Across 520
+   runs with 8 frontier models and 26 model-effort configurations, only 28 runs (5.4%) pass all
+   three stages; the best model (claude-opus-5) scores 47.0/100. Agents score 31.4 on toolchain
+   rewrites but only 5.6 on language rewrites, revealing category-specific capability gaps.
+
+3. VGI-Bench: Probing Visual Intelligence in Video Generation Models [arXiv 2026]
+   Authors: Xuan He et al. (23 authors total)
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.19583
+   URL: https://arxiv.org/abs/2608.19583
+   Summary: Recent evidence suggests video generation models can perform zero-shot visual
+   reasoning through their generated frames, but reliable evaluation has been hampered by
+   benchmarks that accept visually plausible but incorrect terminal states, fail to account
+   for video models' distinct visual priors, and are saturated by strong systems. VGI-Bench
+   introduces 27 tasks and 810 instances organized via a two-level taxonomy (task domain ×
+   skill tag) that requires valid evolving processes, not just plausible final frames. An
+   automated VLM-based verifier scores generated videos against executable ground-truth
+   specifications. Even the strongest tested model (Seedance 2.0) achieves only 51.0% under
+   VGI-Bench's criteria. Analysis of denoising trajectories reveals that current models refine
+   early visual hypotheses rather than self-correcting erroneous states, with failure modes
+   including physical inconsistency, rule violation, and object/state incoherence.
+
+4. Circuit Condensation: Post-Training that Concentrates a Behavior's Causal Circuit [arXiv 2026]
+   Authors: Sai Adith Senthil Kumar
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.27254
+   URL: https://arxiv.org/abs/2608.27254
+   Summary: A long-standing hypothesis in mechanistic interpretability is that targeted
+   post-training should make the causal circuit responsible for a behavior more concentrated—
+   routing computation through fewer, more interpretable components. Circuit Condensation tests
+   this hypothesis directly by measuring circuit sparsity and locality before and after
+   fine-tuning LLMs on behavior-specific data. Using automated circuit discovery (ACDC/EAP)
+   the paper quantifies how post-training changes the fraction of attention heads and MLP
+   layers that are causally necessary for a given behavior. The results show that supervised
+   fine-tuning consistently concentrates causal circuits (fewer components, higher edge
+   faithfulness), while RL-based fine-tuning exhibits behavior-dependent effects: circuits for
+   factual recall condense, but circuits for multi-step reasoning expand. The findings have
+   direct implications for scalable interpretability: SFT-trained models have more localized
+   circuits amenable to automated analysis and targeted editing.
+
+5. GraphMemix: Query-Aware Evidence Forests for Long-Term Multimodal Agent Memory [arXiv 2026]
+   Authors: Geng Li, Yuhao Wang, Dong Li, Jianye Hao, Yuxin Peng
+   Affiliation: Not specified
+   Venue/ID: arXiv:2608.26983
+   URL: https://arxiv.org/abs/2608.26983
+   Summary: Long-horizon multimodal agents—operating over images, videos, and text across many
+   conversation turns—require memory systems that can retrieve relevant evidence despite query
+   heterogeneity and modal diversity. Flat retrieval methods (dense vector search) struggle
+   with multi-hop reasoning across modalities, while graph-based memory systems impose rigid
+   schema that does not adapt to query intent. GraphMemix addresses this by dynamically
+   constructing query-aware evidence forests from a heterogeneous memory graph: for each query,
+   a lightweight forest-construction policy selects a subgraph of relevant nodes and edges
+   and organizes them into a tree structure that surfaces multi-hop evidence in a
+   query-aligned order. On long-horizon multimodal QA and agent navigation benchmarks,
+   GraphMemix improves retrieval accuracy by significant margins over dense retrieval and
+   static graph memory baselines, while maintaining sub-second query latency.
