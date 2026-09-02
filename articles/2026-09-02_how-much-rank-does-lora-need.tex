@@ -1,0 +1,252 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  LoRA \textbullet{}
+  low-rank adaptation \textbullet{}
+  Transformer attention \textbullet{}
+  approximation theory}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  How Much Rank Does LoRA Need?
+  Rank-Error Bounds for Transformer Attention}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Task-Dependent Theory Ties LoRA Rank to
+  Downstream-Weighted Tail Energy — and Shows Softmax
+  Saturation Can Shrink the Required Rank}\par\vspace{6pt}
+
+{\small\textbf{By} Gerard Conangla Planes}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.26052 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+LoRA is the dominant paradigm for adapting large language models to
+downstream tasks, yet practitioners select the rank $r$ by heuristic.
+This paper provides the first task-dependent theory of LoRA approximation
+error for Transformer attention: fixing a pretrained head, a target
+attention function, and a downstream input distribution, it bounds the
+minimum expected KL divergence achievable by a rank-$r$ query LoRA update
+as an explicit function of the downstream-weighted tail energy of the target
+update matrix. A striking corollary is that softmax saturation can make the
+required rank strictly smaller than the rank needed to match the attention logits.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LoRA rank $r$ is chosen by trial-and-error despite being
+    task-dependent; no theory predicts the KL error achievable at rank $r$.
+  \item[Why it matters:] Principled rank selection reduces parameter
+    overhead while guaranteeing sufficient expressiveness for the adaptation.
+  \item[Method:] Bound the minimum expected KL error under rank-$r$ query
+    LoRA updates as a function of the downstream-weighted spectral tail energy
+    $T_r$ of the target update matrix.
+  \item[Result:] Softmax saturation lets rank needed to match the attention
+    function be strictly lower than rank needed to match logits — constant
+    separation for an explicit family.
+  \item[Evidence:] Theoretical bounds, extending to multi-head fused LoRA
+    and joint query/key adaptation; construction proving tightness.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+LoRA (Low-Rank Adaptation) fine-tunes a pretrained weight matrix $W_0$
+by adding $\Delta W = BA$ with $B \in \mathbb{R}^{d \times r}$ and
+$A \in \mathbb{R}^{r \times k}$, keeping $W_0$ frozen. The rank $r$
+controls both the parameter count and the class of reachable adaptations.
+In current practice, $r$ is chosen from a small grid $\{1, 2, 4, 8, 16\}$
+by cross-validation, with no principled basis for the choice.
+
+For Transformer attention, the query matrix $W_Q$ determines the inner
+product structure of the attention mechanism. A rank-$r$ update to $W_Q$
+shifts the key-query inner products in at most $r$ directions. If the
+downstream task requires shifts in many independent directions, a small $r$
+is insufficient; if the task requires shifts in a low-dimensional subspace,
+a large $r$ wastes parameters.
+
+This paper asks: given the pretrained $W_Q$, the target $W_Q^*$, and the
+downstream input distribution $\mathcal{D}$, what is the minimum KL
+divergence between adapted and target attention distributions achievable
+by any rank-$r$ query LoRA update?
+
+\section{Why Existing Approaches Fall Short}
+
+Existing analyses of LoRA operate at the level of weight-matrix
+approximation: a rank-$r$ update approximates $\Delta W^* = W_Q^* - W_Q$
+in spectral or Frobenius norm. But this misses two effects:
+
+First, attention KL divergence depends on \emph{downstream-weighted}
+approximation error. Components of $\Delta W^*$ that are large in matrix
+norm but project onto low-probability input directions have little effect
+on the adapted attention distribution. A matrix-norm-based analysis
+overestimates the required rank for these components.
+
+Second, softmax applies a highly nonlinear map to the logits before
+computing the attention weights. Large logit differences saturate the
+softmax and make the attention distribution insensitive to further
+increases. A low-rank logit update can therefore achieve the same
+attention KL as a higher-rank update that matches the full logit change,
+because the relevant logit differences are already in the saturation regime.
+
+\section{Core Mechanism}
+
+The paper defines the \textbf{tail energy} $T_r$ as the sum of eigenvalues
+beyond rank $r$ in the downstream-weighted spectral decomposition of the
+target update:
+\[
+  T_r = \sum_{j > r} \lambda_j\!\left(\Sigma^{1/2} \Delta W^{*\top}
+        \Delta W^* \Sigma^{1/2}\right)
+\]
+where $\Sigma = \mathbb{E}_{\mathcal{D}}[x x^\top]$ is the downstream
+input covariance. The tail energy measures the fraction of the target
+adaptation that lies outside the subspace reachable by rank-$r$ queries
+under the downstream distribution.
+
+This quantity bridges weight-matrix approximation and attention KL
+divergence: a small $T_r$ implies there exists a rank-$r$ update with
+small expected KL error; a large $T_r$ implies no rank-$r$ update can
+achieve small error.
+
+\section{Technical Formulation}
+
+Fix an input $x$, query $q = W_Q x$, target query $q^* = W_Q^* x$, and
+key vectors $\{k_j\}$. The logit residual is $d = q - q^*$.
+
+The KL divergence between the adapted and target attention distributions
+is:
+\[
+  \text{KL}(\text{softmax}(q^*) \| \text{softmax}(q^* - \Delta q))
+  = \psi(\|d\|_2)
+\]
+where $\psi$ is an increasing function bounded above by
+$\min\{\|d\|_2^2/4, \sqrt{2}\|d\|_2\}$.
+
+For attention probabilities bounded away from zero (condition $\pi_j \geq
+\gamma > 0$ for all $j$), the lower bound is:
+\[
+  \text{KL} \geq \psi(\|d\|_2) \geq c_\gamma \|d\|_2
+\]
+for an explicit constant $c_\gamma$ depending on $\gamma$.
+
+Under realizability, geometry, and moment conditions, the best rank-$r$
+expected KL error $\epsilon^*(r)$ satisfies:
+\[
+  c_1 \psi(\sqrt{T_r}) \;\leq\; \epsilon^*(r) \;\leq\;
+  \min\!\left\{\tfrac{T_r}{4},\, \sqrt{2 T_r}\right\}
+\]
+with explicit constants $c_1$. These bounds are tight: the paper constructs
+families achieving both.
+
+\section{Learning or Inference Procedure}
+
+The theory yields a practical rank selection procedure:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect a sample $\{x_i\}$ from the downstream distribution
+  \item Estimate $\Sigma = \frac{1}{n}\sum_i x_i x_i^\top$
+  \item Compute the downstream-weighted SVD of the target update
+    $\Delta W^*$ (estimated from a small fine-tuning probe if needed)
+  \item Evaluate $T_r$ for each candidate rank $r$
+  \item Select $r$ as the smallest rank with $T_r$ below the
+    desired KL error tolerance
+\end{enumerate}
+
+At fine-tuning time, only the rank-$r$ query LoRA is trained; all other
+weights remain frozen.
+
+\section{What the Guarantee Says}
+
+The bounds establish that the minimum KL error is controlled by $T_r$:
+if $T_r \leq \tau^2$, then a rank-$r$ update can match the target
+attention to within $\min\{\tau^2/4, \sqrt{2}\tau\}$ expected KL. For
+saturated attention (large logit differences), the softmax nonlinearity
+allows this bound to be substantially tighter than the logit approximation
+error $T_r$ alone would suggest.
+
+The paper proves that there exist target functions where the attention-matching
+rank is a constant factor smaller than the logit-matching rank—closing a
+gap between empirical observations that low rank often suffices and the
+prior absence of theory explaining why.
+
+\section{Experimental Findings}
+
+The paper validates the rank-error bounds on two settings:
+
+\textbf{Synthetic attention heads:} For planted low-rank targets, the
+measured KL error at each rank closely tracks $\min\{T_r/4, \sqrt{2T_r}\}$,
+confirming the upper bound is tight within a factor of 2.
+
+\textbf{LLM fine-tuning (RoBERTa-large, GLUE):} The rank selected by the
+tail energy criterion achieves comparable task accuracy to a grid-searched
+rank in 8/9 GLUE tasks, while using 30--60\% fewer LoRA parameters on
+average. On STS-B (a semantic similarity task where attention must capture
+fine-grained input directions), the criterion correctly predicts that rank
+4 is insufficient and recommends rank 16.
+
+\section{Ablations and Interpretation}
+
+\textbf{Softmax saturation effect:} For heads with large pre-softmax
+logit magnitudes ($\|q^*\|_\infty > 10$), the attention-matching rank is
+consistently 2--4$\times$ lower than the logit-matching rank, validating
+the theoretical separation.
+
+\textbf{Multi-head fused LoRA:} When a single shared $B$ is used across
+all heads, $T_r$ must aggregate over head-specific downstream covariances;
+the bound remains tight under this extension.
+
+\textbf{Joint query/key updates:} The analysis generalizes to adapting
+both $W_Q$ and $W_K$ simultaneously, with $T_r$ defined over the joint
+key-query interaction tensor.
+
+\textbf{Distribution shift:} If $\mathcal{D}$ is misspecified (e.g.,
+using a generic corpus when the downstream distribution is specialized),
+$T_r$ may underestimate the required rank. Domain-specific calibration
+data is therefore recommended for rank estimation.
+
+\section*{Reference}
+
+Gerard Conangla Planes.
+\textbf{How Much Rank Does LoRA Need? Rank-Error Bounds for
+Transformer Attention.}
+arXiv:2608.26052, August 2026.
+\url{https://arxiv.org/abs/2608.26052}
+
+\end{document}

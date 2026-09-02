@@ -1,0 +1,261 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  constrained decoding \textbullet{}
+  context-free grammar \textbullet{}
+  structured generation \textbullet{}
+  pushdown automata}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Stay Within Your Bounds: Distance-Guided
+  Decoding for Guaranteed Context-Free
+  Grammar Compliance}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Lookahead Distance to Acceptance Closes the
+  Infeasibility Gap in Grammar-Constrained LM Decoding}\par\vspace{6pt}
+
+{\small\textbf{By} Vincenzo Collura, Karim Tit,
+  Eleonora Giunchiglia, Mike Papadakis, Maxime Cordy}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.28229 \textbullet{}
+  EMNLP 2026 Findings (Long Paper)}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Grammar-constrained decoding guarantees that a language model's output
+satisfies a target context-free grammar—enabling reliable generation of
+JSON, SQL, and logical formulas. But existing methods fail silently:
+they allow prefixes that no valid completion can extend within the token
+budget. This paper fixes that gap with a lookahead-guided framework
+that computes upper-bound distances to the nearest accepting PDA state,
+uses them to prune infeasible tokens online, and guides beam search
+toward acceptance. Every output is guaranteed syntactically valid;
+completion quality improves across all evaluated structure types.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Grammar masks block individually illegal tokens but
+    permit prefixes from which no budget-feasible completion satisfies
+    the grammar — producing invalid outputs despite the mask.
+  \item[Why it matters:] Hard syntactic guarantees are essential for
+    code generation, structured data extraction, and symbolic planning.
+  \item[Method:] Precompute bounded PDA summaries with upper-bound
+    distances to acceptance; prune tokens that exceed the remaining
+    budget; bias beam search toward acceptance.
+  \item[Result:] 100\% syntactic validity on JSON, SQL, and LTL
+    benchmarks; improved completion quality over prior constrained
+    baselines.
+  \item[Evidence:] Experiments across three structure types and
+    multiple grammar sizes; ablations on budget sensitivity and beam width.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Structured generation tasks require outputs that are syntactically valid
+instances of a target language: JSON objects, SQL queries, Python
+expressions, or formulas in linear temporal logic (LTL). Language models
+produce token sequences autoregressively, and without constraints they
+generate syntactically invalid outputs at a significant rate.
+
+Grammar-constrained decoding solves this by tracking a pushdown automaton
+(PDA) derived from the target context-free grammar (CFG). At each step, it
+masks out tokens that are not consistent with the current PDA state,
+ensuring only locally valid tokens are sampled. This prevents any single
+token from violating the grammar.
+
+But local validity is not global validity. A sequence of locally valid
+tokens can lead the PDA into a configuration from which no complete valid
+string can be generated within the remaining budget. The decoder emits a
+prefix that is syntactically valid so far, but cannot be completed.
+
+\section{Why Existing Approaches Fall Short}
+
+Two failure modes arise in prior grammar-constrained decoding:
+
+\textbf{Tokenizer-grammar mismatch:} LM subword tokenizers may split
+strings at positions that do not align with grammar terminal boundaries.
+A token that spans multiple grammar symbols can leave the PDA in a
+non-standard mid-rule state that requires specific continuations — which
+the remaining token vocabulary may not support.
+
+\textbf{Budget exhaustion:} Even with perfect tokenizer alignment, the
+PDA may enter a configuration requiring many more tokens to reach
+acceptance than remain in the budget. The decoder continues generating
+but cannot produce a valid closing sequence.
+
+Both failure modes share the same root: the token mask checks local
+legality (is this token consistent with the current PDA state?) but not
+global feasibility (is there any valid completion within budget?).
+
+\section{Core Mechanism}
+
+The paper introduces a \textbf{distance oracle}: for each PDA configuration
+$c = (q, \gamma)$ (state $q$, stack content $\gamma$), precompute an
+upper-bound estimate $\hat{d}(c)$ of the minimum number of additional
+tokens needed to reach any accepting configuration.
+
+At each decoding step with $B$ tokens remaining, a token $a$ is permitted
+only if:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item It is locally consistent with the current PDA state (existing mask)
+  \item The successor configuration $c' = \delta(c, a)$ satisfies
+    $\hat{d}(c') \leq B$
+\end{enumerate}
+
+Condition 2 is the new feasibility filter. It ensures that after token $a$
+is emitted, the remaining budget is sufficient to reach acceptance.
+
+Among the feasible tokens, beam search is guided by a distance-adjusted
+score:
+\[
+  s'(a) = \log p_\theta(a \mid x_{<t}) - \lambda \cdot \hat{d}(\delta(c, a))
+\]
+which biases the beam toward tokens that reduce the distance to acceptance,
+improving completion quality.
+
+\section{Technical Formulation}
+
+Let $\mathcal{A} = (Q, \Sigma, \Gamma, \delta, q_0, F)$ be the PDA for
+the target CFG. Define the \textbf{distance to acceptance}:
+\[
+  d(c) = \min\!\left\{n \in \mathbb{N} : \exists w \in \Sigma^n,\,
+    c \xrightarrow{w} (q_f, \varepsilon),\, q_f \in F\right\}
+\]
+with $d(c) = \infty$ if no such $w$ exists.
+
+The paper computes upper bounds $\hat{d}(c) \geq d(c)$ by summarizing
+PDA reachability with bounded lookahead:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item For each PDA state $q$, compute the shortest path in the
+    non-deterministic reachability graph over $(q, \gamma)$ pairs to
+    any $q_f \in F$, with stack operations truncated at a bounded depth.
+  \item Propagate distances bottom-up through grammar rule bodies.
+\end{enumerate}
+The computation is done offline before decoding. Online, only a table
+lookup per (configuration, token) pair is required.
+
+For a token budget $T$ and a model generating tokens $a_1, \ldots, a_T$:
+\[
+  a_t^* = \arg\max_{a:\, \hat{d}(\delta(c_t, a)) \leq T - t}
+           s'(a)
+\]
+guarantees that every emitted prefix can be completed within the remaining
+budget.
+
+\section{Learning or Inference Procedure}
+
+The framework operates purely at inference time:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Given a target CFG, compile it to a PDA and compute the distance
+    oracle $\hat{d}(\cdot)$ offline.
+  \item At each decoding step, compute the set of feasible tokens
+    (locally valid and budget-feasible).
+  \item Apply beam search with distance-guided scores.
+  \item Return the highest-scoring complete parse at the end.
+\end{enumerate}
+
+No fine-tuning or modification of the base language model is required.
+The framework integrates with any autoregressive LM.
+
+\section{What the Guarantee Says}
+
+The decoder is \textbf{sound}: every generated sequence is accepted by
+the target grammar. Specifically, if the initial budget $T$ satisfies
+$T \geq \hat{d}(q_0, \bot)$ (the oracle distance from the initial
+configuration), then at least one feasible token exists at every step
+and the decoder terminates with a valid output.
+
+The distance oracle guarantee is: for every configuration $c$ encountered
+during decoding, $\hat{d}(c) \geq d(c)$, so the feasibility filter never
+incorrectly prunes a token that leads to a valid completion.
+
+\section{Experimental Findings}
+
+Evaluated on three structure types with three LLMs (GPT-2-XL,
+LLaMA-3-8B, Mistral-7B-v0.3):
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{JSON:} 100\% syntactic validity for all models and
+    grammar sizes; schema match rate $+9.3$ pp over greedy and $+6.1$ pp
+    over token-mask-only baselines.
+  \item \textbf{SQL:} 100\% parse validity; execution accuracy $+7.8$ pp
+    over token-mask-only decoding on Spider benchmark.
+  \item \textbf{LTL:} 100\% formula well-formedness; satisfaction rate
+    of generated plans $+11.2$ pp over prior constrained baselines.
+  \item \textbf{Latency:} Oracle precomputation takes 0.3--1.8 s for
+    practical grammar sizes; online overhead per step is negligible.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Budget sensitivity:} With tight budgets ($T$ only 10\% above
+$d(q_0, \bot)$), the feasibility filter prunes aggressively and
+occasionally leaves no feasible token at mid-sequence steps. A
+budget cushion of 30\% eliminates this; the paper recommends budget
+estimation from grammar depth.
+
+\textbf{Distance-guidance weight $\lambda$:} $\lambda = 0$ (pure
+language model score) recovers the token-mask baseline; $\lambda = 0.5$
+achieves the best completion quality. Larger $\lambda$ over-constrains
+generation toward acceptance and reduces fluency.
+
+\textbf{Beam width:} Distance-guided beam search with width 4
+outperforms greedy distance-guided decoding by $+2.1$ pp on JSON
+schema match, with diminishing returns beyond width 8.
+
+\textbf{Grammar size:} The oracle scales well to grammars with up to
+500 production rules, covering real SQL dialects. For larger grammars,
+the bounded-lookahead approximation introduces small oracle errors but
+validity is preserved.
+
+\section*{Reference}
+
+Vincenzo Collura, Karim Tit, Eleonora Giunchiglia, Mike Papadakis,
+Maxime Cordy.
+\textbf{Stay Within Your Bounds: Distance-Guided Decoding for
+Guaranteed Context-Free Grammar Compliance.}
+arXiv:2608.28229, EMNLP 2026 Findings.
+\url{https://arxiv.org/abs/2608.28229}
+
+\end{document}

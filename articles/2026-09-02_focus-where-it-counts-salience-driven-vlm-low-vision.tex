@@ -1,0 +1,241 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,80}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language models \textbullet{}
+  assistive technology \textbullet{}
+  salience \textbullet{}
+  low vision}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Focus Where It Counts: A Salience-Driven
+  Vision-Language Model for Low Vision Assistance}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Captioning That Prioritizes Scene Elements by Human-Centered
+  Importance, Not Photographic Coverage}\par\vspace{6pt}
+
+{\small\textbf{By} Jiazhao Liang, Hao Huang, Shuaihang Yuan, et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.28218 \textbullet{} ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-language models offer powerful scene captioning but are designed
+for comprehensive coverage, not for the ordered priorities of users with
+blindness or low vision. This paper introduces Salience-LLaVA, a
+salience-driven VLM trained to mention scene elements in order of their
+functional importance for human-centered navigation and interaction.
+Supported by three newly curated salience-annotated datasets, the model
+places the highest-priority element first in 84.3\% of test images
+and is rated 4.2/5 by blind and low-vision users—versus 3.1/5 for
+standard LLaVA.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] General-purpose VLMs describe images comprehensively
+    but do not order information by functional relevance for users with
+    blindness or low vision.
+  \item[Why it matters:] BLV users often hear only the first few seconds
+    of a caption; placing important information last renders AI assistance
+    unreliable for navigation and safety.
+  \item[Method:] Curate salience-annotated datasets; fine-tune LLaVA
+    with a combined captioning and ranking loss to produce salienceordered
+    descriptions; prepend salience scores as soft prompts.
+  \item[Result:] 84.3\% top-1 salience ordering accuracy (vs.\ 51.2\%
+    for LLaVA); 4.2/5 user helpfulness rating vs.\ 3.1/5.
+  \item[Evidence:] Three datasets, user study with BLV participants,
+    transfer experiments on VizWiz.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Assistive technology for persons with blindness or low vision (BLV) is
+undergoing a rapid transformation as vision-language models replace
+earlier rule-based systems. VLMs can describe complex scenes in natural
+language, answer visual questions, and identify objects---capabilities
+that are transformative for BLV users navigating the world.
+
+But VLMs are trained on captioning benchmarks that reward comprehensive
+coverage: a high CIDEr score requires mentioning many objects accurately.
+For a BLV user in a grocery store, a caption that begins with the color
+and pattern of the floor tiles before mentioning that the aisle is blocked
+by a forklift is not just unhelpful---it is dangerous.
+
+This paper identifies the ordering problem as a first-class challenge in
+assistive VLM design and proposes a framework that addresses it through
+salience-aware training.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{General-purpose captioning:} Models trained on MSCOCO and
+similar benchmarks describe images from top-left to bottom-right, or
+by object size/saliency in the photographic sense. Neither corresponds
+to functional importance for BLV navigation or interaction.
+
+\textbf{VQA-based assistance:} Answering specific questions (``Is the
+crosswalk light green?'') requires the user to know what to ask. Open-ended
+scene description is essential for unknown environments.
+
+\textbf{Prior assistive captioning:} Work on VizWiz-focused models
+improves answer accuracy for BLV-generated images but does not address
+the ordering of information in free-form descriptions.
+
+The key missing component is a notion of \emph{salience} grounded in
+human-centered priorities rather than photographic composition.
+
+\section{Core Mechanism}
+
+The Salience-LLaVA framework has two components:
+
+\textbf{Salience scoring module:} A lightweight MLP head added to the
+VLM's visual encoder that predicts a scalar salience score $s_i \in [0,1]$
+for each detected bounding box $o_i$. The module is trained with a
+point-wise ranking loss against human-annotated salience ranks.
+
+\textbf{Salience-conditioned caption generation:} The caption generator
+receives the ranked object list $[o_{\pi(1)}, o_{\pi(2)}, \ldots]$
+(sorted by predicted salience) as soft prompt tokens prepended to the
+image features. The LM is then trained to generate captions that mention
+objects in the order they appear in the ranked list.
+
+At inference, salience scoring and caption generation run in sequence:
+score all detected objects, sort by salience, generate a caption
+conditioned on the sorted list.
+
+\section{Technical Formulation}
+
+Let $O = \{o_1, \ldots, o_n\}$ be the detected objects with ground-truth
+salience scores $s^*_i$. The salience head predicts $\hat{s}_i$ and
+the ranking loss penalizes misordered pairs:
+\[
+  \mathcal{L}_\text{rank} = \sum_{i,j:\, s^*_i > s^*_j}
+    \max\!\left(0,\, \hat{s}_j - \hat{s}_i + \delta\right)
+\]
+with margin $\delta = 0.1$.
+
+The total training loss is:
+\[
+  \mathcal{L} = \mathcal{L}_\text{CE}(y, \hat{y}) + \lambda \mathcal{L}_\text{rank}
+\]
+where $\mathcal{L}_\text{CE}$ is cross-entropy on the caption sequence
+$y$ and $\lambda = 0.3$.
+
+The implicit ordering $\hat{\pi}$ extracted from the generated caption is
+defined by the first mention position of each object:
+\[
+  \hat{\pi}(i) = \min\!\left\{t : o_i \text{ is mentioned at token position } t\right\}
+\]
+The ranking loss targets the ordering induced by $\hat{s}$ matching $s^*$.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Dataset construction:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Salience COCO:} 30k MSCOCO images; annotators rank all
+    detected objects by importance for a BLV person navigating the scene.
+  \item \textbf{Salience Flickr:} 10k Flickr images with the same protocol.
+  \item \textbf{Salience VizWiz:} 15k images from BLV users' own
+    photographs; salience ranks derived from crowdsourced question answers.
+\end{enumerate}
+
+\textbf{Training:} Fine-tune LLaVA-1.6 on Salience COCO and Salience
+Flickr for 3 epochs with $\lambda = 0.3$; evaluate zero-shot transfer
+to Salience VizWiz.
+
+\textbf{Inference:} Run object detection (DINO-v2), score salience,
+sort, generate caption with sorted soft prompt. Total overhead: $+38$ ms
+per image on an A100.
+
+\section{What the Guarantee Says}
+
+The framework guarantees salience ordering in expectation over the
+training distribution: at convergence, the expected rank of the
+highest-salience object's first mention position approaches 1.
+The guarantee is probabilistic—individual captions may reorder objects
+due to LM fluency constraints—but the aggregate improvement is
+statistically significant ($p < 0.001$).
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Top-1 salience ordering:} Salience-LLaVA 84.3\% vs.\
+    LLaVA-1.6 51.2\%, GPT-4V-captioning 58.7\%.
+  \item \textbf{VizWiz transfer:} Salience ordering F1 $+12.3$ pp over
+    LLaVA-1.6 without VizWiz fine-tuning.
+  \item \textbf{Caption quality:} SPICE +2.1, CIDEr +5.3 over LLaVA-1.6,
+    confirming salience ordering does not hurt coverage.
+  \item \textbf{User study (n=24 BLV participants):} Helpfulness
+    4.2/5 vs.\ 3.1/5 for LLaVA; 20/24 preferred Salience-LLaVA for
+    navigation tasks; most cited ``important info came first.''
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Soft prompt vs.\ hard ordering:} Providing the ranked object list
+as a hard prefix (forcing the caption to start with each object in order)
+achieves 100\% top-1 ordering but reduces fluency (SPICE $-8.4$). Soft
+prompting achieves 84.3\% ordering with only $+2.1$ SPICE gain.
+
+\textbf{Salience source:} Using ground-truth salience ranks at inference
+yields 92.1\% top-1 ordering, establishing an upper bound; the predicted
+salience scores are 93\% rank-correlated with human rankings.
+
+\textbf{$\lambda$ ablation:} $\lambda = 0$ (no ranking loss) reduces
+top-1 ordering to 54.1\%; $\lambda = 1.0$ improves ordering to 87.2\%
+but reduces CIDEr by 11 points; $\lambda = 0.3$ balances both.
+
+\textbf{Domain specificity:} Salience annotations vary across domains:
+in traffic scenes, moving objects (cars, cyclists) are highest salience;
+in indoor scenes, social agents (people) dominate. The model generalizes
+well within COCO categories but may require domain-specific annotation
+for specialized environments.
+
+\section*{Reference}
+
+Jiazhao Liang, Hao Huang, Shuaihang Yuan, et al.
+\textbf{Focus Where It Counts: A Salience-Driven Vision-Language
+Model for Low Vision Assistance.}
+arXiv:2608.28218, ECCV 2026.
+\url{https://arxiv.org/abs/2608.28218}
+
+\end{document}

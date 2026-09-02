@@ -1,0 +1,272 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  adversarial robustness \textbullet{}
+  mixture-of-experts \textbullet{}
+  mode connectivity \textbullet{}
+  multi-norm defense}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Robust CurveMoE: Multi-Norm Adversarial
+  Defense for Mixture-of-Experts Models
+  via Mode Connectivity}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Low-Loss Bézier Paths Through MoE Weight Space
+  Combine Per-Norm Robust Endpoints Into a
+  Single Multi-Norm Robust Model}\par\vspace{6pt}
+
+{\small\textbf{By} Xu Zhang, Ren Wang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.26043 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Mixture-of-Experts models are increasingly deployed at scale, but their
+robustness to adversarial perturbations across multiple $\ell_p$ threat
+models simultaneously has been understudied. This paper proposes Robust
+CurveMoE: train separate MoE models robust under each threat norm, find
+low-loss Bézier curve paths connecting them through weight space, and
+sample a final model from the connecting path. The resulting model
+achieves multi-norm adversarial robustness without ensemble inference
+overhead, with clean accuracy dropping only 1.2\% relative to the
+endpoint models.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] MoE models trained for robustness under one $\ell_p$
+    norm are vulnerable to other norms; union adversarial training is
+    expensive and hurts accuracy.
+  \item[Why it matters:] Production systems face diverse adversarial
+    attacks; a single model must defend across all without multiplying
+    inference cost.
+  \item[Method:] Find Bézier curve paths through MoE weight space
+    connecting per-norm robust endpoints; sample from the path at the
+    point of best multi-norm trade-off.
+  \item[Result:] Robust accuracy [86.2\%, 71.4\%, 68.3\%] under
+    [$\ell_\infty$, $\ell_2$, $\ell_1$] vs.\ 4.8\% clean accuracy drop
+    for union AT; CurveMoE drops only 1.2\%.
+  \item[Evidence:] ResNet MoE on CIFAR-100; ablations on path degree
+    and Gumbel-softmax relaxation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Adversarial robustness is typically studied under a single threat model:
+$\ell_\infty$-bounded perturbations with radius $\epsilon_\infty$. But
+real-world adversaries can construct attacks in any $\ell_p$ geometry,
+and a model robust to $\ell_\infty$ attacks may be easily fooled by
+$\ell_2$ or $\ell_1$ perturbations.
+
+Multi-norm robustness — simultaneous robustness to $\ell_\infty$,
+$\ell_2$, and $\ell_1$ threats — has been addressed for dense networks
+by union adversarial training or ensembles, but both approaches fail for
+Mixture-of-Experts models:
+
+\textbf{Union AT} trains on the worst-case perturbation over all three
+norms simultaneously. This is computationally expensive and leads to
+an accuracy-robustness trade-off that worsens as the number of norms
+increases.
+
+\textbf{Ensembles} combine predictions from three separately robust
+models, tripling inference cost. For MoE models with thousands of
+experts, ensemble inference is prohibitive.
+
+Mode connectivity offers a third path: connect separately trained
+robust models through low-loss paths in weight space and sample a model
+from the path. For dense networks this has been demonstrated; for MoE
+models, the routing-dependent loss landscape poses new challenges.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Single-norm AT:} Provides strong robustness under the target
+norm but typically transfers poorly to orthogonal norms. A model
+$\ell_\infty$-trained at $\epsilon = 8/255$ may have robust accuracy
+below 40\% under $\ell_2$ attacks of matched strength.
+
+\textbf{Union AT for MoE:} The multi-norm adversarial objective requires
+solving $\max_{p \in \{\infty,2,1\}} \max_{\|\delta\|_p \leq \epsilon_p}
+\mathcal{L}(\theta; x+\delta, y)$ at each training step. For MoE
+models, the inner max interacts with discrete expert routing: the
+worst-case perturbation may change the routing path, invalidating the
+gradient from the current routing.
+
+\textbf{Mode connectivity for dense networks:} Garipov et al.\ (2018)
+showed that dense network pairs trained independently can be connected
+by low-loss quadratic Bézier curves. For MoE models, the argmax
+routing creates discontinuities that break the Garipov construction;
+straight-line interpolation passes through high-loss regions.
+
+\section{Core Mechanism}
+
+The CurveMoE approach has four stages:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Per-norm endpoint training:} Train $\theta_{\ell_\infty}$,
+    $\theta_{\ell_2}$, $\theta_{\ell_1}$ using standard adversarial
+    training under each norm respectively.
+  \item \textbf{Gumbel-softmax relaxation:} Replace argmax expert
+    routing with Gumbel-softmax to make the loss differentiable with
+    respect to weight interpolations along the connecting path.
+  \item \textbf{Path optimization:} Find a Bézier curve $\phi(t)$
+    connecting two endpoint models by minimizing the expected loss
+    along the path under the relaxed routing.
+  \item \textbf{Path sampling:} Evaluate a grid of $t$ values and
+    select $t^*$ that maximizes the minimum robust accuracy across all
+    three norms on a held-out validation set.
+\end{enumerate}
+
+For three endpoints, a triangular convex combination is used instead
+of a pairwise curve, providing simultaneous connectivity to all three
+robust models.
+
+\section{Technical Formulation}
+
+A degree-2 Bézier curve between $\theta_A$ and $\theta_B$ with
+midpoint $\theta_c$ is:
+\[
+  \phi(t) = (1-t)^2 \theta_A + 2t(1-t) \theta_c + t^2 \theta_B,
+  \quad t \in [0,1]
+\]
+The midpoint $\theta_c$ is optimized by minimizing:
+\[
+  \mathcal{L}_\text{path}(\theta_c) = \mathbb{E}_{t \sim U[0,1]}
+    \sum_{p \in \{\infty,2,1\}} \alpha_p
+    \mathcal{L}_p^\text{adv}(\phi(t))
+\]
+where $\mathcal{L}_p^\text{adv}(\theta) = \max_{\|\delta\|_p \leq \epsilon_p}
+\mathcal{L}(\theta; x+\delta, y)$.
+
+For the three-endpoint triangular path with $t_1 + t_2 \leq 1$:
+\[
+  \phi(t_1, t_2) = t_1 \theta_{\ell_\infty} + t_2 \theta_{\ell_2}
+    + (1-t_1-t_2) \theta_{\ell_1}
+\]
+with three midpoint parameters $\theta_{c_{12}}, \theta_{c_{13}},
+\theta_{c_{23}}$ along each edge of the triangle.
+
+The Gumbel-softmax relaxation at temperature $\tau_g$:
+\[
+  \hat{g}_i = \frac{\exp((h_i + g_i)/\tau_g)}{\sum_j \exp((h_j + g_j)/\tau_g)}
+\]
+where $g_i \sim \text{Gumbel}(0,1)$ and $h_i$ are expert logits.
+During path optimization $\tau_g = 1.0$; reverted to hard routing
+($\tau_g \to 0$) for evaluation.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train $\theta_{\ell_p}$ for each $p \in \{\infty, 2, 1\}$
+    using $\text{PGD}-10$ adversarial training under the respective norm.
+  \item Initialize pairwise Bézier midpoints $\theta_c = (\theta_A + \theta_B)/2$.
+  \item Optimize $\theta_c$ for 50 epochs with Gumbel-softmax routing
+    at $\tau_g = 1.0$, Adam optimizer, learning rate $10^{-3}$.
+  \item Grid-search $t \in \{0, 0.05, \ldots, 1.0\}$ on the validation set;
+    select $t^*$ maximizing $\min_p R_p(\phi(t^*))$ where $R_p$ is robust
+    accuracy under norm $p$.
+  \item The final model is $\phi(t^*)$ with hard routing; no inference overhead.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The path-loss objective guarantees that $\hat{V}(x_t)$ (the loss along
+the optimized path) is uniformly low across $t \in [0,1]$. Because
+the path connects models robust under each individual norm, and the
+path loss is low (implying robustness is maintained along the path),
+models at intermediate $t$ values inherit multi-norm robustness properties
+from both endpoints.
+
+This is not a formal robustness certificate but a constructive argument:
+the path endpoint models have certified robustness under their respective
+norms, and the path loss bounds how much that robustness degrades along
+the path.
+
+\section{Experimental Findings}
+
+Evaluated on ResNet-56 MoE with 8 experts on CIFAR-100, under PGD-50
+attacks with $\ell_\infty \epsilon = 8/255$, $\ell_2 \epsilon = 0.5$,
+$\ell_1 \epsilon = 12$:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{CurveMoE robust accuracy:} [$\ell_\infty$: 86.2\%,
+    $\ell_2$: 71.4\%, $\ell_1$: 68.3\%]
+  \item \textbf{Best single-norm AT (per norm):} [$\ell_\infty$: 89.1\%,
+    $\ell_2$: 74.2\%, $\ell_1$: 71.8\%] (different models for each)
+  \item \textbf{Union AT:} [$\ell_\infty$: 81.4\%, $\ell_2$: 68.7\%,
+    $\ell_1$: 65.2\%] with $-4.8\%$ clean accuracy drop
+  \item \textbf{CurveMoE clean accuracy:} $-1.2\%$ relative to
+    endpoint models
+  \item \textbf{Path loss:} Maximum loss along the optimized path
+    is 4\% higher than at endpoints; linear interpolation paths peak
+    at 31\% higher, confirming the need for degree-2 curves.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Path degree:} Linear interpolation (degree 1) passes through
+high-loss regions for MoE models. Degree-2 Bézier curves find a low-loss
+path for all endpoint pairs tested. Degree 3 provides marginal improvement.
+
+\textbf{Gumbel temperature:} $\tau_g = 1.0$ during path optimization
+gives smooth gradients; lower temperatures ($\tau_g = 0.1$) approximate
+hard routing but produce noisy gradients; $\tau_g = 0.5$ is a useful
+intermediate for larger MoEs.
+
+\textbf{Number of experts:} Path optimization scales well to 16 and
+32 experts; beyond 64 experts, path optimization requires more epochs
+to overcome routing instability.
+
+\textbf{Transfer to ViT-MoE:} The approach transfers to Vision
+Transformer MoE architectures with token routing; mode connectivity
+persists, though the midpoint loss is 6\% higher than for ResNet MoE,
+suggesting transformer MoE landscapes are less connected.
+
+\section*{Reference}
+
+Xu Zhang, Ren Wang.
+\textbf{Robust CurveMoE: Multi-Norm Adversarial Defense for
+Mixture-of-Experts Models via Mode Connectivity.}
+arXiv:2608.26043, August 2026.
+\url{https://arxiv.org/abs/2608.26043}
+
+\end{document}
