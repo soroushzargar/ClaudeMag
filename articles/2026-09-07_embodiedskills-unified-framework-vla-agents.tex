@@ -1,0 +1,282 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language-action models \textbullet{}
+  embodied AI \textbullet{}
+  robot manipulation \textbullet{}
+  skill-based planning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  EmbodiedSkills: Orchestrating, Training,
+  and Deploying VLA Agents}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Unified Skill Interface with Precondition
+  Checking and Postcondition Verification
+  Lifts Robot Manipulation to 86\% Success}\par\vspace{6pt}
+
+{\small\textbf{By} Wei Wang, Wenqiao Zhang, Yutong Lin, et al.\
+  (17 authors; Zhejiang University et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.01281 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-Language-Action (VLA) models map visual observations and language
+instructions to robot actions end-to-end, but they struggle with
+long-horizon tasks because early errors cascade without a recovery
+mechanism. EmbodiedSkills wraps VLA policies in an executable-skill
+abstraction that checks prerequisites before execution and verifies
+outcomes afterward. Task-adapted low-level VLA policies within this
+framework achieve 86.20\% average success across 50 RoboTwin~2.0 tasks
+and 97.40\% across four LIBERO suites --- far above frozen-policy baselines.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLA models fail on long-horizon tasks because they
+    have no mechanism to detect or recover from execution errors.
+  \item[Why it matters:] Real-world robot deployment requires reliable
+    multi-step manipulation; a single failure can ruin a long task.
+  \item[Method:] Executable-skill interface with learned precondition
+    and postcondition classifiers; modular VLA policy adaptation.
+  \item[Result:] 86.20\% average success (RoboTwin 2.0), 97.40\%
+    (LIBERO); 62\% reduction in cascading failures on 6+ skill tasks.
+  \item[Evidence:] Comparison vs.\ frozen OpenVLA and task-adapted VLA
+    without skill structure across 54 robot manipulation tasks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+VLA models have demonstrated impressive generalisation on short-horizon
+manipulation tasks: given an image observation and a language description,
+they generate motor commands that successfully complete simple pick-and-place
+or push tasks. However, real-world applications require long-horizon
+plans: setting a table, assembling a product, or restocking a shelf
+involves sequences of 6--10 or more distinct sub-tasks.
+
+In long-horizon settings, VLA models fail because they lack two critical
+properties:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Error detection:} the model has no way to know whether
+    a sub-task succeeded or failed before moving to the next.
+  \item \textbf{Recovery:} when a sub-task fails, the model cannot
+    re-try or select an alternative action sequence.
+\end{itemize}
+
+EmbodiedSkills introduces both properties by structuring VLA execution
+around \emph{executable skills} --- a design pattern borrowed from
+classical task-and-motion planning but implemented entirely with learned
+neural components.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Monolithic VLA policies} (e.g.\ OpenVLA, RT-2) are trained
+end-to-end and have no explicit sub-task structure. They may hallucinate
+task completion or proceed past failures.
+
+\textbf{Hierarchical RL approaches} train separate high-level and
+low-level policies, but the high-level policy must be retrained for
+each new task, and low-level sub-policies typically cannot be reused
+across hierarchies.
+
+\textbf{Classical task planners (e.g.\ PDDL-based)} offer structured
+execution with precondition/postcondition semantics but require
+hand-coded predicates and cannot handle the visual complexity of
+real-world robot environments.
+
+EmbodiedSkills occupies the gap: learned precondition/postcondition
+classifiers from visual observations, structured execution via a fixed
+skill interface, and task-adapted VLA policies as low-level executors.
+
+\section{Core Mechanism}
+
+A skill $s$ is a tuple:
+\[
+  s = (\texttt{name},\; \texttt{pre}(o),\; \pi_s(o, g),\; \texttt{post}(o))
+\]
+where:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item $\texttt{pre}(o) \to \{0,1\}$: checks whether the robot is in
+    a valid state to begin executing $s$.
+  \item $\pi_s(o, g) \to a$: the low-level VLA policy that generates
+    actions to achieve sub-goal $g$ from observation $o$.
+  \item $\texttt{post}(o) \to \{0,1\}$: checks whether skill $s$
+    completed successfully.
+\end{itemize}
+
+The agent loop selects skills via a vision-language model planner, checks
+preconditions, executes until postcondition is satisfied or a timeout is
+reached, and triggers recovery or replanning on failure.
+
+\section{Technical Formulation}
+
+\subsection{High-Level Planning}
+
+The high-level planner is a VLM queried at each step as:
+\begin{equation}
+  s_t, a_t = \mathrm{VLM}(G, o_t, \mathcal{S})
+\end{equation}
+where $G$ is the task goal, $o_t$ is the current observation, and
+$\mathcal{S}$ is the skill library. The VLM reasons in natural language
+via chain-of-thought before selecting the next skill $s_t$ and its
+arguments $a_t$.
+
+\subsection{Precondition and Postcondition Classifiers}
+
+Pre- and postconditions are binary classifiers trained on annotated
+demonstrations:
+\begin{align}
+  f_\mathrm{pre}(o;\,\theta_\mathrm{pre}) &\to P(\texttt{pre satisfied}) \\
+  f_\mathrm{post}(o;\,\theta_\mathrm{post}) &\to P(\texttt{post satisfied})
+\end{align}
+with positive/negative labels derived from states before and after
+successful vs.\ failed skill executions.
+
+\subsection{Task-Adapted Policy Training}
+
+Each skill's low-level policy $\pi_s$ is trained with a combination of
+behavioural cloning and proximal policy optimisation:
+\[
+  \mathcal{L}_s(\theta) = \mathcal{L}_\mathrm{BC}(\theta)
+  + \lambda\, \mathcal{L}_\mathrm{PPO}(\theta, R_s)
+\]
+where $R_s$ is a dense reward derived from the postcondition classifier:
+\[
+  R_s(o_t) = f_\mathrm{post}(o_t;\,\theta_\mathrm{post})
+\]
+This reward is dense --- it provides a training signal at every step
+proportional to how close the current state is to satisfying the
+postcondition --- avoiding the sparse reward problem common in robot RL.
+
+\subsection{Recovery Policy}
+
+Failure modes are classified by the postcondition checker; each failure
+mode has an associated recovery policy $r$ selected from a predefined
+recovery library:
+\[
+  r_t = \mathrm{RecoveryPolicy}(o_t, s_t, \mathrm{failure\_mode})
+\]
+
+\section{Learning or Inference Procedure}
+
+EmbodiedSkills is trained in three stages:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Precondition/postcondition learning.} Classifiers are
+    trained on annotated state transitions from expert demonstrations.
+  \item \textbf{Low-level VLA adaptation.} Each skill policy is fine-tuned
+    from a pretrained VLA (OpenVLA) using BC + PPO with the postcondition
+    reward. Adaptation is independent per skill.
+  \item \textbf{High-level planner.} A pretrained VLM (7B or 72B) is
+    prompted with the skill library and task specification; no VLM
+    fine-tuning is required.
+\end{enumerate}
+
+At inference, the agent loop runs: plan $\to$ check precondition $\to$
+execute $\to$ verify postcondition $\to$ recover or continue.
+
+\section{What the Guarantee Says}
+
+The paper proves that under the learned classifier regime, the expected
+task completion rate $P(\mathrm{task})$ satisfies:
+\[
+  P(\mathrm{task}) \geq \prod_{i=1}^{K} P(\mathrm{success}_i)
+  \cdot (1 - P(\mathrm{cascade}))
+\]
+where $K$ is the number of skills, $P(\mathrm{success}_i)$ is the
+per-skill success rate, and $P(\mathrm{cascade})$ is the probability of
+a cascade failure that the recovery policy cannot resolve. Adding
+postcondition verification suppresses $P(\mathrm{cascade})$ by catching
+failures before the next skill begins.
+
+\section{Experimental Findings}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Method & RoboTwin 2.0 & LIBERO \\
+\midrule
+Frozen VLA (OpenVLA)        & 51.4\% & 78.6\% \\
+Task-adapted (no framework) & 71.2\% & 89.1\% \\
+\textbf{EmbodiedSkills}     & \textbf{86.2\%} & \textbf{97.4\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Long-horizon tasks (8+ skills):} EmbodiedSkills achieves 74.3\%
+completion vs.\ 31.2\% for the task-adapted baseline without skill
+structure, a 2.4$\times$ improvement attributable to verification-driven
+recovery.
+
+\section{Ablations and Interpretation}
+
+\textbf{Without postcondition verification:} Success drops from 86.2\%
+to 61.4\% on RoboTwin~2.0 --- the largest single ablation contributor.
+Cascading failures account for the majority of the 24.8-point gap.
+
+\textbf{Without precondition checking:} Success drops to 74.8\%, showing
+that preventing skill execution from an invalid start state avoids
+a different class of compounding errors.
+
+\textbf{VLM planner size:} Using a 7B planner vs.\ a 72B planner reduces
+success by 4.1\% on RoboTwin~2.0. The structured skill interface
+compensates for planner imperfection: the planner only needs to choose
+the right skill, not the right low-level action.
+
+\textbf{Fixed vs.\ adaptive skill library:} A fixed library of 28
+primitive skills matches a dynamically grown library for the tested
+tasks, suggesting that a compact skill vocabulary covers the space of
+practical manipulation scenarios.
+
+\textbf{Dense reward (postcondition) vs.\ sparse reward:} Using the
+postcondition classifier as a dense reward (vs.\ sparse 0/1 completion
+reward) increases average per-skill success rate by 11.4 points.
+
+\section*{Reference}
+
+Wei Wang, Wenqiao Zhang, Yutong Lin et al.\
+\textbf{EmbodiedSkills: A Unified Framework for Orchestrating,
+Training, and Deploying VLA Agents.}
+arXiv:2609.01281, September 2026.
+\url{https://arxiv.org/abs/2609.01281}
+
+\end{document}

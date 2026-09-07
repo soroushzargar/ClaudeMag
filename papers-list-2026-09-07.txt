@@ -1,0 +1,92 @@
+ML Papers List — 2026-09-07
+Generated for ClaudeMag
+
+1. Rethinking On-Policy Distillation of Large Language Models II: One Training Example [arXiv 2026]
+   Authors: Zixuan Fu, Bingxiang He, Yuxin Zuo, Haohuan Huang, Jinqian Zhang, Ruhang Xiao,
+            Cheng Qian, Qinyu Luo, Huan-ang Gao, Yudong Wang, Zhiyuan Liu, Ning Ding, Chaojun Xiao
+   Affiliation: Tsinghua University; various collaborating institutions
+   Venue/ID: arXiv:2609.04172
+   URL: https://arxiv.org/abs/2609.04172
+   Summary: On-policy distillation (OPD) combines student-generated rollouts with dense
+   token-level supervision from a teacher LLM. Despite its effectiveness, OPD is widely
+   believed to require large, diverse training datasets. This paper challenges that
+   assumption by training with a single query — the data-minimal limit. One-shot OPD
+   keeps improving for hundreds of gradient steps and recovers most of full-data OPD's
+   gain on mathematical reasoning across task domains and model families. A single query
+   already reaches 71.5% state coverage (the fraction of states the full dataset visits);
+   adding semantically distinct queries raises coverage and accuracy together, with 16
+   queries reaching 98.9% and matching full-dataset training. The results reveal that
+   OPD is data-overfed but algorithm-starved, and that alignment improvement is bottlenecked
+   by the algorithm, not the data volume.
+
+2. Uncovering Understanding-Generation Synergy in Native Unified Multimodal Models: From Representation, Task to System [arXiv 2026]
+   Authors: Penghao Wu, Haiwen Diao, Weichen Fan, Lewei Lu, Dahua Lin, Ziwei Liu
+   Affiliation: S-Lab, Nanyang Technological University; SenseTime Research
+   Venue/ID: arXiv:2609.01607
+   URL: https://arxiv.org/abs/2609.01607
+   Summary: Unified multimodal models (UMMs) jointly perform visual understanding and
+   generation within a single model. This paper investigates whether the two objectives
+   reinforce each other, compete for capacity, or merely coexist, by conducting a
+   three-level investigation — representation, task, and system — in a controlled,
+   structurally native setting without pretrained vision priors. The researchers find
+   that each objective provides useful signal to the other at the representation level:
+   generation enriches visual features for understanding, while understanding strengthens
+   vision-language alignment for generation. However, forcing both objectives through
+   the same computation path causes one to dominate. A task-decoupled architecture that
+   specializes conflicting visual computation while preserving semantic interaction avoids
+   this asymmetric degradation, yielding consistent gains on both understanding and
+   generation benchmarks.
+
+3. Advanced Pixel Diffusion Model with Guided Sparse Global Refinement [arXiv 2026]
+   Authors: Weiyi You, Jinhua Zhang, Xingyu Zhou, Wei Long, Junyu Lou, Shuhang Gu
+   Affiliation: Not specified
+   Venue/ID: arXiv:2609.00798
+   URL: https://arxiv.org/abs/2609.00798
+   Summary: Pixel-space diffusion is a promising direction for high-fidelity image generation
+   that models images directly in the original pixel domain. However, it is computationally
+   demanding due to the high dimensionality of natural images. Existing pixel diffusion
+   models either compromise fine details with large-patch tokenization or confine subsequent
+   refinement within individual patches, limiting structural continuity and long-range token
+   interactions. This paper proposes PixSGR, a pixel diffusion framework with Sparse Global
+   Refinement. PixSGR begins from a supervised low-channel bottleneck that captures the
+   low-dimensional manifold of natural images, then applies globally sparse refinement
+   across patch boundaries to recover fine-grained details and ensure structural coherence.
+   The method achieves competitive image generation quality while substantially reducing
+   computational cost compared to dense pixel-space baselines.
+
+4. EmbodiedSkills: A Unified Framework for Orchestrating, Training, and Deploying VLA Agents [arXiv 2026]
+   Authors: Wei Wang, Wenqiao Zhang, Yutong Lin, Yuqian Yuan, Tianwei Lin, Jinhao Mao,
+            Zhenxuan Fan, Mingjian Gao, Yang Dai, Wentong Li, Zheqi Lv, Zheng Dong,
+            Yingjie Niu, Jiaqi Zhu, Jun Xiao, Chao Li, Yueting Zhuang
+   Affiliation: Zhejiang University; collaborating institutions
+   Venue/ID: arXiv:2609.01281
+   URL: https://arxiv.org/abs/2609.01281
+   Summary: Vision-Language-Action (VLA) models promise general-purpose robot policies, but
+   deploying them reliably for long-horizon tasks requires more than a single forward pass.
+   EmbodiedSkills is a unified framework that structures perception, planning, execution,
+   verification, and recovery around executable embodied skills. Rather than replacing
+   existing VLA policies, EmbodiedSkills treats each skill decision as an execution proposal:
+   the runtime checks prerequisites before execution and verifies the outcome afterward,
+   using a shared executable-skill interface that connects high-level skill selection,
+   bounded low-level VLA execution, and post-action verification. Because the interface
+   remains fixed, low-level VLA policies can be swapped without changing the agent loop.
+   Task-adapted low-level VLA policies achieve 86.20% average success across 50 RoboTwin
+   2.0 tasks and 97.40% across the four LIBERO suites.
+
+5. SFAD: Speculative Factuality-Aware Decoding [arXiv 2026]
+   Authors: Guanqiao Chen, Di Wang, Lijie Hu
+   Affiliation: MBZUAI; collaborating institutions
+   Venue/ID: arXiv:2609.00796
+   URL: https://arxiv.org/abs/2609.00796
+   Summary: Contextual faithfulness is a critical challenge for large language models in
+   knowledge-intensive applications: models generate plausible-sounding but unfaithful
+   outputs (hallucinations) while existing mitigation strategies either double inference
+   cost (contrastive decoding) or demand expensive post-training (RL alignment). SFAD
+   integrates factuality awareness into the speculative decoding paradigm so that
+   faithfulness is enforced at inference time with no added latency. The authors construct
+   ConFide, a preference dataset with fine-grained atomic perturbations, to train a
+   context-faithful draft model via Direct Preference Optimization. During inference,
+   an Epistemic Friction module detects potential hallucinations by quantifying
+   distributional tension weighted by specialist certainty, and steers the draft model
+   toward contextually faithful outputs before the verifier LLM accepts or rejects
+   tokens. The result is faithful generation at speculative-decoding speeds.

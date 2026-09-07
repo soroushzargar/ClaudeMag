@@ -1,0 +1,255 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  on-policy distillation \textbullet{}
+  knowledge distillation \textbullet{}
+  LLM training efficiency \textbullet{}
+  state coverage}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Rethinking On-Policy Distillation:\\
+  One Training Example}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Single Query Recovers Most of Full-Dataset
+  OPD Gain --- Revealing That LLM Distillation
+  Is Algorithm-Starved, Not Data-Starved}\par\vspace{6pt}
+
+{\small\textbf{By} Zixuan Fu, Bingxiang He, Yuxin Zuo, Haohuan Huang,
+  Jinqian Zhang, Ruhang Xiao, Cheng Qian, Qinyu Luo, Huan-ang Gao,
+  Yudong Wang, Zhiyuan Liu, Ning Ding, Chaojun Xiao
+  (Tsinghua University et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.04172 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+On-policy distillation (OPD) of large language models is widely believed
+to require large, diverse training datasets. This paper refutes that
+assumption: training OPD on a single query recovers most of the accuracy
+gain achieved by full-dataset training on mathematical reasoning, code,
+and general benchmarks across multiple model families. The finding reveals
+that OPD is \emph{data-overfed but algorithm-starved} --- the bottleneck
+lies in the optimization procedure, not the volume of training queries.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] OPD is assumed to require large diverse datasets;
+    no theory or experiment had tested the data-minimal limit.
+  \item[Why it matters:] If one query suffices, OPD can be applied
+    at very low data cost, democratizing teacher-guided alignment.
+  \item[Method:] Fix training steps; vary query count from 1 to
+    the full dataset; measure accuracy and state coverage.
+  \item[Result:] One query achieves 71.5\% state coverage and most of
+    full-data OPD's gain; 16 queries reach 98.9\% and match full data.
+  \item[Evidence:] Experiments across MATH-500, GSM8K, LiveCodeBench,
+    MMLU-Pro with Qwen2.5-7B, Llama-3.1-8B, DeepSeek-R1-Distill-7B.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+On-policy distillation combines student-generated rollouts with dense
+token-level supervision from a teacher LLM. The student generates
+responses, the teacher evaluates them, and the student updates its
+parameters using those signals --- with rollouts regenerated at each
+iteration from the updated student.
+
+The conventional wisdom is that OPD needs a large and diverse set of
+training queries to cover the space of possible inputs and to produce
+varied rollouts for learning from. This view motivates the standard
+practice of assembling large question banks for distillation.
+
+This paper asks a simple question: what happens at the data-minimal
+limit, i.e.\ when OPD trains on exactly one query? The answer, that
+one-shot OPD keeps improving for hundreds of steps and recovers most
+of full-data OPD's gain, reframes the problem of LLM alignment
+distillation entirely.
+
+\section{Why Existing Approaches Fall Short}
+
+Current OPD practice assembles datasets of thousands of training queries
+(e.g.\ 512--4096 mathematical problems), under the assumption that
+broad coverage is necessary for generalization. This creates two problems:
+
+First, large datasets impose \emph{data collection costs}: curating
+high-quality, diverse questions for every new target domain requires
+significant effort.
+
+Second, large datasets may \emph{mask algorithmic limitations}: if the
+training data is the bottleneck, then improving the algorithm yields
+little gain unless data is first increased. This paper reveals that
+the data is \emph{not} the bottleneck, so algorithmic improvements
+(better teachers, better update rules, better rollout strategies) are
+the correct direction for future work.
+
+\section{Core Mechanism}
+
+The key insight is that even with a fixed single query $q^*$, the
+rollout distribution $\pi_\theta(\cdot\mid q^*)$ changes at every
+gradient step as $\theta$ is updated. This \emph{dynamic rollout
+diversity} provides gradient signal across different student behaviours
+even when the input prompt is fixed.
+
+The authors measure this via \textbf{state coverage}: the fraction of
+intermediate rollout states visited by a given query set that are also
+visited by the full dataset:
+\[
+  \mathrm{Coverage}(Q) = \frac{|S(Q) \cap S(Q_\mathrm{full})|}{|S(Q_\mathrm{full})|}
+\]
+One query achieves $\mathrm{Coverage} = 71.5\%$ --- most of the state
+space is reachable from a single starting point as the model evolves.
+
+\section{Technical Formulation}
+
+The OPD training objective is a token-level imitation loss:
+\[
+  \mathcal{L}_\mathrm{OPD}(\theta) = -\mathbb{E}_{q \sim \mathcal{D}}\,
+  \mathbb{E}_{y \sim \pi_\theta(\cdot|q)}
+  \sum_t \log \pi_\mathrm{teacher}(y_t \mid q, y_{<t})
+\]
+where $\pi_\theta$ is the student, $\pi_\mathrm{teacher}$ is the frozen
+teacher, and $y$ is a student-generated rollout.
+
+At the single-query limit with query $q^*$, the gradient at step $k$ is:
+\[
+  \nabla_\theta \mathcal{L} =
+  -\mathbb{E}_{y \sim \pi_\theta(\cdot|q^*)}
+  \sum_t \nabla_\theta \log \pi_\theta(y_t \mid q^*, y_{<t})
+  \cdot \log \pi_\mathrm{teacher}(y_t \mid q^*, y_{<t})
+\]
+Despite the fixed $q^*$, the expectation is over the current student
+rollout distribution, which shifts every step --- providing effective
+gradient diversity.
+
+\subsection{Coverage Saturation}
+
+Empirically, coverage $C(N)$ as a function of query count $N$ follows
+an approximate power law:
+\[
+  C(N) \approx 1 - \alpha N^{-\beta}
+\]
+with fitted constants $\alpha, \beta$. Empirically, $C(1) \approx 0.715$
+and $C(16) \approx 0.989$.
+
+\section{Learning or Inference Procedure}
+
+The authors fix the total training budget (number of gradient steps)
+and vary only the number of unique training queries. For each query count
+$N \in \{1, 4, 16, 64, 512\}$:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Uniformly sample (or select by diversity) $N$ queries from the
+    training pool.
+  \item Run OPD for the fixed number of steps on those $N$ queries.
+  \item Evaluate on held-out benchmarks (MATH-500, GSM8K, LiveCodeBench,
+    MMLU-Pro).
+  \item Measure state coverage by intersecting rollout state sets.
+\end{enumerate}
+
+Query selection at $N > 1$ uses a semantic diversity criterion (maximum
+marginal relevance on embedding space) to maximise coverage gain.
+
+\section{What the Guarantee Says}
+
+The paper does not prove formal guarantees but establishes an empirical
+regularity: OPD accuracy as a function of query count follows the same
+coverage power law. Because accuracy and coverage co-move, maximising
+\emph{semantic diversity} of a small query set --- rather than maximising
+dataset size --- is the correct strategy for efficient OPD.
+
+The corollary is that OPD improvements will be unlocked by better
+algorithms (improved rollout strategies, better acceptance rules,
+curriculum over query difficulty) rather than by larger datasets.
+
+\section{Experimental Findings}
+
+\textbf{Accuracy vs. query count (Qwen2.5-7B, MATH-500):}
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+Queries & MATH-500 & Coverage \\
+\midrule
+1       & 68.4\%   & 71.5\% \\
+4       & 70.1\%   & 89.2\% \\
+16      & 71.8\%   & 98.9\% \\
+512     & 72.3\%   & 100\%  \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The accuracy gain from 1 query to 512 queries is only 3.9 percentage
+points, while the gain from the pre-OPD baseline to 1-query OPD is
+substantially larger --- confirming that most of the alignment benefit
+comes from the OPD mechanism itself, not the data diversity.
+
+Results are consistent across Llama-3.1-8B and DeepSeek-R1-Distill-7B
+student models, and across GSM8K, LiveCodeBench, and MMLU-Pro benchmarks.
+
+\section{Ablations and Interpretation}
+
+\textbf{Random vs.\ semantic query selection:} At $N=16$, randomly
+sampled queries underperform semantically diverse queries by 1.7
+percentage points (MATH-500). Coverage is the active ingredient.
+
+\textbf{Step budget vs.\ data size:} One-shot OPD requires $\sim$2$\times$
+more gradient steps to match full-data OPD accuracy at $N=16$, but
+converges to the same value --- showing the algorithm can compensate for
+data sparsity given sufficient compute.
+
+\textbf{Teacher quality:} Weaker teachers (same-size models) yield
+diminished but still positive one-shot gains. The mechanism does not
+require a very large teacher.
+
+\textbf{Alignment pace:} Plotting validation accuracy vs.\ steps for
+$N=1$ and $N=512$, both curves plateau at the same rate --- confirming
+the algorithm bottleneck hypothesis.
+
+\section*{Reference}
+
+Zixuan Fu, Bingxiang He, Yuxin Zuo et al.
+\textbf{Rethinking On-Policy Distillation of Large Language Models II:
+One Training Example.}
+arXiv:2609.04172, September 2026.
+\url{https://arxiv.org/abs/2609.04172}
+
+\end{document}

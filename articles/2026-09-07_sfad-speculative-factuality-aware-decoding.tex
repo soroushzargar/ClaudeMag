@@ -1,0 +1,290 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  speculative decoding \textbullet{}
+  factuality \textbullet{}
+  hallucination mitigation \textbullet{}
+  inference efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SFAD: Speculative Factuality-Aware Decoding}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A DPO-Trained Draft Model Plus Epistemic
+  Friction Enforces Contextual Faithfulness at
+  Speculative Decoding Speeds}\par\vspace{6pt}
+
+{\small\textbf{By} Guanqiao Chen, Di Wang, Lijie Hu
+  (MBZUAI et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.00796 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Contextual faithfulness --- the property that a language model's output
+is consistent with a provided source document --- is critical for
+retrieval-augmented generation, summarisation, and question answering.
+Existing mitigation strategies either double inference cost (contrastive
+decoding) or require expensive post-training (RL alignment). SFAD
+achieves a 38\% relative reduction in hallucination rate and an 11.6-point
+FactScore gain over greedy decoding, at throughput matching standard
+speculative decoding, by training a factuality-specialised draft model
+with fine-grained preference data and enforcing faithfulness online via
+an Epistemic Friction detector.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLMs hallucinate even when source documents are
+    provided; existing remedies sacrifice inference speed.
+  \item[Why it matters:] RAG and summarisation systems used in
+    production cannot tolerate either hallucinations or latency overhead.
+  \item[Method:] DPO-trained context-faithful draft model (ConFide data)
+    + Epistemic Friction detector; no change to verifier LLM or workflow.
+  \item[Result:] FactScore 72.8\% vs.\ 61.2\% greedy; 88 tok/s
+    vs.\ 91 tok/s speculative decoding (no throughput penalty).
+  \item[Evidence:] RAGTruth, TruthfulQA, SummEval benchmarks; ablations
+    isolating ConFide DPO and Epistemic Friction contributions.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Retrieval-augmented generation (RAG) grounds language model outputs in
+retrieved source documents. Despite the presence of relevant documents
+in context, large language models still hallucinate --- generating
+plausible-sounding but contextually unfaithful text that contradicts or
+is unsupported by the source.
+
+The challenge is threefold. First, hallucination occurs not because the
+model lacks information but because the decoding process does not
+explicitly enforce consistency with the context. Second, the most
+effective existing methods (contrastive decoding) require two forward
+passes, doubling inference cost. Third, post-training alignment via RL
+requires significant compute and careful reward design.
+
+SFAD is the first approach to embed factuality enforcement inside
+speculative decoding, achieving faithfulness gains with zero throughput
+overhead.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Contrastive decoding} compares model outputs under different
+prompts (faithful vs.\ non-faithful) and selects tokens with higher
+probability under the faithful prompt. It requires two forward passes
+per token, doubling inference cost --- impractical in production.
+
+\textbf{RL post-training alignment} trains the model to prefer faithful
+outputs via reward models, but requires thousands of feedback examples
+and careful reward shaping. The resulting model still hallucinate under
+distribution shift.
+
+\textbf{Standard speculative decoding} uses a small draft model to
+propose multiple tokens for a large verifier LLM to accept/reject in
+parallel. This achieves 2--3$\times$ speedup but makes no claim about
+the faithfulness of accepted tokens.
+
+\section{Core Mechanism}
+
+SFAD modifies the draft model in speculative decoding to be
+\emph{context-faithful}, so that the token proposals it generates are
+more likely to be grounded in the source document. The verifier LLM
+then accepts these proposals with high probability --- because they are
+both fluent (the draft is a capable LLM) and faithful (the draft is
+DPO-trained on faithfulness preferences). No modification to the verifier
+or the acceptance criterion is required.
+
+An additional online component, Epistemic Friction, detects tokens
+where the draft's proposal diverges from the verifier's preference in
+a context-relevant direction, and steers the draft before it proposes ---
+further increasing acceptance rate and faithfulness.
+
+\section{Technical Formulation}
+
+\subsection{ConFide Dataset}
+
+ConFide is a preference dataset of (context, chosen output, rejected output)
+triples, constructed from model outputs on knowledge-intensive prompts
+via \emph{atomic perturbations}:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \textbf{Entity swap}: replace entity names with plausible alternatives
+    from the knowledge base.
+  \item \textbf{Relation inversion}: change predicate direction
+    (e.g.\ ``A was founded by B'' $\to$ ``B was founded by A'').
+  \item \textbf{Quantifier change}: replace ``all'' with ``some'',
+    exact numbers with nearby values.
+  \item \textbf{Temporal shift}: shift dates or tenses.
+\end{itemize}
+Original outputs (faithful to source) are chosen; perturbed outputs are
+rejected. This produces fine-grained atomic contrasts that teach the
+draft model exactly which token sequences are unfaithful.
+
+\subsection{DPO Training}
+
+The draft model $\pi_\theta$ is fine-tuned on ConFide with Direct
+Preference Optimisation:
+\begin{align}
+  \mathcal{L}_\mathrm{DPO} = -\mathbb{E}_{(x, y_+, y_-)}\bigl[
+  &\log \sigma\bigl(\beta(\log \pi_\theta(y_+|x) - \log \pi_\mathrm{ref}(y_+|x)) \nonumber\\
+  &- \beta(\log \pi_\theta(y_-|x) - \log \pi_\mathrm{ref}(y_-|x))\bigr)\bigr]
+\end{align}
+where $y_+$ is the faithful (chosen) output, $y_-$ is the perturbed
+(rejected) output, and $\pi_\mathrm{ref}$ is the pre-DPO draft.
+
+\subsection{Epistemic Friction}
+
+At each proposed token $y_t$, the Epistemic Friction score is:
+\[
+  \mathrm{EF}(t) =
+  \mathrm{KL}\!\left(\pi_\mathrm{draft}(\cdot|x, y_{<t}) \;\|\;
+                     \pi_\mathrm{verifier}(\cdot|x, y_{<t})\right)
+  \cdot w_\mathrm{specialist}(t)
+\]
+where $w_\mathrm{specialist}(t)$ is the verifier's mean attention weight
+to the source document at position $t$, measuring how context-relevant
+the current generation position is.
+
+High EF$(t)$ flags a likely hallucination site. The draft's sampling
+temperature is increased at these positions to diversify proposals away
+from the unfaithful mode.
+
+\subsection{Speculative Acceptance}
+
+The standard speculative decoding acceptance criterion is unchanged:
+\[
+  P(\text{accept}\;y_t) = \min\!\left(1,\;
+    \frac{\pi_\mathrm{verifier}(y_t|x, y_{<t})}{\pi_\mathrm{draft}(y_t|x, y_{<t})}\right)
+\]
+Because the DPO draft assigns higher probability to faithful tokens,
+the verifier's acceptance rate increases for faithful proposals and
+decreases for unfaithful ones --- without any change to the acceptance
+formula.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample model outputs on knowledge-intensive prompts.
+  \item Apply atomic perturbations to construct ConFide preference pairs.
+  \item Fine-tune a small draft LLM (3--7B parameters) with DPO on ConFide.
+\end{enumerate}
+
+\textbf{Inference:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Draft model proposes $k=4$ tokens per speculative step.
+  \item Compute EF for each proposed token; re-sample tokens above the
+    EF threshold.
+  \item Verifier LLM processes the $k$ (steered) tokens in parallel
+    and accepts/rejects via the standard criterion.
+  \item Accepted tokens are output; rejected tokens restart from the
+    last accepted position.
+\end{enumerate}
+
+The EF computation adds a single matrix product over the verifier's
+cached attention weights --- negligible overhead.
+
+\section{What the Guarantee Says}
+
+The paper proves that under DPO training, the faithful token acceptance
+rate improves by at least:
+\[
+  \Delta_\mathrm{accept} \geq
+  \frac{\beta}{\mathcal{Z}} \bigl(\mathbb{E}[\log \pi_\mathrm{DPO}(y_+)]
+  - \mathbb{E}[\log \pi_\mathrm{ref}(y_+)]\bigr)
+\]
+which is strictly positive whenever DPO training increases the faithful
+log-probability above the reference model --- a necessary condition for
+successful DPO training. The bound is tight for token-level independent
+acceptance.
+
+\section{Experimental Findings}
+
+\textbf{Main results across benchmarks:}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Method & FactScore$\uparrow$ & Throughput \\
+\midrule
+Greedy (verifier only)         & 61.2\% & 38 tok/s \\
+Contrastive decoding           & 68.4\% & 19 tok/s \\
+Standard speculative decoding  & 61.3\% & 91 tok/s \\
+\textbf{SFAD (ours)}           & \textbf{72.8\%} & \textbf{88 tok/s} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+SFAD improves FactScore by 11.6 points over greedy and 4.4 points over
+contrastive decoding, while matching standard speculative decoding
+throughput. On RAGTruth specifically, hallucination rate drops from
+28.3\% to 17.5\% (38\% relative reduction).
+
+\section{Ablations and Interpretation}
+
+\textbf{Without ConFide DPO:} FactScore drops by 6.8 points --- the
+draft model fine-tuning is the primary source of faithfulness gain.
+
+\textbf{Without Epistemic Friction:} FactScore drops by 2.1 points,
+showing that online steering provides a complementary, additive
+faithfulness layer.
+
+\textbf{Atomic vs.\ coarse perturbations in ConFide:} Fine-grained
+atomic perturbations outperform sentence-level contrastive pairs by
+3.4 FactScore points, validating that granular contrast is essential
+for teaching the draft model about specific faithfulness failures.
+
+\textbf{Specialist weight $w_\mathrm{specialist}$:} Attention-based
+specialist weighting outperforms uniform weighting by 1.8 FactScore
+points. The model is most useful at context-relevant positions,
+not uniformly.
+
+\textbf{EF threshold sensitivity:} FactScore is robust to the EF
+threshold in the range $[0.3, 0.7]$; below 0.3 too many tokens are
+resampled (hurting fluency); above 0.7 too few hallucinations are caught.
+
+\section*{Reference}
+
+Guanqiao Chen, Di Wang, and Lijie Hu.
+\textbf{SFAD: Speculative Factuality-Aware Decoding.}
+arXiv:2609.00796, September 2026.
+\url{https://arxiv.org/abs/2609.00796}
+
+\end{document}

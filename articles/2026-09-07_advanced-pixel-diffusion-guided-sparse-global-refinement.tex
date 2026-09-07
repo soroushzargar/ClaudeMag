@@ -1,0 +1,270 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  pixel-space diffusion \textbullet{}
+  image generation \textbullet{}
+  sparse attention \textbullet{}
+  global refinement}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Advanced Pixel Diffusion with Guided
+  Sparse Global Refinement (PixSGR)}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Low-Channel Bottleneck Plus Sparse Cross-Patch
+  Attention Brings Pixel Diffusion to Latent Diffusion
+  Quality at Substantially Lower Cost}\par\vspace{6pt}
+
+{\small\textbf{By} Weiyi You, Jinhua Zhang, Xingyu Zhou, Wei Long,
+  Junyu Lou, Shuhang Gu}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.00798 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Pixel-space diffusion offers higher fidelity and finer-grained control
+than latent diffusion, but its computational cost has kept it behind
+in practice. PixSGR resolves the core bottleneck with two innovations:
+a supervised low-channel bottleneck that captures the low-dimensional
+manifold of natural images before diffusion begins, and a sparse global
+refinement step that restores structural coherence across patch boundaries
+at sub-quadratic cost. On ImageNet $256\times256$, PixSGR matches latent
+diffusion quality (FID 3.41 vs.\ 3.60 for LDM-4) while operating
+entirely in pixel space.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Pixel-space diffusion is too computationally expensive
+    and produces structural discontinuities at patch boundaries.
+  \item[Why it matters:] Pixel-space models avoid latent encoder
+    artifacts, enabling pixel-perfect fine-grained control.
+  \item[Method:] Supervised low-channel bottleneck + patch-level
+    denoising + sparse global cross-patch refinement.
+  \item[Result:] FID 3.41 on ImageNet 256$\times$256, matching LDM-4
+    with 40\% fewer FLOPs than dense pixel transformer baselines.
+  \item[Evidence:] Ablations confirming sparse global refinement
+    (FID 3.41 vs.\ 6.82 without it) and supervised bottleneck value.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Latent diffusion models (LDMs) dominate image generation by compressing
+images into a learned latent space before applying the diffusion process.
+This reduces computation dramatically but introduces a structural
+limitation: the quality ceiling is bounded by the encoder-decoder and
+artifacts from the latent representation propagate to the output.
+
+Pixel-space diffusion avoids these artifacts by modelling the image
+directly, but faces two challenges. First, a $256\times256$ RGB image
+has 196{,}608 dimensions --- three orders of magnitude more than a typical
+latent code. Second, existing pixel diffusion approaches either use
+large patches (sacrificing fine detail) or process patches independently
+(losing structural coherence across boundaries).
+
+PixSGR addresses both challenges with a staged architecture that keeps
+the effective dimensionality low while restoring global structure.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Dense pixel transformers} apply attention over all pixel tokens
+jointly, achieving global coherence at the cost of $O(N^2)$ attention
+where $N \approx 200$K --- computationally prohibitive at training scale.
+
+\textbf{Patch-level diffusion (e.g.\ DiT in pixel space)} divides the
+image into non-overlapping patches and denoises each independently.
+This achieves linear cost but produces boundary artifacts: adjacent
+patches generate independently without seeing each other's context,
+leading to discontinuities in colour, texture, and large-scale structure.
+
+\textbf{Hierarchical pixel diffusion} uses coarse-to-fine generation
+but still confines refinement within each patch, missing long-range
+interactions needed for global structural consistency.
+
+\section{Core Mechanism}
+
+PixSGR operates in three stages:
+
+\textbf{Stage~1: Supervised Low-Channel Bottleneck.}
+A supervised autoencoder compresses the image from $C=3$ channels to
+$C'=4$ channels at the original spatial resolution. This is not a
+latent encoder: spatial resolution is preserved. The bottleneck captures
+the low-dimensional manifold of natural images in colour-space without
+spatial downsampling.
+
+\textbf{Stage~2: Patch-Level Diffusion.}
+The diffusion process operates on non-overlapping patches of the
+bottleneck representation. A patch-level transformer denoiser processes
+patches in parallel --- linear in the number of patches.
+
+\textbf{Stage~3: Sparse Global Refinement.}
+After patch-level generation, a sparse set of refinement tokens is
+positioned at patch boundaries and a random interior subset. Each
+refinement token attends globally to all patch tokens via sparse
+attention, restoring cross-patch coherence.
+
+\section{Technical Formulation}
+
+\subsection{Patch-Level Denoising Objective}
+
+The denoising loss over patches is the standard DDPM objective:
+\[
+  \mathcal{L}_\mathrm{patch} = \mathbb{E}_{t, x_0, \varepsilon}
+  \|\varepsilon - \varepsilon_\theta(x_t^\mathrm{patch}, t)\|^2
+\]
+where $x_t^\mathrm{patch}$ is the noisy patch at timestep $t$.
+
+\subsection{Sparse Global Attention}
+
+Let $P = \{p_1, \ldots, p_N\}$ be the full set of patch token positions
+and $R = \{r_1, \ldots, r_M\}$ with $M \ll N$ be the sparse refinement
+positions (straddling patch boundaries plus a random interior subset).
+The refinement attention weight for refinement token $r_i$ over patch
+token $p_j$ is:
+\[
+  A(r_i, p_j) =
+  \frac{\exp\!\left(q(r_i)^\top k(p_j) / \sqrt{d}\right)}{Z_i}
+  \;\;\text{for } j \in \mathcal{N}_\mathrm{local}(r_i) \cup \mathcal{N}_\mathrm{rand}(r_i)
+\]
+where $\mathcal{N}_\mathrm{local}$ is a fixed local neighbourhood and
+$\mathcal{N}_\mathrm{rand}$ is a randomly sampled global subset. Total
+attention cost is $O(N \log N)$ per refinement step.
+
+\subsection{Guided Conditioning}
+
+The refinement token hidden states are conditioned on the supervised
+bottleneck representation at the corresponding spatial positions:
+\[
+  h_\mathrm{refine}(r_i)
+  = \mathrm{Attention}(r_i, P)
+  + \gamma \cdot \mathrm{Proj}\!\left(\mathrm{bottleneck}(r_i)\right)
+\]
+where $\gamma$ is a learnable scalar. This structural anchoring prevents
+the refinement step from drifting from the coarse image structure.
+
+\section{Learning or Inference Procedure}
+
+Training proceeds in two phases:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Bottleneck pre-training.} Train the low-channel
+    autoencoder with a reconstruction loss on ImageNet. The encoder
+    produces the 4-channel spatial bottleneck; the decoder reconstructs
+    the original image from patch-level outputs.
+  \item \textbf{Joint diffusion training.} Train the patch-level
+    denoiser and the sparse global refinement module jointly on the
+    bottleneck representation, using the DDPM objective.
+\end{enumerate}
+
+At inference, the model runs the diffusion reverse process patch-by-patch,
+then applies one sparse global refinement pass over the fully denoised
+bottleneck before decoding to pixels.
+
+\section{What the Guarantee Says}
+
+The paper establishes that the sparse global attention achieves an
+approximation error bound:
+\[
+  \|A_\mathrm{sparse} - A_\mathrm{dense}\|_F \leq
+  \epsilon_\mathrm{local} + \epsilon_\mathrm{rand}
+\]
+where $\epsilon_\mathrm{local}$ decreases with the local neighbourhood
+radius and $\epsilon_\mathrm{rand}$ decreases with the random sampling
+budget. For the default configuration (16-token local neighbourhood,
+5\% random sample), $\epsilon_\mathrm{rand} + \epsilon_\mathrm{local}$
+is bounded under standard assumptions on the attention score distribution.
+
+\section{Experimental Findings}
+
+\textbf{Class-conditional generation, ImageNet $256\times256$:}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & FID$\downarrow$ & Params \\
+\midrule
+LDM-4 (latent diffusion) & 3.60 & 400M \\
+DiT-XL/2 (latent)        & 2.27 & 675M \\
+Pixel DiT (dense)        & 8.90 & 600M \\
+\textbf{PixSGR (ours)}   & \textbf{3.41} & 550M \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+PixSGR matches LDM-4 quality in pixel space with 8.5\% fewer parameters
+than the dense pixel diffusion baseline, and reduces FLOPs per denoising
+step by 40\%.
+
+On FFHQ $256\times256$ (unconditional), PixSGR achieves FID 4.2
+vs.\ 5.9 for the dense pixel baseline, with similar parameter counts.
+
+\section{Ablations and Interpretation}
+
+\textbf{Without sparse global refinement:} FID degrades from 3.41 to
+6.82 on ImageNet --- the largest single ablation factor, confirming that
+cross-patch coherence is the critical missing ingredient in prior pixel
+diffusion.
+
+\textbf{Without supervised bottleneck:} Convergence slows substantially
+and final FID increases to 5.10; the bottleneck reduces the effective
+dimensionality of the diffusion task from the start.
+
+\textbf{Refinement token density:} FID improves as the sparse refinement
+fraction increases from 5\% to 15\% of total patches, then plateaus.
+The default of 10\% gives the best efficiency-quality trade-off.
+
+\textbf{Guided vs.\ unguided refinement:} Adding the bottleneck
+conditioning term (guided) reduces FID by 0.8 points over unguided
+refinement, demonstrating that structural anchoring is beneficial.
+
+\textbf{Local neighbourhood radius:} Increasing the local neighbourhood
+from 4 to 16 tokens reduces FID by 0.4 points; beyond 16, gains are
+marginal and cost increases.
+
+\section*{Reference}
+
+Weiyi You, Jinhua Zhang, Xingyu Zhou, Wei Long, Junyu Lou, and Shuhang Gu.
+\textbf{Advanced Pixel Diffusion Model with Guided Sparse Global
+Refinement.}
+arXiv:2609.00798, September 2026.
+\url{https://arxiv.org/abs/2609.00798}
+
+\end{document}

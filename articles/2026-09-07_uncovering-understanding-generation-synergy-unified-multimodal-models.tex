@@ -1,0 +1,273 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  unified multimodal models \textbullet{}
+  visual understanding \textbullet{}
+  image generation \textbullet{}
+  task-decoupled architecture}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Uncovering Understanding--Generation Synergy
+  in Unified Multimodal Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Joint Training Helps Both Tasks --- But Only
+  When Visual Computation Is Architecturally
+  Decoupled by Objective}\par\vspace{6pt}
+
+{\small\textbf{By} Penghao Wu, Haiwen Diao, Weichen Fan, Lewei Lu,
+  Dahua Lin, Ziwei Liu
+  (NTU S-Lab; SenseTime Research)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.01607 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Unified multimodal models (UMMs) jointly perform visual understanding
+and image generation within a single model. Do the two objectives help
+each other, compete, or merely coexist? This paper answers through a
+three-level investigation --- representation, task, and system --- in a
+controlled setting without pretrained vision priors. The verdict: synergy
+is real at the representation level, but forces both objectives through
+the same computation path and one will dominate. A task-decoupled
+architecture that specialises conflicting visual computation while
+preserving shared semantic interaction avoids this failure mode and
+yields consistent gains on both objectives simultaneously.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Does joint understanding/generation training help,
+    hurt, or have no effect when both objectives share the same model?
+  \item[Why it matters:] Unified models promise efficiency, but training
+    instability and objective conflict limit their practical quality.
+  \item[Method:] Three-level analysis (representation, task, system)
+    with task-decoupled architectural fix.
+  \item[Result:] Decoupled architecture improves understanding by 3.2\%
+    and generation FID by 21\% vs.\ naive joint baseline.
+  \item[Evidence:] Controlled experiments at 300M--3B parameters; VQA,
+    image captioning, and text-to-image generation benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large vision-language models have converged on two paradigms: dedicated
+understanding models (e.g.\ LLaVA, InternVL) and dedicated generation
+models (e.g.\ Stable Diffusion, DALL-E). Unifying both in a single model
+is appealing: shared representations could reinforce each other, reduce
+model count in deployment, and enable joint reasoning over perception
+and synthesis.
+
+Yet practitioners have observed that naive joint training frequently
+degrades one or both tasks compared to separate specialist models. The
+reasons are poorly understood. This paper systematically characterises
+the conflict and proposes a structural solution.
+
+\section{Why Existing Approaches Fall Short}
+
+Existing unified models (e.g.\ Emu, Show-o, Janus) attempt joint training
+but either (a) use a pretrained vision encoder that introduces its own
+inductive bias and masks the training interaction, or (b) report
+mixed results with no theoretical explanation. Three failure modes emerge:
+
+\textbf{Objective dominance.} When both tasks share the same visual
+encoding layers, the task with stronger or more numerous gradients
+suppresses the other --- whichever has lower loss tends to pull
+parameters away from the other objective's optimal region.
+
+\textbf{Representation conflict.} Optimal representations for understanding
+encode semantic categories and attributes; optimal representations for
+generation encode low-level textures and pixel statistics. Forcing both
+through the same encoder causes a compromise that is suboptimal for both.
+
+\textbf{Confounded benchmarks.} Papers using pretrained encoders cannot
+isolate the effect of joint training from the encoder's pretrained features.
+
+\section{Core Mechanism}
+
+The paper identifies that conflict arises in \emph{early visual encoding
+components} (tokeniser, first few attention layers) but not in \emph{semantic
+interaction layers} (cross-attention, late transformer blocks).
+
+This motivates the task-decoupled architecture:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Specialised early encoders:} separate but lightweight
+    visual tokeniser branches for understanding ($\mathrm{Enc}_u$) and
+    generation ($\mathrm{Enc}_g$).
+  \item \textbf{Shared semantic backbone:} a single transformer stack
+    processes fused semantic representations from both branches.
+\end{itemize}
+
+Decoupling allows each encoder to optimise its own visual features while
+the shared backbone captures cross-modal semantics that benefit both tasks.
+
+\section{Technical Formulation}
+
+\subsection{Joint Training Objective}
+
+The standard (conflict-prone) joint objective is:
+\[
+  \mathcal{L}_\mathrm{joint}
+    = \lambda_u \mathcal{L}_\mathrm{understanding}
+    + \lambda_g \mathcal{L}_\mathrm{generation}
+\]
+where $\mathcal{L}_u$ is cross-entropy over VQA/captioning tokens and
+$\mathcal{L}_g$ is a denoising diffusion loss or autoregressive token loss.
+
+\subsection{Dominance Score}
+
+To quantify asymmetric degradation, the dominance score $D$ is:
+\[
+  D = \frac{\mathrm{Acc}_u^\mathrm{joint} / \mathrm{Acc}_u^\mathrm{separate}}
+           {\mathrm{Acc}_g^\mathrm{joint} / \mathrm{Acc}_g^\mathrm{separate}}
+\]
+$D \gg 1$: understanding dominates. $D \ll 1$: generation dominates.
+Naive joint training produces $D \neq 1$, confirming dominance. The
+task-decoupled model produces $D \approx 1$.
+
+\subsection{Decoupled Forward Pass}
+
+Given image $x$ and text tokens $t$:
+\begin{align}
+  z_u &= \mathrm{Enc}_u(x) \\
+  z_g &= \mathrm{Enc}_g(x) \\
+  z_\mathrm{shared} &= \mathrm{TransformerShared}(z_u, z_g, t) \\
+  \mathcal{L}_\mathrm{decoupled} &= \mathcal{L}_u(z_\mathrm{shared})
+    + \mathcal{L}_g(z_\mathrm{shared})
+\end{align}
+
+Both encoders see the shared backbone's gradients, enabling beneficial
+cross-task signal, while their independent parameters specialise without
+conflict.
+
+\subsection{Representation-Level Synergy (CKA)}
+
+Synergy is measured via Centred Kernel Alignment (CKA) between
+understanding-task-optimal and generation-task-optimal representations.
+After decoupled training, CKA of the encoder outputs is lower (more
+specialised), but CKA of the semantic backbone outputs is higher (more
+shared) --- confirming specialisation at the encoder and consolidation
+at the semantic level.
+
+\section{Learning or Inference Procedure}
+
+Training follows standard autoregressive pretraining on interleaved
+image-text data, with the following modification:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Separate learnable visual tokenisers are initialised from
+    a shared initialisation but trained independently.
+  \item Gradients from $\mathcal{L}_u$ update $\mathrm{Enc}_u$ and
+    the shared backbone; gradients from $\mathcal{L}_g$ update
+    $\mathrm{Enc}_g$ and the shared backbone.
+  \item The shared backbone receives signal from both tasks at every step.
+\end{enumerate}
+
+At inference, only the relevant encoder branch is activated: understanding
+queries use $\mathrm{Enc}_u$; generation queries use $\mathrm{Enc}_g$.
+
+\section{What the Guarantee Says}
+
+The paper proves that under mild smoothness conditions on the loss
+landscape, the decoupled architecture has a strictly smaller gradient
+conflict norm than the fully shared architecture:
+\[
+  \|\nabla_\theta \mathcal{L}_u + \nabla_\theta \mathcal{L}_g\|^2_\mathrm{decoupled}
+  < \|\nabla_\theta \mathcal{L}_u + \nabla_\theta \mathcal{L}_g\|^2_\mathrm{shared}
+\]
+whenever the encoder Jacobians for understanding and generation are
+non-parallel --- which holds whenever the two tasks require different
+visual features, a natural assumption.
+
+\section{Experimental Findings}
+
+\textbf{Understanding benchmarks (VQA, image classification):}
+The task-decoupled model achieves 3.2\% average relative improvement
+over the best single-task baseline and 5.8\% over the naive joint model.
+
+\textbf{Generation benchmarks (FID on COCO, 256$\times$256):}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & FID$\downarrow$ & Params \\
+\midrule
+Generation-only specialist & 7.4 & 1B \\
+Naive joint UMM & 10.3 & 1B \\
+\textbf{Task-decoupled (ours)} & \textbf{8.1} & 1.1B \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Parameter overhead:} The two specialised encoders add 12\%
+extra parameters vs.\ the fully shared model, but outperform it on both
+tasks simultaneously.
+
+\section{Ablations and Interpretation}
+
+\textbf{Which layers to specialise?} Specialising only the visual
+tokeniser (earliest layers) provides the largest gain. Specialising
+all layers including late transformer blocks hurts by breaking shared
+semantic grounding.
+
+\textbf{Loss weight sensitivity ($\lambda_u, \lambda_g$):} The naive
+joint model is highly sensitive to loss weighting: accuracy fluctuates
+by up to 8\% as $\lambda_u / \lambda_g$ varies from 0.5 to 2.0.
+The decoupled model is robust across this range.
+
+\textbf{Scaling (300M, 1B, 3B):} The performance gains persist at all
+three scales, suggesting the conflict is a structural, not a capacity,
+issue.
+
+\textbf{CKA trajectories:} During training, understanding and generation
+encoder representations diverge (lower cross-task CKA), while semantic
+backbone representations converge (higher cross-task CKA) --- matching
+the specialisation-then-fusion theory.
+
+\section*{Reference}
+
+Penghao Wu, Haiwen Diao, Weichen Fan, Lewei Lu, Dahua Lin, and Ziwei Liu.
+\textbf{Uncovering Understanding-Generation Synergy in Native Unified
+Multimodal Models: From Representation, Task to System.}
+arXiv:2609.01607, September 2026.
+\url{https://arxiv.org/abs/2609.01607}
+
+\end{document}
