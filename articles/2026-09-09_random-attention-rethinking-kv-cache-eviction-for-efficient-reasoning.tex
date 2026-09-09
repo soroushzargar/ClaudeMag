@@ -1,0 +1,223 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  KV cache \textbullet{}
+  speculative eviction \textbullet{}
+  efficient reasoning \textbullet{}
+  LLM inference}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Random Attention: Rethinking KV Cache Eviction
+  for Efficient Reasoning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Scoring Cached Tokens Adds Nothing ---
+  Random Eviction with Prompt Protection Matches
+  the Best Evictors at 32--43\% Higher Throughput}\par\vspace{6pt}
+
+{\small\textbf{By} Heng Wang, Jielin Qiu, Wenting Zhao, Cheng Qian,
+  Liangwei Yang, Jiawei Han, Heng Ji, Silvio Savarese,
+  Shelby Heinecke, Huan Wang
+  (Salesforce AI Research; UIUC; Cornell; et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.03430 \textbullet{} EMNLP 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Long chain-of-thought reasoning turns the KV cache into a severe memory
+bottleneck. Every token in a reasoning trace adds a key-value pair;
+at thousands of tokens per query, the cache overflows batch capacity and
+degrades throughput. Every existing KV cache compression method responds
+with the same paradigm: score each cached token by some proxy for future
+importance, then keep the top scorers. Random Attention discards the
+scores entirely. It keeps the prompt tokens and evicts all others
+uniformly at random --- and across four models and six reasoning tasks
+matches the best-performing scored evictors while achieving 32--43\%
+higher throughput in vLLM.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Long CoT reasoning makes the KV cache a memory
+    bottleneck; existing eviction methods rely on expensive importance
+    scoring.
+  \item[Why it matters:] Production inference systems serving reasoning
+    models need maximal throughput; scoring overhead is non-trivial.
+  \item[Method:] Keep prompt KV cache; evict reasoning-trace tokens
+    uniformly at random per attention head. No score computed.
+  \item[Result:] Matches strongest evictors on 6 tasks; 32--43\%
+    higher throughput at 50\% cache budget in vLLM.
+  \item[Evidence:] Ablations isolating prompt protection from scoring;
+    redundancy analysis across text and attention heads.
+\end{description}
+\end{mdframed}
+
+\section{The Central Observation}
+
+Every KV cache evictor in the literature shares a core design assumption:
+the identity of which tokens to retain matters, and a good scoring
+function is needed to identify them. H2O uses cumulative attention
+weight; StreamingLLM uses recency with attention sinks; LESS uses
+gradient-based estimates; SnapKV clusters similar keys.
+
+Random Attention shows this assumption is false, at least for long
+reasoning traces. The scoring signal contributes almost nothing to the
+final task performance, once you control for whether the prompt is
+preserved.
+
+\section{Why the Scoring Signal Is Worthless}
+
+The authors run controlled ablation experiments across all four model
+families:
+
+\textbf{Condition A:} Prior evictor, prompt not explicitly protected
+--- the prompt may happen to be evicted.
+
+\textbf{Condition B:} Prior evictor with explicit prompt protection.
+
+\textbf{Condition C:} Random eviction, no prompt protection.
+
+\textbf{Condition D (Random Attention):} Random eviction with prompt
+protection.
+
+The results show Condition~B $\approx$ Condition~D $\gg$
+Conditions~A~and~C. The gap between A and D is almost entirely
+explained by whether the prompt is preserved, not by whether scoring is
+used. The gap between B and D (evictor scoring vs.\ random after prompt
+protection) is negligible.
+
+\section{Two Mechanisms Explaining Redundancy}
+
+Why does random eviction of the reasoning trace lose almost nothing?
+
+\textbf{Text-level redundancy.} Models engaged in chain-of-thought
+reasoning restate the facts they need as they work. If the model needs
+$P$ to derive $Q$ three steps later, it typically restates $P$ (or a
+consequence of $P$) at the derivation site. Evicting the original
+occurrence of $P$ loses nothing because the restatement survives.
+The authors measure text-level redundancy: roughly 60\% of trace tokens
+can be deleted while preserving QA-measured semantic content.
+
+\textbf{Head-level redundancy.} Each attention head maintains its own
+copy of the KV cache. Information encoded at a given token is
+distributed across heads. When eviction is performed independently per
+head (as in Random Attention), the probability that a fact encoded in
+$m$ heads is retained by at least one head is:
+\[
+  P(\text{fact retained}) = 1 - (1-p)^m
+\]
+For $m = 6$ heads and $p = 0.5$ budget: $P = 1 - 0.5^6 = 0.984$.
+This near-certainty of retention means no scored selection is needed.
+
+\section{Technical Formulation}
+
+Let $\mathcal{P}$ be the set of prompt token positions and
+$\mathcal{T}$ the set of reasoning-trace positions. Given a cache
+budget~$B$, standard evictors compute:
+\[
+  \mathcal{R} = \mathcal{P} \cup \operatorname{top}_k^{\!\text{score}}(\mathcal{T}),
+  \quad k = B - |\mathcal{P}|
+\]
+Random Attention replaces scored selection with uniform sampling:
+\[
+  \mathcal{R}^{(h)} = \mathcal{P} \cup
+  \operatorname{sample}_k^{\!\text{uniform}}(\mathcal{T})
+\]
+performed independently per attention head $h$. No score function is
+defined or computed.
+
+\section{Experimental Findings}
+
+Experiments span four models --- DeepSeek-R1-Distill-Qwen-7B,
+DeepSeek-R1-Distill-Qwen-14B, QwQ-32B, and DeepSeek-R1-32B --- and
+six tasks: AIME 2024, AIME 2025, AMC, MATH500, LiveCodeBench, and GPQA
+Diamond. At 50\% cache budget:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Method & AIME 2024 & MATH500 \\
+\midrule
+Full KV cache           & 72.3\% & 91.4\% \\
+H2O (50\%)              & 68.1\% & 89.3\% \\
+StreamingLLM (50\%)     & 67.4\% & 88.7\% \\
+\textbf{Random Att.\ (50\%)} & \textbf{68.4\%} & \textbf{89.5\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Random Attention matches or slightly exceeds scored evictors, while
+serving 32--43\% higher throughput in vLLM deployment.
+
+\section{Throughput Analysis}
+
+The throughput advantage has two sources. First, eliminating the score
+computation removes a matrix product over the full KV sequence per
+generation step, saving roughly 15\% of the per-step compute at 50\%
+budget. Second, uniform random eviction produces better memory access
+patterns than score-sorted eviction (which leaves a non-contiguous,
+score-ranked subset in the cache), saving the remaining 17--28\%.
+
+\section{Ablations and Interpretation}
+
+\textbf{Per-head vs.\ global eviction:} Per-head independent sampling
+outperforms global uniform eviction by 1.2 AIME points, confirming
+that head-level redundancy requires per-head independent treatment.
+
+\textbf{Tight budgets (25\%):} Random Attention is more robust than
+scored evictors at 25\% budget, where its MATH500 accuracy matches
+scored evictors at 50\%.
+
+\textbf{Task type:} Temporal and procedural tasks (LiveCodeBench)
+benefit slightly more from Random Attention than purely mathematical
+tasks, consistent with higher restatement frequency in procedural traces.
+
+\textbf{Prompt fragility confirmed:} If the prompt is evicted even
+partially (Condition C), accuracy drops 17+ points on AIME 2024 ---
+confirming that the prompt, not the trace, is semantically irreplaceable.
+
+\section*{Reference}
+
+Heng Wang et al. \textbf{Random Attention: Rethinking KV Cache Eviction
+for Efficient Reasoning.} arXiv:2609.03430, EMNLP 2026.
+\url{https://arxiv.org/abs/2609.03430}
+
+\end{document}

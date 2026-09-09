@@ -1,0 +1,244 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion transformer \textbullet{}
+  image generation \textbullet{}
+  open training recipe \textbullet{}
+  Muon optimizer}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  LLaDA-Image: Building Strong Image Generators
+  with Fully Open Training Recipes}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A 6B Diffusion Transformer with Staged Training,
+  Parameter-Free RMSNorm, and the Muon Optimizer
+  Achieves State-of-the-Art on Qwen-Image-Bench
+  with Full Open Release}\par\vspace{6pt}
+
+{\small\textbf{By} Chuyan Chen, Haoxing Chen, et al.\
+  (inclusionAI, Ant Group)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.03796 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+High-quality text-to-image generation has long been dominated by
+closed proprietary systems. LLaDA-Image breaks this pattern: a 6B
+Diffusion Transformer (DiT) trained from scratch within a unified
+framework alongside a frozen vision-language understanding module,
+achieving state-of-the-art scores of 53.53 (English) and 53.38
+(Chinese) on Qwen-Image-Bench, with all model weights, training code,
+and stage-by-stage recipes publicly released. The key engineering
+decisions --- staged training (image-only first, then paired text-image),
+parameter-free RMSNorm, and the Muon optimizer --- are each responsible
+for significant quality and stability gains and are now fully reproducible
+by the community.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Competitive text-to-image generation requires
+    proprietary recipes, closed weights, and unreported training
+    decisions.
+  \item[Why it matters:] Without reproducible open baselines, the
+    community cannot build on, audit, or improve SOTA image generators.
+  \item[Method:] 6B DiT + frozen LLaDA2.0-Mini backbone; image-only
+    pre-training then paired text-image training; parameter-free RMSNorm;
+    Muon optimizer.
+  \item[Result:] SOTA Qwen-Image-Bench 53.53 EN / 53.38 ZH; Muon
+    reduces training compute by 20\%; Turbo variant in 2--4 steps.
+  \item[Evidence:] Qwen-Image-Bench, GenEval, T2I-CompBench; ablations
+    on staged training, RMSNorm, and optimizer.
+\end{description}
+\end{mdframed}
+
+\section{Architecture: Unified DiT Plus Frozen LLM}
+
+LLaDA-Image pairs two modules:
+
+\textbf{Image Generation Module (DiT).} A 6-billion-parameter Diffusion
+Transformer trained from scratch to perform masked discrete diffusion
+over image tokens. The DiT models the conditional distribution
+$p(x_{\text{image}} | c_{\text{text}})$ where $c_{\text{text}}$ is the
+conditioning signal from the understanding module.
+
+\textbf{Vision-Language Understanding Module.} A frozen LLaDA2.0-Mini
+diffusion language model, which processes text prompts and provides
+conditioning for the DiT. Because LLaDA2.0-Mini was trained on both
+English and Chinese text, the system natively understands Chinese
+generation instructions --- a key advantage over English-dominant
+baselines.
+
+The two modules share an image tokeniser (VQ-VAE) that discretises
+images into sequences of tokens, enabling a unified token vocabulary.
+
+\section{Key Engineering Decision 1: Staged Training}
+
+Training starts with image-only pre-training before any text-image
+pair is introduced.
+
+\textbf{Stage 1 --- Image-only pre-training (98M samples):}
+The DiT is trained on unlabeled images using the masked diffusion
+objective with no conditioning signal. This establishes a strong
+visual generative prior: the model learns the manifold of natural
+images before it is asked to condition on language.
+
+\textbf{Stage 2 --- Paired text-image mid-training (122M samples):}
+The DiT is fine-tuned on (text, image) pairs with conditioning from
+the understanding module. Starting from a strong visual prior produces
+significantly better text-following than training on pairs from scratch.
+
+\textbf{Stage 3 --- Instruction fine-tuning:}
+A smaller high-quality stage sharpens precision on detailed captions
+and editing instructions.
+
+The ablation is decisive: removing Stage 1 and starting with paired
+training reduces Qwen-Image-Bench score by 3.8 points.
+
+\section{Key Engineering Decision 2: Parameter-Free RMSNorm}
+
+Standard affine RMSNorm applies learned scale $\gamma$ and bias
+$\beta$:
+\[
+  \text{RMSNorm}_\text{affine}(x) = \gamma \cdot \frac{x}{\|x\|_2} + \beta
+\]
+At 6B parameters, the learned scale can drift during training, causing
+loss spikes that require manual intervention.
+
+Parameter-free RMSNorm simply normalises to unit norm:
+\[
+  \text{RMSNorm}_\text{free}(x) = \frac{x}{\|x\|_2}
+\]
+Fixing the output norm eliminates the scale drift channel, enabling
+stable training throughout. Applied uniformly throughout the DiT,
+this removes approximately 12M parameters while improving training
+stability.
+
+\section{Key Engineering Decision 3: Muon Optimizer}
+
+Standard Adam-family optimisers update parameters along the raw
+gradient direction, which can inflate or collapse parameter norms.
+The Muon optimizer applies orthogonalised gradient updates:
+\[
+  \mathbf{G}_t^\perp = \operatorname{NewtonSchulz5}(\mathbf{M}_t)
+\]
+\[
+  \theta_{t+1} = \theta_t - \eta \mathbf{G}_t^\perp
+\]
+where $\mathbf{M}_t$ is the momentum-corrected gradient and
+$\operatorname{NewtonSchulz5}$ applies five iterations of the
+Newton-Schulz iteration to orthogonalise $\mathbf{M}_t$. Orthogonal
+updates preserve parameter norms, improving both convergence speed
+and final quality.
+
+\section{Masked Diffusion Objective}
+
+For an image token sequence $x = (x_1,\ldots,x_T)$, the DiT is
+trained to predict masked tokens:
+\[
+  \mathcal{L}_\text{DiT} =
+  -\mathbb{E}_{t,\mathbf{m}}\!
+  \left[ \sum_{i: m_i=1} \log p_\theta(x_i | x_{\setminus m}, c, t) \right]
+\]
+where $\mathbf{m}$ is a random mask, $x_{\setminus m}$ are unmasked
+tokens, $c$ is text conditioning, and $t$ is the diffusion timestep.
+
+\section{LLaDA-Image-Turbo: Distillation to 2--4 Steps}
+
+LLaDA-Image-Turbo is distilled from the full model using consistency
+distillation:
+\[
+  \mathcal{L}_\text{turbo} =
+  \mathbb{E}_{x, t, s}
+  \bigl\| f_\theta(x_t, t) - f_{\theta^-}(x_s, s) \bigr\|^2
+\]
+where $t > s$ are timesteps on the same trajectory, $f_\theta$ is the
+student, and $f_{\theta^-}$ is an EMA teacher. Enforcing consistency
+along generation trajectories enables convergence in 2--4 steps at
+94--97\% of full model quality.
+
+\section{Experimental Results}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & QB-EN & QB-ZH & GenEval \\
+\midrule
+DALL-E 3         & 50.1 & 48.7 & 0.61 \\
+SD 3.5-L         & 49.6 & ---  & 0.71 \\
+Flux-1.1-pro     & 51.4 & ---  & 0.72 \\
+\textbf{LLaDA-Image} & \textbf{53.53} & \textbf{53.38} & \textbf{0.74} \\
+LLaDA-Turbo (4-step) & 51.8 & 51.4 & 0.71 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Training compute:} Muon reduces GPU-hours to convergence by
+20\% (75,500 vs.\ 94,400 with AdamW) and reaches the same validation
+loss 25\% fewer steps.
+
+\section{Ablations}
+
+\textbf{Stage 1 removal:} $-3.8$ Qwen-Image-Bench points.
+
+\textbf{Affine vs.\ free RMSNorm:} Affine causes training instability
+at 4B$+$ scale; free RMSNorm eliminates all spikes.
+
+\textbf{Muon vs.\ AdamW:} Muon is $+1.1$ Qwen-Image-Bench points
+at the same compute budget.
+
+\textbf{Turbo step count:} 4 steps retains 97\% of quality; 2 steps
+94\%, at 8$\times$ speedup.
+
+\textbf{Chinese prompt following:} The bilingual LLaDA2.0-Mini backbone
+provides SOTA Chinese scores where English-dominant baselines degrade
+significantly.
+
+\section*{Reference}
+
+Chuyan Chen et al.\ (inclusionAI).
+\textbf{LLaDA-Image: Building Strong Image Generators with Fully Open
+Training Recipes.}
+arXiv:2609.03796, September 2026.
+\url{https://arxiv.org/abs/2609.03796}
+
+\end{document}

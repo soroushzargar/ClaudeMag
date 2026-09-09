@@ -1,0 +1,92 @@
+ML Papers List — 2026-09-09
+Generated for ClaudeMag
+
+1. Random Attention: Rethinking KV Cache Eviction for Efficient Reasoning [EMNLP 2026]
+   Authors: Heng Wang, Jielin Qiu, Wenting Zhao, Cheng Qian, Liangwei Yang, Jiawei Han,
+            Heng Ji, Silvio Savarese, Shelby Heinecke, Huan Wang
+   Affiliation: Salesforce AI Research; University of Illinois Urbana-Champaign; Cornell University;
+                and collaborating institutions
+   Venue/ID: arXiv:2609.03430 — Accepted, EMNLP 2026
+   URL: https://arxiv.org/abs/2609.03430
+   Summary: KV cache compression methods for long chain-of-thought reasoning uniformly adopt
+   the paradigm of scoring each cached token by importance and keeping the top scorers.
+   This paper shows the scoring signal is nearly worthless: Random Attention keeps the
+   prompt KV cache intact and evicts all other tokens uniformly at random within each
+   attention head — computing no score at all. Across four models and six reasoning tasks,
+   Random Attention matches the strongest prior evictors while serving 32–43% higher
+   throughput in vLLM. Controlled experiments reveal two key mechanisms: the prompt is the
+   fragile component of the cache (most prior-evictor gains stem from accidentally preserving
+   it), and the reasoning trace is inherently redundant — models restate needed information
+   as they work, and each attention head maintains its own copy, so random eviction retains
+   sufficient redundant coverage without any scoring.
+
+2. Beyond Language Priors: Diagnosing and Fixing Visual-Origin Hallucinations in Multimodal LLMs [arXiv 2026]
+   Authors: Peiyang Xu, Xiaopei Zhu, Jun Zhu, Xiaolin Hu
+   Affiliation: Tsinghua University
+   Venue/ID: arXiv:2609.00231
+   URL: https://arxiv.org/abs/2609.00231
+   Summary: Object hallucination in multimodal large language models (MLLMs) is widely
+   attributed to language priors — the model relying on textual co-occurrence statistics
+   rather than image content. This paper presents quantitative evidence for a complementary,
+   under-explored cause: visual-origin hallucination, where hallucinations stem from
+   incorrect visual feature extraction and misalignment between image and text embeddings.
+   Using cosine similarity analysis and Smooth Grad-CAM entropy measurements, the authors
+   show that hallucinated samples exhibit systematically lower image-text similarity and
+   higher visual entropy than faithful samples. Based on this diagnosis, the paper proposes
+   targeted interventions at the visual encoding stage that reduce hallucination rates
+   without degrading multimodal understanding performance.
+
+3. From Vision to Language: Investigating Causal Information Flow in Multimodal Decision-Making [arXiv 2026]
+   Authors: Davide Testa, Hugh Mee Wong, Alessandro Lenci, Bernardo Magnini, Albert Gatt
+   Affiliation: Fondazione Bruno Kessler; University of Malta; University of Pisa;
+                and collaborating institutions
+   Venue/ID: arXiv:2609.05149
+   URL: https://arxiv.org/abs/2609.05149
+   Summary: How do vision-language models (VLMs) integrate visual information into
+   language-based decisions? This paper applies layer-wise causal intervention on
+   video-text attention pathways to trace cross-modal information flow in a video-based
+   multiple-choice setting targeting spatial, causal, and temporal visual reasoning.
+   Key findings: visual information is integrated primarily while the model processes
+   candidate answer options (not the question); nouns serve as semantic anchors for
+   multimodal enrichment, while verbs carry temporal relational processing; and a
+   distinct fragility in temporal reasoning suggests VLMs struggle to reconstruct
+   sequential visual information across frames, possibly reflecting linguistic temporal
+   biases rather than true video understanding.
+
+4. Compile by Training: Turning Natural-Language Specifications into Local Neural Functions [EMNLP 2026]
+   Authors: Yuntian Deng, Pengyu Nie, Stuart Shieber
+   Affiliation: Harvard University; collaborating institutions
+   Venue/ID: arXiv:2609.04199 — EMNLP 2026 System Demonstrations
+   URL: https://arxiv.org/abs/2609.04199
+   Summary: Compile by Training (CbT) converts a natural-language specification into a
+   reusable, composable neural function via a training-time compilation step rather than
+   runtime inference. At compile time, teacher LLMs generate task-specific input-output
+   examples; these examples are used to train a lightweight adapter for a compact
+   interpreter model. The resulting neural function runs entirely locally without the
+   teachers, can be stored, versioned, and composed like ordinary software, and achieves
+   83.6% semantic accuracy on FuzzyBench-Hard — a benchmark where the fast
+   Program-as-Weights compiler produces zero exact matches. CbT trades higher compile-time
+   cost (roughly one minute vs.\ seconds) for far higher accuracy and a permanently
+   reusable artifact, with practical demonstrations including website helpers and
+   language-controlled 3D avatars.
+
+5. LLaDA-Image: Building Strong Image Generators with Fully Open Training Recipes [arXiv 2026]
+   Authors: Chuyan Chen, Haoxing Chen, Kun Chen, Zhenglin Cheng, Long Cui, Ruishan Fang,
+            Zhangxuan Gu, Zhicheng Huang, Zhenzhong Lan, Yuanting Lei, Haoquan Li,
+            Jianguo Li, Rongchuan Li, Sidu Li, Tao Lin, Deyuan Liu, Jiacheng Liu,
+            Lin Liu, Yuxuan Lou, Zhisheng Lu, Yuxin Ma, Shuheng Shen, Peng Sun,
+            Chaoyang Wang, Hongjun Wang, Xiaomei Wang, Yongxin Wang, Chengzhang Wu,
+            Hongru Wu, Jun Xie (inclusionAI)
+   Affiliation: inclusionAI (Ant Group)
+   Venue/ID: arXiv:2609.03796
+   URL: https://arxiv.org/abs/2609.03796
+   Summary: LLaDA-Image is a fully open 6B Diffusion Transformer (DiT) image generator
+   unified with a frozen vision-language understanding module built on the LLaDA2.0-Mini
+   diffusion language model backbone. Training follows a staged recipe: image-only
+   pre-training builds a strong visual generative prior before any paired text-image data
+   is introduced; mid-training then bridges to text-conditioned generation. Key engineering
+   decisions include parameter-free RMSNorm throughout the DiT and the Muon optimizer for
+   efficient large-scale optimization. LLaDA-Image achieves state-of-the-art scores of
+   53.53 (English) and 53.38 (Chinese) on Qwen-Image-Bench and is distilled into
+   LLaDA-Image-Turbo, which produces high-quality images in 2–4 sampling steps. All
+   model weights, training code, and detailed recipes are publicly released.

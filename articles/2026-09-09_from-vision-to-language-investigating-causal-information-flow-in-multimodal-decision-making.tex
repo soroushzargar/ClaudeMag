@@ -1,0 +1,241 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-language models \textbullet{}
+  causal intervention \textbullet{}
+  cross-modal attention \textbullet{}
+  video understanding}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  From Vision to Language: Investigating Causal
+  Information Flow in Multimodal
+  Decision-Making}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Causal Patching of Video-Text Attention Reveals
+  That VLMs Ground Vision at Answer Tokens,
+  with Nouns as Anchors and Temporal Reasoning Fragile}\par\vspace{6pt}
+
+{\small\textbf{By} Davide Testa, Hugh Mee Wong, Alessandro Lenci,
+  Bernardo Magnini, Albert Gatt
+  (FBK; Univ.\ Malta; Univ.\ Pisa; et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.05149 \textbullet{} Preprint, September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Vision-language models (VLMs) are widely deployed for video
+understanding tasks --- question answering, visual reasoning, action
+recognition. Yet the internal mechanism by which visual information is
+integrated into language-based decisions remains largely opaque.
+This paper applies layer-wise causal intervention on video-text attention
+pathways to answer a basic question: at which layer, and at which token
+positions, does visual information causally determine the model's final
+answer? The answer is consistent across five VLMs spanning two orders of
+magnitude in parameters: visual information is integrated primarily when
+the model processes the candidate \emph{answer} tokens, not the question.
+Nouns act as semantic anchors for cross-modal grounding; verbs carry
+temporal relational load; and temporal reasoning exhibits a distinct
+fragility suggesting models rely on linguistic cues rather than genuine
+frame-by-frame sequential understanding.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Where and when do VLMs integrate visual signals when
+    answering video questions?
+  \item[Why it matters:] Understanding integration sites guides
+    architecture choices and reveals failure modes.
+  \item[Method:] Layer-wise causal patching of video-text attention
+    activations; tested on spatial, causal, and temporal QA.
+  \item[Result:] Visual integration peaks at answer tokens; nouns
+    anchor cross-modal binding; temporal reasoning fragility TFI=0.34.
+  \item[Evidence:] 5 VLMs (7B--72B); consistent across spatial, causal,
+    and temporal tasks.
+\end{description}
+\end{mdframed}
+
+\section{The Question}
+
+VLMs process videos as sequences of frame tokens and answer multiple-choice
+questions about their content. The prevailing assumption is that visual
+grounding is distributed throughout the forward pass. But mechanistic
+interpretability work on image-text models has suggested that
+cross-modal integration is often concentrated at specific layers and
+token positions. For video, with its additional temporal structure,
+the picture is even less clear.
+
+This paper runs the first systematic causal intervention study on the
+cross-modal attention pathways of video VLMs, targeting three reasoning
+types: spatial (object location, spatial relations), causal (action
+outcomes, event causation), and temporal (sequence, duration,
+before/after).
+
+\section{Causal Patching Methodology}
+
+The central method is \textbf{causal activation patching} applied to
+cross-modal attention activations.
+
+For a clean run on a video-question pair, all attention activations
+$\mathbf{A}^{(l)}_t$ at layer $l$, token position $t$ are recorded.
+A corrupted run processes a corrupted video (shuffled or masked frames)
+to obtain degraded activations.
+
+\textbf{Causal patching} restores the clean activation at a single
+$(l^*, t^*)$ while all other activations remain corrupted:
+\[
+  \mathbf{A}^{(l)}_t =
+  \begin{cases}
+    \mathbf{A}^{(l)}_t[\text{clean}]     & l = l^*,\; t = t^* \\
+    \mathbf{A}^{(l)}_t[\text{corrupted}] & \text{otherwise}
+  \end{cases}
+\]
+The \textbf{causal effect} of visual information at $(l^*, t^*)$ is:
+\[
+  \text{CE}(l^*, t^*) =
+  P(\text{correct}\,|\,\text{patched at } l^*, t^*)
+  - P(\text{correct}\,|\,\text{fully corrupted})
+\]
+High CE means visual information at that position is causally necessary.
+
+Normalising by the maximum recoverable effect:
+\[
+  \widehat{\text{CE}}(l^*, t^*) =
+  \frac{\text{CE}(l^*, t^*)}{P(\text{correct}|\text{clean}) -
+                              P(\text{correct}|\text{corrupted})}
+\]
+
+\section{Where Visual Integration Happens}
+
+The results are striking in their consistency. Across all five models
+and all three task types, the highest causal effects appear at the
+positions of \emph{candidate answer tokens} --- not the question,
+not the reasoning prefix. The model reads the video primarily when it
+evaluates each answer option against the video content.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & Spatial & Causal & Temporal \\
+\midrule
+Peak CE at answer tokens   & 0.71 & 0.68 & 0.53 \\
+Peak CE at question tokens & 0.18 & 0.22 & 0.19 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Visual integration peaks at layers 60--75\% of model depth, in the
+middle-to-late transformer layers.
+
+\section{Nouns Anchor, Verbs Carry Temporal Load}
+
+Aggregating causal effects by token part-of-speech reveals the role
+of different word classes:
+\[
+  \widehat{\text{CE}}_\text{POS}(\text{pos}) =
+  \frac{1}{|T_\text{pos}|} \sum_{t \in T_\text{pos}} \sum_l
+  \widehat{\text{CE}}(l, t)
+\]
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+POS & Spatial & Causal & Temporal \\
+\midrule
+Noun share  & 58\% & 51\% & 44\% \\
+Verb share  & 12\% & 24\% & 41\% \\
+Other share & 30\% & 25\% & 15\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Nouns dominate as binding sites for object identity and spatial
+information. Verbs grow in importance for causal and temporal tasks,
+where relational and sequential information must be extracted from
+the video.
+
+\section{Temporal Fragility}
+
+The \textbf{Temporal Fragility Index} (TFI) measures how much harder
+it is to recover visual information for temporal questions:
+\[
+  \text{TFI} =
+  \frac{\widehat{\text{CE}}_\text{spatial}
+      - \widehat{\text{CE}}_\text{temporal}}
+       {\widehat{\text{CE}}_\text{spatial}}
+\]
+
+TFI $= 0.34$ averaged across models. Restoring a clean visual signal
+for a temporal question recovers 34\% less accuracy than for a spatial
+question, despite identical video content.
+
+Combined with the high verb CE share on temporal tasks, this pattern
+suggests VLMs use linguistic temporal markers (verb tense, temporal
+adverbs, ``before/after'' phrases) rather than reconstructing sequential
+information across frames. Temporal expressions in answer candidates
+trigger reliance on linguistic temporal priors.
+
+\section{Experimental Details}
+
+\textbf{Models:} LLaVA-Video-7B, LLaVA-Video-72B, Qwen2.5-VL-7B,
+Qwen2.5-VL-72B, InternVL3-8B.
+
+\textbf{Video benchmarks:} Spatial, causal, and temporal questions
+derived from standardised evaluation datasets; 4 answer candidates per
+question; balanced correct/incorrect.
+
+\textbf{Corruption:} Frame shuffling and frame masking produce similar
+CE patterns, confirming that ordering information (not just content
+presence) drives temporal fragility.
+
+\textbf{Model scale:} Larger models achieve higher absolute accuracy but
+the same qualitative pattern, suggesting these are architectural
+properties rather than capacity limitations.
+
+\section*{Reference}
+
+Davide Testa, Hugh Mee Wong, Alessandro Lenci, Bernardo Magnini, and
+Albert Gatt. \textbf{From Vision to Language: Investigating Causal
+Information Flow in Multimodal Decision-Making.}
+arXiv:2609.05149, September 2026.
+\url{https://arxiv.org/abs/2609.05149}
+
+\end{document}

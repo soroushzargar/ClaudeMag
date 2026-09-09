@@ -1,0 +1,239 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal LLM \textbullet{}
+  hallucination \textbullet{}
+  visual grounding \textbullet{}
+  object hallucination}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Beyond Language Priors: Diagnosing and Fixing
+  Visual-Origin Hallucinations in Multimodal LLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Cosine Similarity and Grad-CAM Entropy Reveal
+  That Half of Object Hallucinations Originate
+  in the Visual Encoder, Not the Language Model}\par\vspace{6pt}
+
+{\small\textbf{By} Peiyang Xu, Xiaopei Zhu, Jun Zhu, Xiaolin Hu
+  (Tsinghua University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.00231 \textbullet{} Preprint, August 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Object hallucination in multimodal large language models (MLLMs) --- the
+generation of text describing objects not present in the image --- is
+a persistent failure mode that undermines trust in deployed systems.
+The field has converged on a near-consensus explanation: the language
+model component over-relies on learned co-occurrence statistics (language
+priors), producing objects that are likely in the described scene even
+when they are absent from the image. This paper challenges that consensus.
+Using cosine similarity analysis and Smooth Grad-CAM entropy, the authors
+show that 38--52\% of object hallucinations across three MLLM architectures
+originate not in the language prior but in failures of the visual encoder
+itself.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Object hallucination in MLLMs is blamed on language
+    priors; visual encoding failures are ignored.
+  \item[Why it matters:] Misdiagnosing the root cause leads to
+    interventions (decoding fixes) that do not address visual failures.
+  \item[Method:] Cosine similarity and Smooth Grad-CAM entropy to
+    classify hallucinations as visual-origin vs.\ language-prior-origin.
+  \item[Result:] 38--52\% of hallucinations are visual-origin; targeted
+    visual fixes reduce POPE hallucination rate by 4.1 points and
+    MSCOCO-Hallu rate by 37\% relative.
+  \item[Evidence:] Three MLLM families; POPE, MME, MSCOCO-Hallu
+    benchmarks; ablations of visual contrastive training and attention
+    focusing.
+\end{description}
+\end{mdframed}
+
+\section{The Language Prior Hypothesis and Its Limits}
+
+The dominant account of object hallucination posits that MLLMs inherit
+strong language priors from pre-training: the language model has seen
+``refrigerator'' co-occurring with ``kitchen'' thousands of times and
+will generate it even when the image shows an empty kitchen. Prior work
+has proposed remedies at the language side: instruction tuning with
+hallucination-negative examples, post-hoc decoding corrections, and
+contrastive decoding between image-conditioned and image-unconditioned
+outputs.
+
+These language-side fixes improve hallucination metrics, but do not
+fully close the gap with human performance. This paper asks whether
+there is a second root cause that language-side fixes cannot address.
+
+\section{Diagnosing Visual-Origin Hallucination}
+
+The authors propose two diagnostic metrics that distinguish visual-origin
+from language-prior-origin hallucination.
+
+\textbf{Image-text cosine similarity} measures how well the visual
+embedding aligns with the text of the generated output:
+\[
+  \text{sim}(v, t) = \frac{\mathbf{f}_v \cdot \mathbf{f}_t}
+                          {\|\mathbf{f}_v\| \|\mathbf{f}_t\|}
+\]
+If the visual encoder correctly represents the image content,
+$\text{sim}(v, t)$ should be high for faithful outputs. A low
+$\text{sim}(v, t)$ for a hallucinatory output indicates that the
+generated text does not correspond to the visual representation ---
+suggesting the visual encoder failed.
+
+\textbf{Smooth Grad-CAM entropy} measures the diffuseness of image
+regions attended during generation:
+\[
+  H_{\text{Grad-CAM}} = -\sum_{r} p_r \log p_r
+\]
+where $p_r$ is the normalized Smooth Grad-CAM activation for image
+region $r$. High entropy means the model fails to focus on
+task-relevant objects. For faithful outputs, entropy is low; for
+visual-origin hallucinations, entropy is systematically elevated.
+
+Using these two metrics as a joint classifier, the authors assign each
+hallucinated object instance to one of three categories:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \textbf{Language-prior-origin:} high sim, low entropy, object
+    absent from image.
+  \item \textbf{Visual-origin:} low sim or high entropy, regardless of
+    whether the object could be predicted from language priors.
+  \item \textbf{Ambiguous:} both factors elevated.
+\end{itemize}
+
+\section{Quantitative Decomposition}
+
+Across three architectures (LLaVA-1.5, InstructBLIP, MiniGPT-4) on
+MSCOCO-Hallu, the decomposition results are:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & Language & Visual & Ambig. \\
+\midrule
+LLaVA-1.5      & 41\% & 44\% & 15\% \\
+InstructBLIP   & 38\% & 47\% & 15\% \\
+MiniGPT-4      & 45\% & 40\% & 15\% \\
+\midrule
+Average        & 41\% & 44\% & 15\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The visual-origin fraction is consistently comparable to or larger than
+the language-prior fraction, establishing it as a primary, not secondary,
+cause.
+
+\section{Targeted Remediation}
+
+The authors propose two complementary fixes targeting the visual encoder.
+
+\textbf{Visual contrastive training} pushes image embeddings toward
+representations of faithful captions and away from unfaithful ones:
+\[
+  \mathcal{L}_{\text{contrast}} = -\log
+  \frac{\exp(\text{sim}(v, t^+)/\tau)}
+       {\exp(\text{sim}(v, t^+)/\tau) + \sum_j \exp(\text{sim}(v, t^-_j)/\tau)}
+\]
+where $t^+$ is the ground-truth caption and $t^-_j$ are negative captions
+(hallucination-containing descriptions generated by the model).
+
+\textbf{Attention focusing regularization} reduces visual entropy during
+training by penalizing diffuse visual attention:
+\[
+  \mathcal{L}_{\text{focus}} = \lambda_2 \cdot H_{\text{Grad-CAM}}
+\]
+The full training objective combines both:
+\[
+  \mathcal{L} = \mathcal{L}_{\text{LM}}
+              + \lambda_1 \mathcal{L}_{\text{contrast}}
+              + \lambda_2 \mathcal{L}_{\text{focus}}
+\]
+
+\section{Experimental Results}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & POPE Acc. & Hallu.\ Rate \\
+\midrule
+LLaVA-1.5 (baseline)         & 85.3\% & 28.4\% \\
++ Language-side fix (ICD)     & 87.1\% & 24.9\% \\
++ Visual contrastive training & 88.6\% & 20.1\% \\
+\textbf{+ Full method}        & \textbf{89.4\%} & \textbf{17.8\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The full method reduces hallucination rate by 37.3\% relative on
+MSCOCO-Hallu and improves POPE accuracy by 4.1 points, without
+degrading object recognition or VQA performance.
+
+\section{Ablations and Interpretation}
+
+\textbf{Contrastive vs.\ focus ablation:} Contrastive training accounts
+for 65\% of the hallucination reduction; attention focusing contributes
+the remaining 35\%.
+
+\textbf{Cross-architecture AUC:} The diagnostic metrics predict
+visual-origin hallucinations with AUC 0.78--0.83 across all three
+families, confirming the finding generalises beyond a single model.
+
+\textbf{No regression on downstream tasks:} VQAv2 and ScienceQA scores
+are unchanged, confirming the intervention is targeted and does not
+erode general multimodal capability.
+
+\textbf{Diagnostic threshold sensitivity:} The 41--44\% visual-origin
+estimate shifts by at most $\pm$6 points across threshold choices,
+showing the result is robust to the classification boundary.
+
+\section*{Reference}
+
+Peiyang Xu, Xiaopei Zhu, Jun Zhu, and Xiaolin Hu.
+\textbf{Beyond Language Priors: Diagnosing and Fixing Visual-Origin
+Hallucinations in Multimodal LLM.}
+arXiv:2609.00231, August 2026.
+\url{https://arxiv.org/abs/2609.00231}
+
+\end{document}
