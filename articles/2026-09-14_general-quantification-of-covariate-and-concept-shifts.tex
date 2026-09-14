@@ -1,0 +1,240 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  distribution shift \textbullet{}
+  covariate shift \textbullet{}
+  concept shift \textbullet{}
+  optimal transport \textbullet{}
+  generalization bounds}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  General Quantification of Covariate
+  and Concept Shifts}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Entropic Optimal Transport Yields the First General,
+  Estimable Error Bound Unifying Both Shift Types}\par\vspace{6pt}
+
+{\small\textbf{By} Hongbo Chen, Li Charlie Xia
+  (South China University of Technology)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.11918 \textbullet{} ICML 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Generalization under distribution shift is a core unsolved challenge in
+modern machine learning. Existing learning bound theory handles covariate
+shift and concept shift in separate, narrow, idealized frameworks ---
+and both frameworks break when the source and target distributions do
+not share the same support, which is the common case in deployment. This
+paper derives a single general bound that unifies both shift types using
+entropic optimal transport, is estimable from samples, and comes with an
+algorithm --- DataShifts --- that measures each component of the shift
+from finite data.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing distribution-shift bounds are restricted to
+    matching supports and separate shift types; neither condition holds
+    in practice.
+  \item[Why it matters:] Unestimable, vacuous, or type-specific bounds
+    cannot guide real deployment decisions under shift.
+  \item[Method:] Define $\gamma^*$-concept shifts via entropic OT;
+    derive a unified bound; construct sample estimators for both components.
+  \item[Result:] DataShifts produces finite non-vacuous bounds on all
+    12 synthetic and 5 real benchmarks; 1.5--5$\times$ tighter than
+    prior methods where prior methods are finite.
+  \item[Evidence:] Formal concentration guarantees; ablations on SCM
+    size, sample size, and cost function.
+\end{description}
+\end{mdframed}
+
+\section{The Core Problem}
+
+A learning algorithm is trained on source data $(X_s, Y_s) \sim P_s$
+and deployed on target data $(X_t, Y_t) \sim P_t$. How much does the
+test error on $P_t$ exceed the training error on $P_s$?
+
+\textbf{Covariate shift} assumes the label mechanism is unchanged
+($P_t(Y|X) = P_s(Y|X)$) but the input distribution shifts
+($P_t(X) \neq P_s(X)$). Importance-weighted ERM corrects this.
+
+\textbf{Concept shift} assumes the conditional itself changes:
+$P_t(Y|X) \neq P_s(Y|X)$. Existing bounds measure this change via
+$f$-divergences between conditionals --- but these divergences are
+infinite when $\mathrm{supp}(P_t) \not\subseteq \mathrm{supp}(P_s)$,
+producing vacuous bounds in the mismatch setting that characterizes
+most real deployments.
+
+\section{Why Existing Bounds Fail}
+
+The authors prove a formal impossibility: any bound of the form
+\[
+  \mathcal{E}_t(h) \leq \mathcal{E}_s(h) + D_f(P_s, P_t) + \lambda
+\]
+where $D_f$ is any $f$-divergence-based concept shift measure will be
+infinite whenever $\mathrm{supp}(P_t) \not\subseteq \mathrm{supp}(P_s)$,
+even if the conditional distributions are in practice very close.
+
+This is not merely a theoretical inconvenience. On standard domain
+adaptation benchmarks such as Camelyon17 (where hospital scanners differ)
+or CIFAR-10-C (where corruptions shift the input distribution globally),
+the target support extends beyond the source support. All prior bounds
+are vacuous on these benchmarks.
+
+\section{Entropic Optimal Transport and $\gamma^*$-Concept Shifts}
+
+The key insight is to replace $f$-divergence with a soft coupling via
+entropic optimal transport. Given a cost function $c(x, x')$ on the
+input space, define:
+\[
+  \gamma^* = \arg\min_{\gamma \in \Pi(P_s^X, P_t^X)}
+  \mathbb{E}_\gamma[c(X,X')] + \varepsilon H(\gamma)
+\]
+where $H(\gamma)$ is the entropy of the coupling and $\varepsilon > 0$
+is a regularization parameter. The \textbf{$\gamma^*$-concept shift} is:
+\[
+  \Delta_\gamma = \mathbb{E}_{\gamma^*}\!\left[
+    \mathrm{TV}\!\left(P_s(Y|X{=}x),\, P_t(Y|X'{=}x')\right)
+  \right]
+\]
+This measures how much the label distribution changes between
+``matched'' source and target points under the optimal transport plan.
+When supports agree, this recovers the classical TV-based concept
+shift. When supports mismatch, the transport plan couples each target
+point to the nearest available source point, producing a
+well-defined, finite quantity.
+
+\section{The General Error Bound}
+
+\textbf{Theorem.} For any hypothesis $h$ with bounded loss
+$\ell \in [0,1]$:
+\[
+  \mathcal{E}_t(h) \leq \mathcal{E}_s(h)
+    + \underbrace{W_\varepsilon(P_s^X, P_t^X)}_{\text{covariate shift}}
+    + \underbrace{\Delta_\gamma(P_s, P_t)}_{\gamma^*\text{-concept shift}}
+    + O\!\left(\sqrt{\frac{\log|\mathcal{H}|}{n}}\right)
+\]
+where $W_\varepsilon$ is the entropic Wasserstein distance between input
+marginals. This bound:
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item Applies to multiclass, regression, and stochastic labeling.
+  \item Is finite for arbitrary source/target supports.
+  \item Recovers known tight bounds as special cases.
+  \item Is estimable from finite samples.
+\end{itemize}
+
+\section{The DataShifts Algorithm}
+
+DataShifts estimates both shift components from source and target samples:
+
+\textbf{Step 1.} Solve $\hat{\gamma}^* = \mathrm{Sinkhorn}(\hat{P}_s^X,
+\hat{P}_t^X, c, \varepsilon)$ via Sinkhorn iterations.
+
+\textbf{Step 2.} Compute $\hat{W}_\varepsilon$ as the primal OT objective.
+
+\textbf{Step 3.} For each matched pair $(x_i, x_j')$ in $\hat{\gamma}^*$,
+estimate $\mathrm{TV}(P_s(Y|x_i), P_t(Y|x_j'))$ from label empiricals.
+
+\textbf{Concentration guarantee:} With probability $1 - \delta$,
+\[
+  |\hat{W}_\varepsilon - W_\varepsilon| \leq C\sqrt{\frac{\log(1/\delta)}{n}}
+\]
+and similarly for $\hat{\Delta}_\gamma$, where $C$ depends on the
+diameter of the input space.
+
+\section{Experimental Findings}
+
+Experiments span 12 synthetic shift scenarios and 5 real-world
+benchmarks (Portraits, CIFAR-10-C, Camelyon17, DomainNet, and a
+tabular clinical dataset):
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Dataset & $\mathcal{H}\Delta\mathcal{H}$ bound & DataShifts \\
+\midrule
+CIFAR-10-C (blur)  & $\infty$ & 0.48 (true: 0.31) \\
+Camelyon17         & 2.31     & 0.39 (true: 0.24) \\
+Portraits          & 0.87     & 0.27 (true: 0.18) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+DataShifts is 1.5--5$\times$ tighter where prior methods are finite,
+and produces finite bounds where prior methods give $\infty$.
+
+\section{Shift Decomposition}
+
+A key practical capability of DataShifts is decomposing total shift
+into covariate and concept components, guiding which correction strategy
+to apply:
+
+\textbf{CIFAR-10-C (corruption-only):}
+$\hat{W}_\varepsilon = 0.41$, $\hat{\Delta}_\gamma = 0.03$ ---
+shift is almost entirely covariate; apply importance weighting.
+
+\textbf{Clinical tabular (changed deployment policy):}
+$\hat{W}_\varepsilon = 0.07$, $\hat{\Delta}_\gamma = 0.28$ ---
+shift is almost entirely concept; apply label calibration.
+
+\section{Ablations and Interpretation}
+
+\textbf{Regularization $\varepsilon$:} Smaller values tighten bounds
+but increase optimization difficulty; $\varepsilon = 0.1$ works well
+across all tested datasets.
+
+\textbf{Sample size:} DataShifts requires roughly $n = 500$ target
+samples for reliable bounds; $n = 100$ suffices for decomposition
+quality.
+
+\textbf{Cost function:} Euclidean cost works for image benchmarks;
+learned feature-space cost improves results on tabular data.
+
+\section*{Reference}
+
+Hongbo Chen, Li Charlie Xia.
+\textbf{General Quantification of Covariate and Concept Shifts.}
+arXiv:2609.11918, ICML 2026.
+\url{https://arxiv.org/abs/2609.11918}
+
+\end{document}

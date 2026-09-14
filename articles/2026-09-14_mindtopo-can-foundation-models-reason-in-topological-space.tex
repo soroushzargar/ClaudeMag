@@ -1,0 +1,248 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  topological reasoning \textbullet{}
+  spatial cognition \textbullet{}
+  multimodal LLM \textbullet{}
+  benchmark \textbullet{}
+  knot theory}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MindTopo: Can Foundation Models
+  Reason in Topological Space?}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Best Model Scores 61.4\% vs.\ 97.9\% Human on a Benchmark
+  of 11,030 Topological Intuition Instances}\par\vspace{6pt}
+
+{\small\textbf{By} Yunfei Ge, Anbang Liu, Qineng Wang,
+  Johnalbert Garnica, Jianwen Lyu, Zihan Wang, Reuben Tan,
+  Jianfeng Gao, Ruohan Zhang, Yining Hong, Jiajun Wu, Manling Li
+  (Northwestern University; Microsoft Research; Stanford University;
+  et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.11900}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Spatial reasoning benchmarks for foundation models have focused almost
+entirely on metric properties: distances, angles, viewpoints, and
+shapes. Cognitive science identifies a more fundamental layer of
+spatial understanding --- topological relations that remain invariant
+under continuous deformation --- as the earliest spatial concepts
+acquired by infants. MindTopo evaluates foundation models on this
+layer and finds a systematic blind spot: the best multimodal LLM
+scores 61.4\% on 11,030 topological instances against 97.9\% human
+performance, with near-random performance on knots --- the most globally
+structured topological property.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Foundation models are not evaluated on topological
+    spatial relations despite their cognitive primacy.
+  \item[Why it matters:] Topological reasoning underlies planning,
+    navigation, and physical interaction; a gap here limits physical AI.
+  \item[Method:] 11,030 procedurally generated instances across 5
+    topological properties (continuity, separation, order, enclosure,
+    knots) at reasoning and planning cognitive levels.
+  \item[Result:] Best model 61.4\%; human 97.9\%; knots near random
+    for all 14 tested multimodal LLMs.
+  \item[Evidence:] 14 MLLMs + 3 video generative models evaluated;
+    ablations with chain-of-thought, metric cue removal, difficulty scaling.
+\end{description}
+\end{mdframed}
+
+\section{Topology vs.\ Metric Geometry}
+
+Topology studies properties invariant under \emph{homeomorphisms}
+(continuous deformations with continuous inverses), as opposed to
+geometry, which studies properties invariant under rigid motions.
+The classic example: a coffee cup and a donut are topologically
+equivalent (both have one handle/hole) but geometrically different.
+
+Cognitive developmental science (Piaget 1956; Spelke et al.\ 1995)
+identifies topological relations as the first spatial concepts acquired
+by infants, preceding projective and metric relations. Despite this
+cognitive primacy, virtually all spatial reasoning benchmarks for
+foundation models measure metric or viewpoint-dependent properties.
+
+MindTopo addresses this gap with five topological properties:
+
+\textbf{Continuity:} Is a path or region connected without breaks?
+
+\textbf{Separation:} Are two regions or paths disconnected?
+
+\textbf{Order:} What is the cyclic ordering of points along a closed curve?
+
+\textbf{Enclosure:} Does one region contain another (Jordan curve-type)?
+
+\textbf{Knots:} What is the global entanglement class of a closed
+curve in 3D space?
+
+\section{The Knot Problem}
+
+Knots are the hardest property in MindTopo and the most revealing
+failure. A \emph{knot} is a closed curve $\gamma: S^1 \to \mathbb{R}^3$.
+Two knots are equivalent (the same knot type) iff one can be
+deformed into the other without cutting --- a relation that cannot
+be decomposed into any set of local features.
+
+By the Reidemeister theorem, two knot diagrams represent equivalent
+knots iff one can be obtained from the other by three local moves
+(Reidemeister moves I, II, III). Checking equivalence requires
+reasoning about global path structure through an unbounded sequence
+of local moves. Current vision models, which process local patches
+and aggregate them, have no mechanism for this kind of global
+topological bookkeeping.
+
+\textbf{Result:} All 14 MLLMs score between 24--35\% on knot
+instances (4-choice random = 25\%), confirming the problem is
+currently unsolvable by the tested models regardless of scale or
+architecture.
+
+\section{Benchmark Design}
+
+MindTopo contains \textbf{11,030 instances} across \textbf{13 task types}
+at two cognitive levels:
+
+\textbf{Reasoning:} Given visual input (image or short video),
+identify a topological property or predict how it changes under a
+described deformation.
+
+\textbf{Planning:} The model acts as a closed-loop agent selecting
+environment actions. Task completion within $T = 20$ steps is the
+primary metric.
+
+Instances are generated algorithmically using a custom topology
+simulator with difficulty parameter $d \in [1,5]$ controlling the
+number of topological operations required. All instances are
+procedurally generated --- not scraped --- ensuring no overlap with
+web training data.
+
+\textbf{Human baseline:} 50 participants (college students with no
+topology training) evaluated a stratified 500-instance subset; mean
+accuracy 97.9\%.
+
+\section{Technical Formulation}
+
+Let $f: X \to Y$ be a continuous map between topological spaces.
+MindTopo operationalizes five invariant types:
+
+\textbf{Separation:} Two sets $A, B \subset X$ are separated if
+$\bar{A} \cap B = A \cap \bar{B} = \emptyset$.
+
+\textbf{Enclosure:} Region $A$ encloses $B$ if $B \subset \mathrm{Int}(A)$
+in the ambient space (Jordan curve theorem generalization).
+
+\textbf{Knot equivalence:} Closed curve $\gamma: S^1 \to \mathbb{R}^3$
+belongs to knot class $[K]$ if it is ambient isotopic to $K$.
+MindTopo uses three-crossing and four-crossing knots as test cases.
+
+\textbf{Order invariant:} Given $n$ points on a closed curve, their
+cyclic order $\sigma \in S_n / \mathbb{Z}_n$ is invariant under
+homeomorphism.
+
+\section{Experimental Findings}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & Reasoning & Planning \\
+\midrule
+Human                  & 98.2\% & 97.5\% \\
+Gemini 1.5 Pro (best)  & 68.3\% & 54.5\% \\
+GPT-4o                 & 65.1\% & 48.9\% \\
+Claude 3.5 Sonnet      & 63.7\% & 46.2\% \\
+Avg.\ 14 MLLMs         & 52.4\% & 38.7\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{4pt}
+
+Results by property reveal a clear hierarchy:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Property & Best Model & Human \\
+\midrule
+Continuity  & 79.2\% & 98.8\% \\
+Separation  & 74.1\% & 98.5\% \\
+Order       & 65.8\% & 97.4\% \\
+Enclosure   & 61.3\% & 97.1\% \\
+Knots       & 29.4\% & 97.2\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Continuity and separation (local, visually apparent properties) are
+relatively easier; knots (global, non-local) are near-random.
+
+\section{Ablations and Interpretation}
+
+\textbf{Metric cues removed:} When images are topologically equivalent
+but metrically different (differently scaled loops), model accuracy
+changes by less than 2\%, confirming models do not exploit metric
+shortcuts.
+
+\textbf{Chain-of-thought prompting:} CoT improves average accuracy by
+4.1 points on reasoning and 3.8 on planning --- helpful but insufficient
+to close the human gap.
+
+\textbf{Difficulty scaling:} At difficulty $d = 5$, models average
+31.2\% (near random) while humans score 95.4\%, indicating complex
+topological configurations are qualitatively out of distribution for
+current models.
+
+\textbf{Planning gap:} All models perform better on reasoning than
+planning (average gap: 13.7 points), suggesting models recognize
+topological cues without grounding them in action-relevant planning
+representations.
+
+\section*{Reference}
+
+Yunfei Ge et al.\ \textbf{MindTopo: Can Foundation Models Reason in
+Topological Space?} arXiv:2609.11900, September 2026.
+\url{https://arxiv.org/abs/2609.11900}
+
+\end{document}

@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  long video understanding \textbullet{}
+  agentic AI \textbullet{}
+  edge-cloud \textbullet{}
+  visual routing \textbullet{}
+  multimodal LLM}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Caption-once, Frames-on-Demand:
+  Visual-Need Routing for Budget-Aware
+  Agentic Long Video Understanding}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  One Offline Captioning Pass, a Dual-Track Narrative Index,
+  and a Lightweight Router Cut Frame API Calls by 71\%
+  While Improving Accuracy}\par\vspace{6pt}
+
+{\small\textbf{By} Weitong Cai, Hang Zhang, Yukai Huang,
+  Yiqiao Xie, Shan Gao, Jiankang Deng, Songcen Xu,
+  Jifei Song, Zhensong Zhang
+  (Imperial College London; Huawei Noah's Ark Lab; et al.)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.11899 \textbullet{} EMNLP 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Deploying long-video understanding on edge devices imposes two
+simultaneous constraints: tight compute budgets (no dense frame encoding
+over hours of content) and tight bandwidth budgets (no per-query frame
+refetch from the cloud). Prior systems sacrifice accuracy for
+efficiency (sparse frame methods) or efficiency for accuracy (dense
+MLLM methods). Caption-once, Frames-on-Demand (CFD) resolves the
+tradeoff: a single offline captioning pass builds a reusable dual-track
+narrative index, and a lightweight Visual-Need Router at query time
+triggers pixel retrieval only when the question requires it --- 29\%
+of the time.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Long-video understanding on edge devices is blocked
+    by the cost of dense frame processing and per-query frame retrieval.
+  \item[Why it matters:] Hours-long video QA is needed for wearables,
+    in-car systems, and surveillance; bandwidth and compute are limited.
+  \item[Method:] Caption video once; build event-level story skeleton
+    + clip-level micro-log; route each query through Visual-Need Router;
+    retrieve frames only for perceptual sub-questions.
+  \item[Result:] 74.8\%/60.9\%/66.7\% on EgoSchema/LVBench/Video-MME-Long;
+    average 1.16 frames per query vs.\ 18--64 for baselines.
+  \item[Evidence:] Ablations on dual-track index, router design,
+    and frame budget $R_{\max}$.
+\end{description}
+\end{mdframed}
+
+\section{The Visual-Textual Duality}
+
+The core insight is that long-video questions separate cleanly into
+two types:
+
+\textbf{Structural questions} (temporal order, causality, scene
+transitions, narrative arc) are answered better from language memories
+than from dense frames. A prose description of a sequence of events
+conveys order and causality more compactly and reliably than 3,600
+frames at 1 fps.
+
+\textbf{Perceptual questions} (clothing color, on-screen text, object
+state, character identity) require pixels. Language captions inevitably
+abstract away discriminating visual details; the answer ``the person
+is wearing a blue jacket'' is useless if the question distinguishes
+between navy, teal, and cobalt.
+
+Prior systems ignore this duality. Dense-frame MLLMs pay the cost of
+all frames for all questions. Text-only memory agents fail systematically
+on perceptual questions. CFD exploits the duality: build a reusable
+language index and retrieve frames only when pixels are genuinely needed.
+
+\section{The CFD Framework}
+
+\textbf{Offline phase (run once at ingestion):}
+
+\textbf{1. Clip segmentation.} Video is divided into clips
+$\{c_1, \ldots, c_K\}$ at scene boundaries by a local shot-detection
+model (no API calls).
+
+\textbf{2. Clip captioning.} Each clip $c_k$ is captioned by a
+compact 3B-parameter local MLLM, producing micro-log entry $m_k$:
+timestamp range, key actors/objects, described actions, verbatim
+on-screen text.
+
+\textbf{3. Story synthesis.} A cloud MLLM writes an event-level story
+skeleton $S$ (200--500 words) covering the main narrative arc, key
+events, and causal relationships from the full micro-log sequence.
+
+\textbf{4. Index construction.} The dual-track index
+$\mathcal{I} = (S,\, \{m_k\},\, \{t_k\})$ is stored locally.
+
+\textbf{Online phase (per query):}
+
+\textbf{1. Story pass.} Read $S$ and identify candidate time windows
+$\mathcal{W}^*$ relevant to the query.
+
+\textbf{2. Micro-log pass.} Read micro-logs for $\mathcal{W}^*$ and
+attempt a text-only answer.
+
+\textbf{3. Visual-Need Router.} Classify remaining uncertainty as
+``perceptual'' or ``structural''. If structural: return text answer.
+If perceptual: request bounded keyframe retrieval.
+
+\textbf{4. Bounded retrieval.} Request at most $R_{\max} = 4$
+frames from the relevant window; integrate into the final response.
+
+\section{Technical Formulation}
+
+The full inference pipeline computes:
+\[
+  \hat{\mathcal{A}} = \mathrm{MLLM}\!\left(
+    q,\; S,\; \{m_k : t_k \in \mathcal{W}^*\},\;
+    \{f_j : j \in \mathcal{R}(q)\}
+  \right)
+\]
+where the frame retrieval set is:
+\[
+  \mathcal{R}(q) = \begin{cases}
+    \arg\max_{|J| \leq R_{\max}} \mathrm{Rel}(q, \{f_j\}_{j \in J})
+      & \phi(q, \mathcal{I}) = \mathrm{perceptual} \\
+    \emptyset & \text{otherwise}
+  \end{cases}
+\]
+and $\phi: (q, \mathcal{I}) \to \{\mathrm{perceptual}, \mathrm{structural}\}$
+is the Visual-Need Router.
+
+\textbf{Expected cost per query:}
+\[
+  \mathbb{E}[|\mathcal{R}(q)|] = R_{\max} \cdot p_{\mathrm{perc}}
+  = 4 \times 0.29 = 1.16 \text{ frames}
+\]
+vs.\ $\sim$64 for dense-frame baselines and $\sim$18--22 for prior
+agentic methods.
+
+\section{Visual-Need Router}
+
+The router $\phi$ is a 350M-parameter BERT-style encoder trained on
+2,400 (question, micro-log) pairs annotated for visual necessity. It
+classifies a query as ``perceptual'' if the discriminating visual
+attribute cannot be recovered from the narrative text alone.
+
+Router accuracy on 600 held-out pairs: 91.4\%. Inference latency:
+${<}1$\,ms on CPU --- negligible vs.\ frame retrieval latency
+(200--800\,ms round-trip).
+
+\section{Experimental Results}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Method & EgoS. & LVB. & VME-L \\
+\midrule
+GPT-4V-Long (dense)  & 72.4\% & 58.3\% & 64.1\% \\
+VideoAgent           & 68.9\% & 52.7\% & 59.8\% \\
+EgoVideoQA           & 70.3\% & 54.1\% & 61.2\% \\
+\textbf{CFD (ours)}  & \textbf{74.8\%} & \textbf{60.9\%} & \textbf{66.7\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{2pt}
+{\small EgoS. = EgoSchema; LVB. = LVBench; VME-L = Video-MME Long.}
+\vspace{4pt}
+
+CFD improves over the best prior method by 2.4--2.8 accuracy points
+while using 15--55$\times$ fewer frames per query.
+
+\section{Ablations and Interpretation}
+
+\textbf{Without story skeleton:} Accuracy drops 5.3 points on LVBench.
+Multi-scene temporal reasoning requires the sketch-level narrative.
+
+\textbf{Without micro-logs:} Accuracy drops 3.1 points on EgoSchema.
+Clip-level detail is needed for fine-grained activity understanding.
+
+\textbf{Without Visual-Need Router (always retrieve):} Accuracy
+improves by only 0.9 points but frame cost increases 3.4$\times$.
+The router's accuracy--efficiency tradeoff is strongly favorable.
+
+\textbf{Single-track index:} Either track alone scores 4--8 points
+below the dual-track system, confirming the two tracks are complementary.
+
+\section*{Reference}
+
+Weitong Cai et al.\ \textbf{Caption-once, Frames-on-Demand: Visual-Need
+Routing for Budget-Aware Agentic Long Video Understanding.}
+arXiv:2609.11899, EMNLP 2026.
+\url{https://arxiv.org/abs/2609.11899}
+
+\end{document}

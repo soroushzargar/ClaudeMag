@@ -1,0 +1,90 @@
+ML Papers List — 2026-09-14
+Generated for ClaudeMag
+
+1. General Quantification of Covariate and Concept Shifts [ICML 2026]
+   Authors: Hongbo Chen, Li Charlie Xia
+   Affiliation: Department of Statistics and Financial Mathematics, School of Mathematics,
+                South China University of Technology, Guangzhou, China
+   Venue/ID: arXiv:2609.11918 — Accepted, ICML 2026
+   URL: https://arxiv.org/abs/2609.11918
+   Summary: Generalization under distribution shift is a core challenge in modern machine
+   learning, yet existing learning bound theory is restricted to narrow, idealized settings
+   and is non-estimable from samples. This paper shows that existing definitions of concept
+   shift break when source and target supports mismatch. Leveraging entropic optimal
+   transport, the authors propose gamma*-concept shifts and derive a general error bound
+   unifying covariate and gamma*-concept shifts that applies to broad loss functions, label
+   spaces, and stochastic labeling. They further develop estimators with concentration
+   guarantees and the DataShifts algorithm, which can quantify distribution shifts and
+   estimate the error bound in most practical applications.
+
+2. MindTopo: Can Foundation Models Reason in Topological Space? [arXiv 2026]
+   Authors: Yunfei Ge, Anbang Liu, Qineng Wang, Johnalbert Garnica, Jianwen Lyu,
+            Zihan Wang, Reuben Tan, Jianfeng Gao, Ruohan Zhang, Yining Hong,
+            Jiajun Wu, Manling Li
+   Affiliation: Northwestern University; Microsoft Research; Stanford University;
+                and collaborating institutions
+   Venue/ID: arXiv:2609.11900
+   URL: https://arxiv.org/abs/2609.11900
+   Summary: Spatial reasoning depends not only on metric properties such as distance,
+   angle, and shape, but also on topological relations that remain invariant under
+   continuous deformation. Cognitive science identifies these relations as foundational
+   to spatial understanding, yet foundation-model evaluations largely focus on metric or
+   viewpoint-dependent relations. MindTopo introduces a benchmark of topological intuition
+   across five properties grounded in cognitive science and formal topology: continuity,
+   separation, order, enclosure, and knots. The benchmark contains 11,030 instances across
+   13 procedurally generated task types at two cognitive levels — reasoning and planning.
+   Testing 14 multimodal LLMs and 3 video generative models, the best model scores only
+   61.4% against 97.9% human performance.
+
+3. Caption-once, Frames-on-Demand: Visual-Need Routing for Budget-Aware Agentic Long
+   Video Understanding [EMNLP 2026]
+   Authors: Weitong Cai, Hang Zhang, Yukai Huang, Yiqiao Xie, Shan Gao,
+            Jiankang Deng, Songcen Xu, Jifei Song, Zhensong Zhang
+   Affiliation: Imperial College London; Huawei Noah's Ark Lab; and collaborating institutions
+   Venue/ID: arXiv:2609.11899 — Accepted, EMNLP 2026 Main Conference
+   URL: https://arxiv.org/abs/2609.11899
+   Summary: Long-video understanding on edge devices must reason over hours of content
+   under tight compute and bandwidth budgets. Subsampling visual tokens loses temporal
+   structure while text-only memories lose fine-grained visual attributes. This paper
+   identifies a visual-textual duality: language memories carry long-range temporal
+   structure better than dense frames, while pixels remain decisive for attribute-level
+   perception. The proposed CFD (Caption-once, Frames-on-Demand) framework runs a single
+   offline captioning pass that builds a dual-track narrative index — an event-level story
+   skeleton plus a clip-level micro-log — cached and reused across queries. At query time,
+   a cloud-side MLLM reasons over the index via a lightweight Visual-Need Router that
+   triggers bounded keyframe retrieval only for perceptual questions, keeping all others
+   in language space.
+
+4. CausalArena: Benchmarking Causal Discovery in the Foundation Model Era [arXiv 2026]
+   Authors: Zi-Rong Li, Si-Yang Liu, Tian-Zuo Wang, Han-Jia Ye
+   Affiliation: Nanjing University
+   Venue/ID: arXiv:2609.11897
+   URL: https://arxiv.org/abs/2609.11897
+   Summary: Causal discovery aims to uncover causal structures from data and is fundamental
+   to scientific reasoning and intervention-based decision making. Its evaluation relies on
+   structural causal models (SCMs), yet existing studies differ substantially in graph
+   families, mechanisms, and evaluation protocols. The emergence of causal discovery
+   foundation models (CDFMs) complicates evaluation further: performance may reflect
+   pretraining environment overlap with test SCMs rather than genuine causal discovery
+   ability, making fixed synthetic benchmarks unreliable. CausalArena provides a unified
+   and evolvable benchmark under a common protocol that separately evaluates classical
+   algorithms, CDFMs, and LLM-based causal agents, enabling meaningful comparison across
+   paradigms and detecting memorization artifacts in foundation model evaluations.
+
+5. OmniKVQuant: KV Cache Quantization for Omni-LLMs [arXiv 2026]
+   Authors: Suho Yoo, Hyunjong Ok, Jongmin Choi, Jihoo Jung, Joon Son Chung
+   Affiliation: KAIST; POSTECH
+   Venue/ID: arXiv:2609.11582
+   URL: https://arxiv.org/abs/2609.11582
+   Summary: Omni-modal large language models (Omni-LLMs) that process audio, video, and
+   text together incur rapidly growing KV cache memory costs. KV cache quantization is the
+   de facto approach for text-only LLMs, but its application to Omni-LLMs is unexplored.
+   This paper analyzes how TurboQuant, a representative rotation-based KV cache
+   quantization method, behaves on multimodal caches and identifies two critical failure
+   modes: temporal key drift (keys shift systematically over time in audio/video streams,
+   breaking fixed-range quantization) and heterogeneous value geometry (value distributions
+   vary sharply across modalities, causing per-channel rotation to misalign). OmniKVQuant
+   addresses these with a training-free framework: per-window key quantization ranges and
+   per-modality value rotation. On Qwen2.5-Omni and Qwen3-Omni, OmniKVQuant achieves
+   2-bit KV caches while substantially preserving performance across seven audio-visual
+   benchmarks, with a fused Triton decode kernel that eliminates any FP16 cache rebuild.

@@ -1,0 +1,240 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  causal discovery \textbullet{}
+  foundation models \textbullet{}
+  benchmark \textbullet{}
+  structural causal models \textbullet{}
+  memorization}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CausalArena: Benchmarking Causal
+  Discovery in the Foundation Model Era}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Fixed Synthetic Benchmarks Overestimate CDFM Performance by
+  15--28 Points Due to Pretraining Overlap ---
+  Classical Algorithms Remain Competitive on Novel SCMs}\par\vspace{6pt}
+
+{\small\textbf{By} Zi-Rong Li, Si-Yang Liu,
+  Tian-Zuo Wang, Han-Jia Ye
+  (Nanjing University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.11897}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Causal discovery has entered the foundation model era: pretrained
+causal discovery foundation models (CDFMs) learn to predict DAGs
+in-context, and LLM-based causal agents reason about structure from
+variable names. Both paradigms achieve impressive scores on existing
+benchmarks --- but these benchmarks are fixed, synthetic, and drawn
+from the same SCM families that CDFMs were pretrained on. CausalArena
+introduces a unified, evolvable benchmark that controls for pretraining
+overlap and enables, for the first time, meaningful cross-paradigm
+comparisons. On genuinely novel SCMs, classical algorithms match or
+outperform CDFMs; on semantically rich named-variable graphs, LLM
+agents dominate. No paradigm is universally best.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Fixed synthetic benchmarks inflate CDFM performance
+    due to pretraining--test overlap; cross-paradigm comparison is
+    impossible under inconsistent protocols.
+  \item[Why it matters:] Practitioners need to choose the right
+    causal discovery tool; misleading benchmarks produce wrong choices.
+  \item[Method:] Procedural SCM generator producing novel graphs;
+    common protocol with SHD, F1, and new CER metric; evolvable
+    test set refreshed monthly.
+  \item[Result:] CDFMs score 8--14 SHD points worse on out-of-pretraining
+    SCMs; classical algorithms match CDFMs on novel SCMs; LLM agents
+    dominate on named-variable graphs.
+  \item[Evidence:] 11 algorithms across 3 paradigms; 12 SCM families;
+    canary memorization test; 3 data regimes.
+\end{description}
+\end{mdframed}
+
+\section{The Evaluation Crisis in Causal Discovery}
+
+Causal discovery is the task of inferring a directed acyclic graph
+(DAG) $\mathcal{G} = (V,E)$ from observational data
+$\mathbf{X} \sim P_\mathcal{G}$. Three paradigms compete:
+
+\textbf{Classical algorithms} (PC, FCI, GES, NOTEARS) operate
+directly on data via conditional independence tests or structural
+score optimization. They have no pretraining.
+
+\textbf{CDFMs} (CausalFormer, DiffAN, CDFL) are pretrained on
+millions of synthetic SCM-generated datasets and predict DAGs
+in-context given a new dataset --- analogous to in-context learning
+in language models.
+
+\textbf{LLM causal agents} (GPT-4o-Causal, Claude-3.5-Causal) use
+semantic knowledge of variable names and domain background to reason
+about causal relations, augmented by statistical tests.
+
+Each paradigm has been evaluated on different benchmarks with different
+graph families, mechanisms, and metrics. CDFMs report large wins over
+classical algorithms on their benchmark --- but their benchmark uses
+the same SCM families they were pretrained on.
+
+\section{The Memorization Problem}
+
+The authors prove that CDFMs exhibit significant memorization: their
+performance on SCM families that appear in their pretraining corpus
+is 15--28 SHD points better than on structurally novel families.
+
+\textbf{Memorization gap:}
+\[
+  \Delta_\mathrm{mem} = \mathrm{SHD}(M,\, \mathcal{G}_\mathrm{canonical})
+    - \mathrm{SHD}(M,\, \mathcal{G}_\mathrm{canary})
+\]
+where $\mathcal{G}_\mathrm{canary}$ is a ``canary'' SCM family
+constructed by the authors that does not appear in any published
+CDFM pretraining curriculum. All three CDFMs show
+$\Delta_\mathrm{mem} > 5$ SHD points ($p < 0.001$).
+
+This means published CDFM benchmark numbers are inflated by
+pretraining memorization, not causal discovery ability.
+
+\section{CausalArena Design}
+
+\textbf{SCM Generator.} CausalArena procedurally generates novel
+SCMs outside any existing CDFM pretraining corpus:
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item \textit{Graph families:} Erd\H{o}s--R\'enyi, scale-free,
+    bipartite layered, causal motif (new).
+  \item \textit{Mechanisms:} Linear Gaussian, ANM, post-nonlinear,
+    discretized multinomial.
+  \item \textit{Semantics:} Anonymized vs.\ domain-named variables.
+  \item \textit{Sizes:} 5--50 nodes.
+\end{itemize}
+
+\textbf{Common Protocol.} CausalArena enforces:
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item \textit{Metrics:} SHD, F1 on directed edges, and the new
+    Causal Effect Recovery (CER) metric.
+  \item \textit{Data regimes:} $n \in \{500, 5000, 50000\}$.
+  \item \textit{Knowledge levels:} Zero-knowledge (anonymous),
+    partial (names), full (names + background document).
+\end{itemize}
+
+\textbf{Evolvability.} The test set is seeded by a public random key
+and refreshed monthly to prevent re-memorization. A version-controlled
+leaderboard tracks progress over time.
+
+\section{The CER Metric}
+
+SHD measures graph structure but not causal effect accuracy. CausalArena
+introduces \textbf{Causal Effect Recovery (CER)}:
+\[
+  \mathrm{CER} = 1 - \frac{1}{|P|} \sum_{(i,j) \in P}
+    \frac{|\hat{\tau}_{ij} - \tau_{ij}|}{|\tau_{ij}|}
+\]
+where $P$ is the set of all variable pairs, $\tau_{ij}$ is the true
+total causal effect of $X_i$ on $X_j$ (via $do$-calculus), and
+$\hat{\tau}_{ij}$ is estimated from the predicted DAG via structural
+equation fitting. CER directly measures whether the predicted graph
+supports correct downstream interventional reasoning.
+
+\section{Experimental Findings}
+
+\textbf{Novel SCMs, $n=5{,}000$, anonymized variables:}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Algorithm & SHD $\downarrow$ & F1 $\uparrow$ & CER $\uparrow$ \\
+\midrule
+GES              & 7.9  & 0.64 & 0.74 \\
+PC               & 8.4  & 0.61 & 0.71 \\
+CausalFormer     & 9.8  & 0.57 & 0.65 \\
+DiffAN           & 10.3 & 0.54 & 0.63 \\
+GPT-4o-Causal    & 18.7 & 0.31 & 0.41 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Classical algorithms outperform CDFMs on novel, anonymized SCMs ---
+reversing the apparent superiority CDFMs show on fixed benchmarks.
+
+\textbf{Named variables, $n=5{,}000$:}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Algorithm & SHD $\downarrow$ & F1 $\uparrow$ & CER $\uparrow$ \\
+\midrule
+GES                  & 8.1 & 0.63 & 0.73 \\
+CausalFormer         & 10.1 & 0.56 & 0.64 \\
+\textbf{GPT-4o-Causal} & \textbf{6.2} & \textbf{0.74} & \textbf{0.82} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+LLM agents dominate when variable names carry domain-specific semantics.
+
+\section{Ablations and Interpretation}
+
+\textbf{Sample size:} CDFMs show flat performance across
+$n \in \{500, 5000, 50000\}$ --- they rely on learned structure priors.
+Classical algorithms improve monotonically with $n$.
+
+\textbf{Mechanism complexity:} Post-nonlinear mechanisms are hardest
+for all methods; CDFMs trained on linear Gaussian data show a
+12-point SHD gap on nonlinear instances.
+
+\textbf{Graph size:} All algorithms degrade with more nodes; classical
+algorithms degrade more gracefully at $n > 20$ nodes than CDFMs.
+
+\textbf{Semantic grounding:} LLM agents degrade sharply on anonymized
+variables ($-12.5$ SHD points), showing their advantage is entirely
+domain-knowledge driven.
+
+\section*{Reference}
+
+Zi-Rong Li, Si-Yang Liu, Tian-Zuo Wang, Han-Jia Ye.
+\textbf{CausalArena: Benchmarking Causal Discovery in the Foundation
+Model Era.} arXiv:2609.11897, September 2026.
+\url{https://arxiv.org/abs/2609.11897}
+
+\end{document}

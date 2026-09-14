@@ -1,0 +1,238 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  KV cache quantization \textbullet{}
+  omni-modal LLM \textbullet{}
+  multimodal inference \textbullet{}
+  2-bit quantization \textbullet{}
+  efficient serving}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  OmniKVQuant: KV Cache Quantization
+  for Omni-LLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Temporal Key Drift and Heterogeneous Value Geometry Break
+  Existing 2-Bit Methods on Multimodal Caches ---
+  Per-Window and Per-Modality Fixes Achieve Near-Lossless Quality}\par\vspace{6pt}
+
+{\small\textbf{By} Suho Yoo, Hyunjong Ok, Jongmin Choi,
+  Jihoo Jung, Joon Son Chung
+  (KAIST; POSTECH)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.11582}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Omni-modal large language models --- models that jointly process audio,
+video, and text --- are increasingly used in real-time deployments.
+Their KV cache grows proportionally to all modalities simultaneously:
+a 7B omni-model processing 10 minutes of audio-video accumulates
+$\sim$30\,GB of FP16 KV cache. 2-bit quantization would reduce this
+to 4\,GB, enabling consumer deployment. But applying existing
+rotation-based quantization methods (designed for text-only LLMs)
+to multimodal caches cuts performance by 20 points or more.
+OmniKVQuant diagnoses why --- two failure modes specific to multimodal
+caches --- and fixes them with targeted, training-free interventions.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Rotation-based KV cache quantization fails on
+    omni-modal caches; no training-free solution exists.
+  \item[Why it matters:] Omni-LLMs for real-time audio-video require
+    radical memory reduction; 2-bit is the practical target.
+  \item[Method:] Per-window key quantization (for temporal key drift);
+    per-modality value rotation (for heterogeneous value geometry);
+    fused Triton decode kernel.
+  \item[Result:] 2-bit KV cache on Qwen2.5-Omni and Qwen3-Omni with
+    only 2.3-point degradation vs.\ 19--24 points for prior methods.
+  \item[Evidence:] 7 audio-visual benchmarks; ablations on window size,
+    modality rotation, and kernel overhead.
+\end{description}
+\end{mdframed}
+
+\section{KV Cache Memory in Omni-LLMs}
+
+The KV cache size scales as:
+\[
+  M_{\mathrm{KV}} = 2 \cdot n_l \cdot n_h \cdot L \cdot d_h \cdot \text{prec}
+\]
+For a 7B omni-model (32 layers, 32 heads, $d_h = 128$) processing
+10 minutes of audio-video at 25\,fps ($L \approx 15{,}000$), this is
+$\approx$30\,GB at FP16 --- far beyond consumer GPU memory.
+
+\textbf{Existing KV cache quantization} for text-only LLMs uses
+rotation-based methods: apply an orthogonal matrix $R$ to key/value
+vectors before quantization to eliminate outliers:
+\[
+  \tilde{\mathbf{V}} = R\mathbf{V}, \quad
+  \hat{\mathbf{V}} = Q_2(\tilde{\mathbf{V}})
+\]
+where $Q_2$ is 2-bit rounding. $R$ is calibrated once on text
+calibration data. On text-only LLMs, this reduces memory to
+$\approx$4\,GB with $<$1 point degradation. On omni-modal caches,
+applying the same $R$ causes 19--24 point degradation.
+
+\section{Failure Mode 1: Temporal Key Drift}
+
+In a text-only LLM, the statistical distribution of key vectors is
+roughly stationary over the sequence. In an omni-modal model
+processing audio:
+\[
+  \mathbf{K}_t = W_K \cdot \mathbf{x}_t^\text{audio}
+\]
+where $\mathbf{x}_t^\text{audio}$ is the audio embedding at time $t$.
+Audio embeddings have strong temporal autocorrelation --- consecutive
+frames are highly similar --- so the key distribution drifts
+systematically over time:
+\[
+  \|\mathbf{K}_t - \mathbf{K}_{t-1}\|_2 \ll \|\mathbf{K}_t\|_2
+\]
+A quantization range $[r_\mathrm{min}, r_\mathrm{max}]$ calibrated at
+initialization clips new key values that drift outside this range,
+producing growing quantization error over longer audio streams.
+
+\textbf{Fix: per-window key quantization.} Apply separate quantization
+ranges to each temporal window of size $w$:
+\[
+  r_\mathrm{min}^{(t)} = \min_{t' \in [t-w,t]} K_{j,t'}^\mathrm{min},
+  \quad
+  r_\mathrm{max}^{(t)} = \max_{t' \in [t-w,t]} K_{j,t'}^\mathrm{max}
+\]
+This adapts the quantization range locally, tracking drift without
+requiring global statistics. Window size $w = 64$ works well across
+all tested models.
+
+\section{Failure Mode 2: Heterogeneous Value Geometry}
+
+The optimal rotation $R^*_m$ for modality $m$ is the PCA rotation of
+the value covariance matrix $\Sigma_m$:
+\[
+  R^*_m \approx U_m^\top, \quad \Sigma_m = U_m \Lambda_m U_m^\top
+\]
+These matrices are modality-specific:
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item \textit{Text:} Near-isotropic; $\sim$30 directions with
+    $>$1\% variance.
+  \item \textit{Audio:} Concentrated; 90\% variance in 5 low-frequency
+    pitch/timbre directions.
+  \item \textit{Video:} High-rank anisotropic; large dynamic range in
+    spatial-frequency directions.
+\end{itemize}
+
+Applying $R^*_\text{text}$ to audio values leaves 85\% of variance
+concentrated in 5 directions, producing massive outliers in the
+rotated space that 2-bit quantization cannot faithfully represent.
+
+\textbf{Fix: per-modality value rotation.} Calibrate and store
+separate rotations $\{R^*_m\}$ per modality. At inference, detect
+the current modality from the token type embedding and apply the
+appropriate rotation:
+\[
+  \tilde{\mathbf{V}} = R^*_m \mathbf{V}, \quad
+  \hat{\mathbf{V}} = Q_2(\tilde{\mathbf{V}})
+\]
+
+\section{Fused Triton Decode Kernel}
+
+Standard 2-bit implementations dequantize the cache to FP16 before
+attention, reconstructing the full dense cache and negating half the
+memory savings. OmniKVQuant provides a fused Triton kernel that
+dequantizes on the fly during attention computation, reading 2-bit
+integers per block and expanding to FP16 without storing the
+FP16 cache. Memory footprint remains at 2 bits throughout.
+
+\textbf{2-bit symmetric quantization:}
+\[
+  \hat{v}_j = s \cdot \mathrm{round}\!\left(\frac{v_j}{s}\right),
+  \quad \mathrm{round}(\cdot) \in \{-2,-1,0,1\},
+  \quad s = \frac{\max_j |v_j|}{2}
+\]
+
+\section{Experimental Results}
+
+Tested on Qwen2.5-Omni-7B and Qwen3-Omni-7B across 7 audio-visual
+benchmarks (LibriSpeech, MMAU, Video-MME, ActivityNet-QA,
+MSVD-QA, OmniBench, Evo-OMNIBench):
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Method & Bits & Avg Score & $\Delta$ \\
+\midrule
+Full FP16           & 16 & 72.4 & --- \\
+TurboQuant          & 2  & 48.3 & $-$24.1 \\
+KIVI                & 2  & 52.7 & $-$19.7 \\
+\textbf{OmniKVQuant} & \textbf{2} & \textbf{70.1} & $-$2.3 \\
+OmniKVQuant         & 4  & 72.0 & $-$0.4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+OmniKVQuant reduces 2-bit degradation from 19--24 points (prior methods)
+to 2.3 points, and achieves near-lossless 4-bit quantization (0.4 points).
+
+\section{Ablations and Interpretation}
+
+\textbf{Without per-window key quantization:} Degradation grows from
+2.3 to 11.4 points; confirms temporal key drift is the dominant
+failure mode.
+
+\textbf{Without per-modality value rotation:} Degradation grows from
+2.3 to 8.9 points; audio benchmarks are disproportionately
+affected ($-$18.3 on MMAU).
+
+\textbf{Kernel overhead:} The fused Triton kernel adds 4\% latency
+vs.\ FP16 attention while delivering 7.8$\times$ memory reduction
+for 2-bit vs.\ FP16 caches.
+
+\textbf{Window size:} $w = 64$ works well; smaller $w$ slightly
+improves accuracy at the cost of more quantization parameter updates.
+
+\section*{Reference}
+
+Suho Yoo, Hyunjong Ok, Jongmin Choi, Jihoo Jung, Joon Son Chung.
+\textbf{OmniKVQuant: KV Cache Quantization for Omni-LLMs.}
+arXiv:2609.11582, September 2026.
+\url{https://arxiv.org/abs/2609.11582}
+
+\end{document}
