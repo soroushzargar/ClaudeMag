@@ -1,0 +1,90 @@
+ML Papers List — 2026-09-16
+Generated for ClaudeMag
+
+1. SAS: Simple Attention Sparsification via End-to-End Optimization of Context Ranking [arXiv 2026]
+   Authors: Zhiwei Li, Lei Zhu, Hao Gu, Xiang Hu, Yan Wang, Haitao Mi, Sirui Han,
+            Leo Liang, Zhijiang Guo
+   Affiliation: Tencent HY LLM Frontier; Hong Kong University of Science and Technology
+   Venue/ID: arXiv:2609.13141
+   URL: https://arxiv.org/abs/2609.13141
+   Summary: Efficient inference for long-context Transformers requires reducing attention
+   from quadratic to sub-linear by retaining only a sparse set of relevant KV entries.
+   Existing trainable sparse attention methods use a lightweight context selector followed
+   by a hard Top-K operation to select keys, but the non-differentiable Top-K blocks
+   gradients and prevents end-to-end optimization with the language modeling objective.
+   SAS (Simple Attention Sparsification) inserts continuous log-space gates into the
+   attention softmax, transforming sparsification into a smooth optimization problem.
+   A gate g_i = sigma(s_i) is injected as log g_i into the attention logits before
+   softmax so that gradient flows from the language modeling loss back through the
+   attention computation to the selector. Normalized softmax gates calibrate historical
+   context against a mandatory current block. SAS outperforms trainable baselines on
+   reasoning, long-context understanding, and agentic tasks under tight sparsity budgets.
+
+2. Temporal Recurrence Favors Fewer Layers [arXiv 2026]
+   Authors: Ivan Anokhin, Johan Obando-Ceron, Irina Rish, Sebastian Risi
+   Affiliation: Mila / Université de Montréal; University of Copenhagen
+   Venue/ID: arXiv:2609.12531
+   URL: https://arxiv.org/abs/2609.12531
+   Summary: Deep learning lore holds that depth is critical for model expressivity, yet
+   this intuition was developed for non-recurrent models that cannot accumulate
+   computation across time steps. This paper studies how compute should be allocated
+   across within-step depth, expert width, and the number of parallel experts for
+   recurrent vs. non-recurrent models. Evaluated on Sokoban planning (a hard sequential
+   reasoning task) and FineWeb autoregressive language modeling, the study finds a sharp
+   difference: recurrent models peak at 2-4 layers, while non-recurrent models continue
+   improving up to 8-32 layers. Under the same compute budget, recurrent architectures
+   achieve their best performance with fewer, wider layers, suggesting that temporal
+   recurrence and within-step depth provide partially overlapping computational benefits.
+
+3. Rethinking Heterogeneous System Disaggregation for Subquadratic Attention [arXiv 2026]
+   Authors: Arya Tschand, Yaosheng Fu, Vikram Sharma Mailthody, Nicolai Oswald,
+            Po-An Tsai, Ritchie Zhao, Oreste Villa, Vijay Janapa Reddi, Karu Sankaralingam
+   Affiliation: Harvard University; NVIDIA; University of Wisconsin-Madison
+   Venue/ID: arXiv:2609.13134
+   URL: https://arxiv.org/abs/2609.13134
+   Summary: Frontier LLMs increasingly replace full quadratic attention with subquadratic
+   variants (sparse, linear, sliding-window) to reduce KV memory. Current heterogeneous
+   hardware disaggregation strategies split workloads by operator type — prefill on one
+   device, decode on another — but do not account for the distinct arithmetic intensity
+   profile of subquadratic attention layers. This paper introduces SQD (SubQuadratic
+   Disaggregation), a fine-grained scheme that disaggregates within the decode step
+   itself. For sparse attention, SQD separates top-k key selection (full KV traversal,
+   memory-bound) from top-k attention plus FFN (static memory, compute-bound). For
+   linear and sliding-window attention, SQD separates dense attention layers from
+   subquadratic layers and FFN. On an 8xB200 heterogeneous system, SQD achieves 53%
+   improvement in tokens per joule on GLM 5.2, 31% on Nemotron 3 Ultra, and 56% on
+   Gemma 4 31B compared with a GPU-only baseline.
+
+4. UniMo: Unifying Human and Animal Motion Generation [SIGGRAPH Asia 2026]
+   Authors: Zeyu Zhang, Zhiyuan Zhang, Siheng Wang, Yiran Wang, Danning Li,
+            Ian Reid, Richard Hartley
+   Affiliation: University of Adelaide; Australian National University
+   Venue/ID: arXiv:2609.12342 — Accepted, SIGGRAPH Asia 2026
+   URL: https://arxiv.org/abs/2609.12342
+   Summary: Text-driven 3D motion generation for humans has matured rapidly, but animals
+   remain largely out of scope because their skeletal topologies differ radically across
+   species, preventing the standardization that human motion models rely on. UniMo
+   addresses this by converting parametric skeletons to unparametric point cloud
+   representations, removing dependence on topology and allowing a single model to handle
+   humans and arbitrary animal species. Dynamic sampling allocates more point budget to
+   actively moving joints. The paper also contributes UniML3D, a large-scale dataset of
+   145,907 motion sequences and 433,388 text captions spanning human and animal
+   categories — 102 times larger than the largest existing animal motion dataset. UniMo
+   achieves state of the art on HumanML3D, KIT-ML, and AnimalML3D benchmarks.
+
+5. Attention Quantization for Tabular Foundation Models [arXiv 2026]
+   Authors: Jonas M. Kübler, Benjamin Jäger, Klemens Flöge, Noah Hollmann, Frank Hutter
+   Affiliation: University of Freiburg; ELLIS Institute Tübingen
+   Venue/ID: arXiv:2609.13031
+   URL: https://arxiv.org/abs/2609.13031
+   Summary: Tabular foundation models such as TabPFN and TabICL operate via in-context
+   learning, encoding entire training datasets as KV pairs in a single forward pass. Their
+   KV matrices scale quadratically with the number of training rows and can reach millions
+   of entries, dwarfing the KV caches of generative LLMs. Standard FP8 attention
+   quantization methods designed for LLMs fail on tabular FMs because misaligned
+   quantization error between test and training rows degrades prediction accuracy. This
+   paper applies FP8 (e4m3fn format) quantization with dynamic scale calibration to the
+   attention computation, introduces an alignment procedure to equalize quantization error
+   across test and training rows, and provides a custom Triton kernel that achieves 1.7x
+   speedup over 16-bit baselines. No accuracy loss is observed on TabPFN-v3 and TabICLv2
+   across TabArena and BeyondArena benchmarks.
