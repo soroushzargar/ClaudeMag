@@ -1,0 +1,233 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  heterogeneous hardware \textbullet{}
+  subquadratic attention \textbullet{}
+  disaggregation \textbullet{}
+  energy efficiency \textbullet{}
+  LLM serving}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Rethinking Heterogeneous System
+  Disaggregation for Subquadratic Attention}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Prefill-Decode Disaggregation Misses Within-Decode Arithmetic
+  Intensity Heterogeneity --- Fine-Grained SQD Delivers
+  31--56\% Tokens-per-Joule Gains}\par\vspace{6pt}
+
+{\small\textbf{By} Arya Tschand, Yaosheng Fu, Vikram Sharma Mailthody,
+  Nicolai Oswald, Po-An Tsai, Ritchie Zhao, Oreste Villa,
+  Vijay Janapa Reddi, Karu Sankaralingam
+  (Harvard; NVIDIA; UW-Madison)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.13134}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Frontier LLMs increasingly deploy subquadratic attention --- sparse,
+linear, and sliding-window variants --- to reduce the $O(L)$ KV memory
+footprint of long contexts. Heterogeneous hardware systems already
+disaggregate by phase: prefill (compute-bound) on one device, decode
+(memory-bound) on another. But this coarse split ignores a critical
+observation: within a single decode step, different operators have
+sharply different arithmetic intensity profiles. SQD (SubQuadratic
+Disaggregation) exploits this by splitting the decode step itself,
+routing memory-bound and compute-bound sub-phases to the hardware
+optimized for each.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Prefill-decode disaggregation does not account for
+    within-decode operator heterogeneity in models with subquadratic
+    attention.
+  \item[Why it matters:] 31--56\% energy efficiency gain is
+    left on the table on frontier models (GLM 5.2, Nemotron 3 Ultra,
+    Gemma 4 31B).
+  \item[Method:] SQD splits decode by sub-phase: top-$k$ selection
+    (memory device) vs.\ top-$k$ attention + FFN (compute device)
+    for sparse; dense layers vs.\ subquadratic + FFN for linear models.
+  \item[Result:] 53\%, 31\%, 56\% tokens/J improvement on GLM 5.2,
+    Nemotron 3 Ultra, Gemma 4 31B on an 8$\times$B200 system.
+  \item[Evidence:] Energy and throughput measured on production
+    model weights; ablations by disaggregation level.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Full attention has arithmetic intensity $I = \text{FLOPs}/\text{bytes}
+\approx d/2$ (roughly compute-bound for large $d$). Decode batch size 1
+is memory-bound ($I \approx 1$) regardless of attention type. The
+roofline model predicts runtime:
+\[
+  T(O) = \max\!\left(\frac{F}{C},\,\frac{B}{\beta}\right)
+\]
+where $C$ (FLOP/s) and $\beta$ (bytes/s) are device peaks. Routing
+to the device where this bound is tightest minimizes runtime and
+energy per token.
+
+\section{Why Existing Approaches Fall Short}
+
+Current disaggregation schemes split at the phase boundary: prefill
+(high compute intensity, batch $= L$) goes to GPU; decode (low
+intensity, batch $= 1$--few) goes to memory-optimized accelerator.
+This is appropriate for dense attention. For subquadratic attention,
+the decode step itself contains operators with radically different
+intensities:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Operator & $I$ (FLOP/byte) & Bound \\
+\midrule
+Top-$k$ KV selection   & $\approx 1$     & Memory \\
+Top-$k$ attn.\ + FFN   & $\approx 10^3$  & Compute \\
+Dense attn.\ layer     & $\approx 10$    & Memory \\
+Subquad.\ layer + FFN  & $\approx 2$     & Memory \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Routing the entire decode step to a memory-optimized device wastes
+compute capacity on operators that are actually compute-bound.
+
+\section{Core Mechanism: SQD}
+
+\textbf{SQD for sparse attention.} Each decode step is split into two
+sub-phases:
+\begin{enumerate}[itemsep=2pt,topsep=2pt]
+  \item \textit{Selection:} Traverse all $L$ keys to compute relevance
+    scores and select top-$k$ entries. Cost: $O(L\cdot d_\text{head})$
+    reads, $O(L)$ FLOPs. $I \approx 1$~FLOP/byte $\to$ memory device.
+  \item \textit{Attention + FFN:} Attend to the selected $k$ entries
+    and run the FFN. With $k \ll L$, KV footprint is small and static;
+    $I \approx 10^3$~FLOP/byte $\to$ compute device.
+\end{enumerate}
+
+\textbf{SQD for linear/sliding-window attention.} Split by layer type:
+\begin{enumerate}[itemsep=2pt,topsep=2pt]
+  \item \textit{Dense attention layers:} Memory-bound at decode
+    batch 1 $\to$ memory device.
+  \item \textit{Subquadratic layers + FFN:} Linear attention state
+    update is compute-bound $\to$ compute device.
+\end{enumerate}
+
+\textbf{Communication cost:} The two sub-phases exchange activation
+tensors of size $O(d)$ per token per layer --- small compared with
+$O(L\cdot d)$ KV data transfer.
+
+\section{Technical Formulation}
+
+The \textbf{ridge point} of a device is:
+\[
+  I^* = \frac{C}{\beta}
+\]
+On B200: $C = 4.5\times 10^{15}$~FP8~FLOP/s,
+$\beta = 8\times 10^{12}$~bytes/s, so $I^* \approx 562$~FLOP/byte.
+
+\textbf{Routing criterion:} Assign operator $O$ to the memory-optimized
+device if $I(O) < I^*$, otherwise to the compute-optimized GPU.
+
+\textbf{Energy per token:} Routing each operator to its optimal device
+reduces average power draw per operation; the total energy per token is:
+\[
+  E = \sum_O \frac{F_O}{P_O} + \frac{B_O}{P_O^{\mathrm{mem}}}
+\]
+where $P_O$ is the TDP of the assigned device.
+
+\section{Experimental Results}
+
+Evaluated on an 8$\times$B200 heterogeneous system (4 compute-optimized
++ 4 memory-bandwidth-optimized) with production model weights:
+
+\begin{center}
+\begin{tabular}{llc}
+\toprule
+Model & Attn.\ Type & Tokens/J Gain \\
+\midrule
+GLM 5.2         & Sparse      & +53\% \\
+Nemotron 3 Ultra & Linear     & +31\% \\
+Gemma 4 31B     & Sliding-win & +56\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Throughput gains (tokens/s, batch $=$ 8, seq $=$ 32k):
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & GPU-only & SQD & Speedup \\
+\midrule
+GLM 5.2     & 1,840 & 2,710 & 1.47$\times$ \\
+Gemma 4 31B & 2,190 & 3,080 & 1.41$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Ablations and Interpretation}
+
+\textbf{Selection-only disaggregation:} Routing only the top-$k$
+selection phase accounts for 68\% of the total energy gain for sparse
+attention models.
+
+\textbf{Without within-decode layer-type split:} Routing by
+prefill/decode phase only reduces energy gain from 53\% to 29\% for
+GLM 5.2, quantifying the value of intra-decode disaggregation.
+
+\textbf{Communication overhead:} Cross-device activation transfer
+adds 7--12\% latency but is offset by 40--55\% reduction in
+time-per-token on memory-bound operators.
+
+\textbf{Dense models:} SQD provides no benefit when all attention
+layers are dense --- standard prefill-decode disaggregation is
+already optimal in that case.
+
+\section*{Reference}
+
+Arya Tschand et al.\ \textbf{Rethinking Heterogeneous System
+Disaggregation for Subquadratic Attention.}
+arXiv:2609.13134, September 2026.
+\url{https://arxiv.org/abs/2609.13134}
+
+\end{document}

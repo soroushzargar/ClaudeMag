@@ -1,0 +1,227 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  motion generation \textbullet{}
+  point cloud representation \textbullet{}
+  text-to-motion \textbullet{}
+  animal motion \textbullet{}
+  diffusion models}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  UniMo: Unifying Human and Animal
+  Motion Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Parametric Skeletons Block Cross-Species Unification ---
+  Topology-Agnostic Point Clouds and a Dataset 102$\times$ Larger
+  Than Any Prior Animal Corpus Enable a Single Model for All
+  Species}\par\vspace{6pt}
+
+{\small\textbf{By} Zeyu Zhang, Zhiyuan Zhang, Siheng Wang, Yiran Wang,
+  Danning Li, Ian Reid, Richard Hartley
+  (University of Adelaide; Australian National University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.12342 --- SIGGRAPH Asia 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Text-driven 3D motion generation has matured rapidly for humans, with
+standardized SMPL skeletons enabling a community of comparable models.
+Animals remain largely excluded: a dog has 17 joints, a horse 30, a
+bird 15 --- their skeletal topologies are incompatible with each other
+and with SMPL, forcing per-species model training. UniMo eliminates
+this barrier by converting any skeleton to a fixed-size unparametric
+point cloud, training a single diffusion model across species, and
+releasing UniML3D, a dataset that is 102 times larger than any
+existing animal motion corpus.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Diverse animal skeletal topologies prevent training
+    a single motion generation model across species.
+  \item[Why it matters:] Per-species models are expensive; animal
+    motion datasets are tiny ($<$1,500 sequences); SIGGRAPH
+    applications demand diverse creatures.
+  \item[Method:] Convert parametric skeletons to $N=256$ point clouds
+    with dynamic sampling; train single diffusion model; IK
+    reconstruction per species at test time.
+  \item[Dataset:] UniML3D: 145,907 sequences + 433,388 captions
+    across human and animal categories.
+  \item[Result:] State of the art on HumanML3D, KIT-ML, and
+    AnimalML3D simultaneously in one model.
+\end{description}
+\end{mdframed}
+
+\section{Why Existing Approaches Fall Short}
+
+Motion generation models represent poses as joint rotation/position
+vectors in species-specific fixed order:
+\[
+  \mathbf{p}_\text{human} \in \mathbb{R}^{22 \times 3}, \quad
+  \mathbf{p}_\text{dog} \in \mathbb{R}^{17 \times 3}, \quad
+  \mathbf{p}_\text{horse} \in \mathbb{R}^{30 \times 3}
+\]
+Dimension and joint semantics differ across species; concatenating
+these into a single input space is undefined without topology alignment
+that does not exist. The result: every new species requires a separate
+model trained from scratch.
+
+\section{Core Mechanism: Point Cloud Representation}
+
+UniMo samples $N = 256$ points from the bones of any skeleton,
+regardless of species topology. For each bone $b$ connecting joints
+$j_a$ and $j_b$, $n_b$ equally-spaced points are placed along the
+bone segment. The pose at time $t$ is:
+\[
+  \mathbf{P}_t \in \mathbb{R}^{N \times 3}, \quad N = \sum_b n_b
+\]
+
+This representation is topology-agnostic (always 256 points),
+continuous (captures limb geometry, not just endpoints), and
+differentiable (linear interpolation along bones).
+
+\textbf{Dynamic sampling.} Bone activity at time $t$:
+\[
+  v_{b,t} = \|\Delta\mathbf{p}_{j_a,t}\|_2 + \|\Delta\mathbf{p}_{j_b,t}\|_2
+\]
+Mean activity: $\bar{v}_b = \frac{1}{T}\sum_t v_{b,t}$.
+Point allocation:
+\[
+  n_b = \max\!\left(1,\;\left\lfloor N\cdot
+    \frac{\bar{v}_b}{\sum_{b'}\bar{v}_{b'}}\right\rfloor\right)
+\]
+This concentrates the $N$-point budget on actively moving bones,
+sharpening the representation of the most informative parts of motion.
+
+\section{Technical Formulation}
+
+\textbf{Diffusion forward process:}
+\[
+  \mathbf{P}_t^{(\tau)} = \sqrt{\bar{\alpha}_\tau}\,\mathbf{P}_t^{(0)}
+    + \sqrt{1-\bar{\alpha}_\tau}\,\boldsymbol{\epsilon},
+    \quad\boldsymbol{\epsilon}\sim\mathcal{N}(0,I)
+\]
+
+\textbf{Denoising objective:}
+\[
+  \mathcal{L} = \mathbb{E}_{\tau,\boldsymbol{\epsilon}}\!\left[
+    \left\|\boldsymbol{\epsilon}
+      - \boldsymbol{\epsilon}_\theta\!\left(\mathbf{P}^{(\tau)},
+        \tau, \mathbf{c}\right)
+    \right\|^2\right]
+\]
+where $\mathbf{c}$ is a CLIP text embedding and
+$\boldsymbol{\epsilon}_\theta$ is a Transformer denoiser with
+cross-attention to $\mathbf{c}$.
+
+\textbf{Inverse kinematics reconstruction:} Given predicted point cloud
+$\hat{\mathbf{P}}_t$, recover joint rotations by minimizing:
+\[
+  \hat{\boldsymbol{\theta}}_t = \arg\min_{\boldsymbol{\theta}}
+    \sum_b\!\left\|\mathrm{FK}(\boldsymbol{\theta})_b
+      - \hat{\mathbf{P}}_{t,b}\right\|^2
+    + \lambda\sum_b\!\left(\|\Delta\mathrm{FK}_b\|_2 - \ell_b\right)^2
+\]
+where $\mathrm{FK}$ is forward kinematics and $\ell_b$ is rest-pose
+bone length.
+
+\section{UniML3D Dataset}
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Category & Sequences & Captions \\
+\midrule
+Human             & 128,319 & 384,957 \\
+Animal (quadruped) & 14,231 & 42,693 \\
+Animal (avian)     & 3,357  & 5,738  \\
+\midrule
+\textbf{Total}    & \textbf{145,907} & \textbf{433,388} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The largest prior animal dataset contains $\sim$1,432 sequences;
+UniML3D is 102$\times$ larger.
+
+\section{Experimental Results}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Method & HumanML3D & KIT-ML & AnimalML3D \\
+       & FID$\downarrow$ & FID$\downarrow$ & FID$\downarrow$ \\
+\midrule
+MDM            & 0.544 & 0.497 & --- \\
+MotionDiffuse  & 0.630 & 1.954 & --- \\
+MLD            & 0.473 & 0.404 & --- \\
+Species-specific & ---  & ---  & 2.14 \\
+\textbf{UniMo} & \textbf{0.412} & \textbf{0.381} & \textbf{1.07} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+UniMo improves over MLD on both human benchmarks while being the
+first unified model to achieve competitive quality on animals.
+
+\section{Ablations and Interpretation}
+
+\textbf{Without dynamic sampling (static uniform):} AnimalML3D FID
+degrades by 0.11; most degradation on fast-moving quadruped sequences.
+
+\textbf{Without joint training on animals:} AnimalML3D FID $= 4.32$
+(near random), confirming human-only training does not generalize.
+
+\textbf{Point count $N$:} Plateaus at $N=256$; $N=128$ degrades FID
+by 0.09 on animals; $N=512$ shows no improvement.
+
+\textbf{IK reconstruction:} Mean bone-length error of 1.2~mm
+($<$0.1\% of body height), confirming the IK solver accurately
+recovers valid joint configurations from predicted point clouds.
+
+\section*{Reference}
+
+Zeyu Zhang et al.\ \textbf{UniMo: Unifying Human and Animal Motion
+Generation.} arXiv:2609.12342, September 2026. SIGGRAPH Asia 2026.
+\url{https://arxiv.org/abs/2609.12342}
+
+\end{document}

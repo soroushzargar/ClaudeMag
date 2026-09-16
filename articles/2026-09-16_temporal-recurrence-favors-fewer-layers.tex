@@ -1,0 +1,201 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  recurrent neural networks \textbullet{}
+  depth vs.\ width \textbullet{}
+  compute allocation \textbullet{}
+  sequence modeling \textbullet{}
+  neural scaling}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Temporal Recurrence Favors
+  Fewer Layers}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Recurrent Models Peak at 2--4 Layers While Non-Recurrent Models
+  Keep Improving Up to 32 --- Temporal Depth and Within-Step
+  Depth Provide Overlapping Computational Benefits}\par\vspace{6pt}
+
+{\small\textbf{By} Ivan Anokhin, Johan Obando-Ceron, Irina Rish,
+  Sebastian Risi
+  (Mila / Universit\'e de Montr\'eal; University of Copenhagen)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.12531}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Deep learning lore holds that depth is essential for model expressivity.
+This intuition was developed for non-recurrent models that process all
+sequence positions in parallel and must instantiate all computation
+simultaneously. Recurrent architectures add a qualitatively different
+computation axis: temporal recurrence, which accumulates processing
+across sequence positions step by step. This paper asks: when temporal
+recurrence is available, how much within-step depth is still needed?
+The answer is surprisingly little --- and the difference has direct
+implications for how recurrent models should be scaled.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] How should compute be allocated across within-step
+    depth, expert width, and parallel experts for recurrent vs.\
+    non-recurrent models?
+  \item[Why it matters:] Miscalibrated depth wastes compute that
+    could go to width; the right allocation changes at optimal
+    recurrent model design.
+  \item[Finding:] Recurrent models peak at 2--4 layers; non-recurrent
+    models keep improving through 8--32 layers.
+  \item[Explanation:] Temporal recurrence and within-step depth both
+    allow later computation to condition on earlier outputs ---
+    recurrence makes depth partly redundant.
+  \item[Evidence:] Sokoban planning and FineWeb language modeling;
+    matched FLOPs across depth, width, expert-count axes.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+A non-recurrent Transformer of depth $D'$ processes each token through
+$D'$ layers applied once in parallel. A recurrent model of within-step
+depth $D$ applied over $T$ sequence positions uses $D\cdot T$ total
+layer applications. Under matched FLOPs, the question is: for a fixed
+$D\cdot T$ budget, should $D$ be large (deep per-step, fewer steps of
+computation) or small (shallow per-step, many recurrent steps)?
+
+The answer the authors find empirically: small $D$ with compensating
+width is consistently better for recurrent models, while large $D$ is
+better for non-recurrent models. This suggests that within-step depth
+and temporal depth are not fully orthogonal dimensions --- they provide
+partly overlapping computational benefits.
+
+\section{Technical Formulation}
+
+Let $\mathbf{h}_t^{(0)} = \mathbf{x}_t$ be the input at position $t$.
+The recurrent forward pass applies $D$ within-step layers:
+\[
+  \mathbf{h}_t^{(d)} = f_d\!\left(\mathbf{h}_t^{(d-1)},\,
+  \mathbf{h}_{t-1}^{(D)}\right), \quad d = 1,\ldots,D
+\]
+where $\mathbf{h}_{t-1}^{(D)}$ is the hidden state from the previous
+position, and weights are shared across positions (weight tying across
+time). For $E$ parallel experts:
+\[
+  \mathbf{h}_t^{(d)} = \sum_{e=1}^E \pi_e(\mathbf{h}_t^{(d-1)})
+  \cdot f_d^{(e)}\!\left(\mathbf{h}_t^{(d-1)}\right)
+\]
+\textbf{Compute matching:} When depth is reduced from $D$ to $D/k$,
+the hidden dimension is increased by $\sqrt{k}$ to hold parameters
+constant (quadratic scaling of attention/MLP with hidden dim).
+
+\textbf{Arithmetic intensity:} Total layer applications per sequence
+equal $D\cdot T$ (recurrent) vs.\ $D'$ (non-recurrent, applied once
+to all positions in parallel). FLOPs are matched across configurations.
+
+\section{What the Results Show}
+
+\subsection*{Sokoban Planning (Success Rate, \%)}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Depth $D$ & Recurrent & Non-Recurrent \\
+\midrule
+1  & 44.2 & 31.8 \\
+2  & 67.9 & 49.3 \\
+4  & \textbf{71.3} & 58.7 \\
+8  & 70.1 & 66.4 \\
+16 & 68.4 & \textbf{70.8} \\
+32 & 66.7 & 72.1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Recurrent models peak at $D=4$; non-recurrent models keep improving
+through $D=32$. At the recurrent optimum ($D=4$), the recurrent model
+outperforms the non-recurrent model by 12.6 points at the same FLOPs.
+
+\subsection*{FineWeb Language Modeling (Validation Perplexity, $\downarrow$)}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Depth $D$ & Recurrent & Non-Recurrent \\
+\midrule
+2  & 18.7 & 22.4 \\
+4  & \textbf{17.3} & 20.1 \\
+8  & 17.8 & 18.6 \\
+16 & 18.4 & \textbf{17.9} \\
+32 & 19.1 & 17.2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Consistent finding: recurrent optimal at $D=4$; non-recurrent at
+$D=16$--$32$.
+
+\section{Ablations and Interpretation}
+
+\textbf{Width compensation:} Reducing recurrent depth from 8 to 2
+layers while increasing hidden dimension to match FLOPs recovers 97\%
+of 8-layer recurrent performance on both tasks. Width is a suitable
+substitute for depth in recurrent networks.
+
+\textbf{Expert count:} Increasing parallel experts from 1 to 4 (same
+compute via width reduction) provides consistent modest gains for both
+architectures, orthogonal to the depth effect.
+
+\textbf{Shared vs.\ unshared weights:} Unshared weights slightly
+improve non-recurrent baselines but do not change the qualitative
+finding for recurrent models.
+
+\textbf{Sequence length effect:} Longer sequences amplify the
+advantage of shallow recurrent models over deep ones, consistent with
+the interpretation that temporal depth substitutes for within-step
+depth; more recurrent steps make additional layers more redundant.
+
+\section*{Reference}
+
+Ivan Anokhin, Johan Obando-Ceron, Irina Rish, Sebastian Risi.
+\textbf{Temporal Recurrence Favors Fewer Layers.}
+arXiv:2609.12531, September 2026.
+\url{https://arxiv.org/abs/2609.12531}
+
+\end{document}
