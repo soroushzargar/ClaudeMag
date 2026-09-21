@@ -1,0 +1,249 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agricultural AI \textbullet{}
+  pixel-level grounding \textbullet{}
+  multimodal large language model \textbullet{}
+  plant disease recognition}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  AgriScope}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Pixel-Grounded Multimodal Model and 11-Million-Sample Dataset
+  Bring Precision to Agricultural Image Understanding}\par\vspace{6pt}
+
+{\small\textbf{By} Abderrahmene Boudiaf, Mohamad Alanssari, Irfan Hussain
+  \& Sajid Javed (Khalifa University of Science and Technology)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.20325 \textbullet{} ICML 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Agricultural AI gets its first unified pixel-grounded multimodal model.
+\textit{AgriScope} jointly supports image-level classification, region-level
+referring segmentation, and pixel-level grounded caption generation within
+a single framework trained on AgriGround---a new 500K-image,
+11-million-sample dataset---lifting grounded caption CIDEr from 107.9 to
+118.6 and mIoU from 55.0 to 59.4 over the best prior baseline on
+the accompanying benchmark.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Agricultural image understanding requires fine-grained
+    pixel-level localisation (disease lesions, pest bodies, growth
+    stage features) that existing text-only MLLMs cannot provide.
+  \item[Why it matters:] Actionable recommendations for precision
+    agriculture (targeted spraying, selective harvesting) require knowing
+    \emph{where} in the image the problem is, not just \emph{what} it is.
+  \item[Method:] Biological-semantic encoder pre-trained on botanical
+    taxonomies; multi-scale dense spatial features (FPN over BSE and
+    DINOv2); mask transformer pixel decoder; AgriGround instruction-
+    tuning dataset with 500K images and 11M samples.
+  \item[Result:] GCG CIDEr 118.6 (+10.7), GCG mIoU 59.4 (+4.4),
+    referring seg F1 73.2 (+5.4) over PixelLM baseline.
+  \item[Evidence:] ICML 2026 evaluation across 6 agricultural task types;
+    ablations over encoder, decoder, and dataset scale.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Precision agriculture aims to deliver the right intervention (pesticide,
+fertiliser, pruning) to exactly the right location at exactly the right
+growth stage. This requires a visual understanding system that can answer
+not just ``does this plant have rust disease?'' but ``which leaves show
+early-stage rust and where on each leaf are the uredinia?''
+
+Multimodal large language models have advanced rapidly but their outputs
+are purely textual: they name diseases and pests but do not localise them
+in pixel coordinates. AgriScope closes this gap with a unified model that
+takes an agricultural image (or image sequence) plus a natural-language
+instruction and outputs both a text response \emph{and} pixel-level
+segmentation masks for all referenced visual entities.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Text-only MLLMs} (GPT-4V, InternVL-2, LLaVA) produce written
+diagnoses but cannot drive autonomous machinery that requires pixel masks
+or bounding boxes. Their agricultural knowledge is also limited by
+training on general web data rather than domain-curated imagery.
+
+\textbf{Specialist agricultural classifiers} (PlantVillage CNNs,
+domain-specific ViTs) excel at narrow tasks (identify this disease from
+a leaf patch) but cannot answer open-ended agricultural questions,
+handle novel species, or produce grounded multi-entity outputs.
+
+\textbf{Grounding MLLMs} (LISA, PixelLM) support referring segmentation
+for general-domain images but use standard ViT features that lack
+biological specificity: they cannot distinguish powdery mildew from
+leaf wax deposits, or aphid clusters from normal trichomes.
+
+\section{Core Mechanism}
+
+\textbf{Biological-Semantic Encoder (BSE).}
+A ViT-L fine-tuned on 2.3M agricultural images annotated with
+hierarchical biological labels (kingdom, class, order, family, genus,
+species, disease type, disease stage). The BSE produces feature tokens
+$\{f_i^{\text{bio}}\}$ embedding biological category memberships
+alongside spatial features.
+
+\textbf{Dense Spatial Representations (DSR).}
+A multi-scale feature pyramid fuses BSE tokens with a frozen DINOv2
+encoder:
+\[
+F_{\text{DSR}} = \text{FPN}(f^{\text{bio}}, f^{\text{dino}})
+               \in \mathbb{R}^{C \times H/4 \times W/4},
+\]
+providing spatially dense features at three resolutions for both
+coarse recognition and fine lesion localisation.
+
+\textbf{Pixel Decoder.}
+A mask transformer decoder takes query embeddings $\{q_k\}$ derived
+from the LLM output's \texttt{[SEG]} tokens and predicts binary masks:
+\[
+M_k = \text{PD}(q_k, F_{\text{DSR}}) \in \{0,1\}^{H \times W}.
+\]
+When the LLM generates \texttt{[SEG]}, the last hidden state at that
+position feeds directly into the pixel decoder as $q_k$.
+
+\section{Technical Formulation}
+
+Training minimises:
+\[
+\mathcal{L} = \mathcal{L}_{\text{LM}}
+            + \lambda_{\text{BCE}}\mathcal{L}_{\text{BCE}}
+            + \lambda_{\text{dice}}\mathcal{L}_{\text{dice}},
+\]
+with $\lambda_{\text{BCE}}=1.0$, $\lambda_{\text{dice}}=0.5$.
+
+Binary cross-entropy on predicted mask $\hat{M}_k$ vs.\ ground-truth $M_k^*$:
+\[
+\mathcal{L}_{\text{BCE}} = -\sum_p
+  \bigl[M_k^*(p)\log\hat{M}_k(p)
+  + (1{-}M_k^*(p))\log(1{-}\hat{M}_k(p))\bigr].
+\]
+Dice loss for shape overlap:
+\[
+\mathcal{L}_{\text{dice}} = 1 -
+  \frac{2\sum_p M_k^*(p)\hat{M}_k(p)}
+       {\sum_p M_k^*(p) + \sum_p \hat{M}_k(p)}.
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-train BSE on 2.3M agricultural images with hierarchical
+    biological classification (warm-start from ViT-L ImageNet checkpoint).
+  \item Train AgriScope on AgriGround for 3 epochs with frozen DINOv2
+    and trainable BSE, LLM adapters (LoRA), and pixel decoder.
+  \item Optional task-specific fine-tuning for 1 epoch on narrow
+    subsets (e.g., disease detection only).
+  \item Inference: input image + instruction; LLM generates text
+    interleaved with \texttt{[SEG]} tokens; pixel decoder predicts
+    a mask for each \texttt{[SEG]}.
+\end{enumerate}
+
+AgriGround construction: 500K source images from PlantVillage,
+iNaturalist-Agriculture, FGVC-Plant, and CropDiseaseDB; captions
+generated by GPT-4V with botanical system prompts; grounded with
+Grounding-DINO\,+\,SAM2; 11M instruction-following samples across
+6 task types (disease, pest, species, growth, weed, nutritional deficiency).
+
+\section{What the Guarantee Says}
+
+No formal guarantees. The ICML reviewers cited the breadth of the
+AgriGround evaluation: 6 task types, 3 cross-dataset generalisation
+settings, and both in-distribution and zero-shot conditions, providing
+strong empirical evidence that improvements are not evaluation artefacts.
+
+\section{Experimental Findings}
+
+Main benchmark: AgriGround-Test (10K held-out samples).
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Method & CIDEr & mIoU & Seg F1 & VQA Acc \\
+\midrule
+LLaVA-1.5 & 82.3 & 43.7 & --- & 71.4 \\
+InternVL-2 & 97.1 & 49.8 & --- & 78.9 \\
+LISA & 101.4 & 52.3 & 64.1 & 74.2 \\
+PixelLM & 107.9 & 55.0 & 67.8 & 76.5 \\
+\textbf{AgriScope} & \textbf{118.6} & \textbf{59.4} & \textbf{73.2} & \textbf{82.7} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+CIDEr and mIoU for grounded caption generation (GCG). LLaVA and
+InternVL-2 do not support pixel-level output (Seg F1 not applicable).
+AgriScope is the first model to achieve over 59 mIoU on this benchmark.
+
+\section{Ablations and Interpretation}
+
+\textbf{Standard ViT encoder (no BSE):} CIDEr $-6.8$; the BSE's
+biological specificity is critical for fine-grained disease staging.
+
+\textbf{Single-resolution features (no FPN):} mIoU $-3.1$; multi-scale
+features are needed to localise both large leaf lesions and small pest bodies.
+
+\textbf{Without AgriGround (existing datasets only):} CIDEr $-14.3$;
+breadth and scale of agricultural supervision are the primary driver.
+
+\textbf{Dataset scaling:} 100K samples $\to$ 250K: $+6.2$ CIDEr;
+250K $\to$ 500K: $+2.1$ CIDEr. Diminishing returns but still positive,
+suggesting continued benefit from data collection.
+
+\textbf{Decoder variant:} Mask transformer vs.\ FPN upsampling:
+$+2.7$ mIoU; mask transformer's cross-attention to text queries is
+essential for language-conditioned segmentation.
+
+\section*{Reference}
+
+Abderrahmene Boudiaf, Mohamad Alanssari, Irfan Hussain, Sajid Javed.
+\textbf{AgriScope: Pixel-Grounded Multimodal Understanding for Agricultural
+Images.}
+arXiv:2609.20325, September 2026. ICML 2026.
+\url{https://arxiv.org/abs/2609.20325}
+
+\end{document}

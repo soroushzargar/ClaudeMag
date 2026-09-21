@@ -1,0 +1,252 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  hierarchical robot planning \textbullet{}
+  vision-language models \textbullet{}
+  agentic distillation \textbullet{}
+  stage-transition detection}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  StageGuard}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Three-Layer Agentic Distillation Teaches a Compact VLM to Decide
+  When Robots Should Switch Subtasks---at Real-Time Speed}\par\vspace{6pt}
+
+{\small\textbf{By} Wenbo Cui, Jing Xu, Rui Zhao, Yunchao Liu, Chaobin Ye,
+  Xinyu Zhang \& Mingkui Tan (South China University of Technology;
+  Tencent Robotics~X)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.20791 \textbullet{} Submitted September 17, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The bottleneck in long-horizon robot planning is not the skills themselves
+but knowing when to stop one and start the next. \textit{StageGuard} distils
+structured three-layer reasoning from a large cloud VLM into a compact local
+model that runs at 11~Hz, achieves F1\,=\,88.4 on stage-transition
+detection---7.2 points above the best prior method---and improves full-task
+success rate by 9.7 percentage points on BEHAVIOR-1K.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Stage-transition decisions in hierarchical robot
+    planning require human-designed completion checkers that fail under
+    perceptual noise; large VLMs can reason about completion but are
+    misaligned with subtask criteria and too slow for real-time control.
+  \item[Why it matters:] Errors in stage transitions cascade: a premature
+    transition moves to the next skill before the current one is complete,
+    and a missed transition stalls the robot indefinitely.
+  \item[Method:] A teacher VLM generates structured three-layer traces
+    (state, task, decision) from demonstration trajectories; a compact
+    student VLM is fine-tuned on these traces and deployed on-robot.
+  \item[Result:] F1\,=\,88.4 (sim), 87~ms latency, 67.1\% task success
+    rate on BEHAVIOR-1K; validated on a real Franka Panda.
+  \item[Evidence:] Comparison with rule-based checkers, zero-shot GPT-4V,
+    and fine-tuned VLM without structured reasoning; ablations over
+    each reasoning layer and observation history length.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Hierarchical robot planners decompose complex tasks (e.g.,
+``load the dishwasher and close it'') into a sequence of subtasks
+(grasp plate, place plate, grasp glass, \ldots, close door), each
+executed by a dedicated low-level skill policy. The stage-transition
+monitor decides when to terminate the current skill and invoke the next.
+
+This is a harder problem than it appears. Low-level skill policies
+produce smooth trajectories that may overshoot, stall, or partially
+succeed. The robot may not be able to observe all relevant state directly.
+Transition criteria that are trivially stated in natural language
+(``the drawer is fully closed'') require fine-grained spatial reasoning
+under occlusion and varied lighting.
+
+Current solutions are hand-crafted rule sets: threshold on end-effector
+position, contact detection, object bounding-box IoU. These rules are
+brittle, task-specific, and require re-engineering for each new subtask.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Rule-based completion checkers} must be designed per subtask by
+a robotics engineer, do not generalise to novel objects or environments,
+and fail under sensor noise. Their F1 on BEHAVIOR-1K is only 71.3.
+
+\textbf{Cloud VLMs (GPT-4V, Qwen-VL-Max)} can interpret diverse scene
+images but have three problems for this use case: (1) their query--answer
+format is not calibrated to subtask-completion criteria specifically;
+(2) they operate at 1--3 seconds per query vs.\ 10\,Hz control loops;
+(3) they require cloud access, making them unsuitable for offline or
+safety-critical deployments.
+
+\textbf{Fine-tuned VLMs without structured reasoning} achieve F1\,=\,81.6
+but have a flat, one-layer reasoning process: they output binary decisions
+without decomposing state observations, task semantics, or decision
+rationales separately, limiting their robustness.
+
+\section{Core Mechanism}
+
+The teacher VLM processes each timestep observation through three
+sequential prompting stages that build a structured trace
+$(z_{\text{state}},\,z_{\text{task}},\,z_{\text{decision}},\,d_t)$:
+
+\textbf{State layer.} Given observation history $o_{t-H:t}$, the
+teacher extracts a structured state summary: current object poses,
+grasp contacts, spatial relations, and completion indicators (e.g.,
+``cup rim 2~cm above shelf surface, no contact'').
+
+\textbf{Task layer.} Given $z_{\text{state}}$ and the current/next
+subtask pair $(T_i, T_{i+1})$, the teacher maps state facts to subtask
+completion criteria: which aspects of $z_{\text{state}}$ determine
+whether $T_i$ is done, and what preconditions $T_{i+1}$ requires.
+
+\textbf{Decision layer.} Given $z_{\text{task}}$, the teacher issues
+a binary transition verdict $d_t \in \{0,1\}$ with a natural-language
+rationale $z_{\text{decision}}$.
+
+A compact local student VLM (3B parameters) is fine-tuned on
+$(o_{t-H:t}, T_i, T_{i+1}) \to (z_{\text{decision}}, d_t)$ pairs
+generated by running the teacher on all demonstration trajectories.
+
+\section{Technical Formulation}
+
+Formally, the monitor observes $o_t = (I_t, \mathbf{q}_t, \mathbf{p}_t)$
+(RGB image, joint configuration, end-effector pose) with history window
+$H$. The transition decision:
+\[
+d_t = f(o_{t-H:t},\, T_i,\, T_{i+1}) \in \{0,1\}.
+\]
+
+The student produces a soft confidence from its last-layer hidden state:
+\[
+c_t = \sigma\!\left(w^\top h_t\right), \quad h_t = \text{Student}(o_{t-H:t}, T_i, T_{i+1}),
+\]
+triggering a transition when $c_t \geq \tau$ (set by validation).
+
+The student training loss combines binary cross-entropy on the decision
+and a token-level alignment loss on the compressed explanation:
+\[
+\mathcal{L}_S = \mathcal{L}_{\text{CE}}(d_t, \hat{d}_t)
+              + \lambda\,\mathcal{L}_{\text{align}}(z_{\text{decision}},\hat{z}_{\text{decision}}).
+\]
+The alignment loss is a token-level cross-entropy weighted by teacher
+confidence:
+\[
+\mathcal{L}_{\text{align}} = -\sum_j \hat{p}_j \log p_j^{\text{student}},
+\]
+where $\hat{p}_j$ are teacher token probabilities for explanation
+token $j$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect human demonstration trajectories for target task set.
+  \item Run cloud teacher VLM (offline) to produce structured
+    traces for all trajectory timesteps.
+  \item Fine-tune compact student VLM on trace-decision pairs.
+  \item Deploy student on-robot: at each 10\,Hz control step, pass
+    recent observation and subtask context; trigger transition if
+    $c_t \geq \tau$.
+  \item Log student explanation text for safety records and debugging.
+\end{enumerate}
+
+Training uses $\lambda = 0.3$, history $H=5$, threshold $\tau=0.55$.
+Teacher traces are generated once and cached; student fine-tuning takes
+approximately 4 hours on a single A100.
+
+\section{What the Guarantee Says}
+
+StageGuard provides no formal guarantees. Empirically, the student's F1
+is within 2.3 points of the teacher's F1 on held-out BEHAVIOR-1K
+trajectories, while inference latency drops from 1,820~ms (cloud VLM)
+to 87~ms (local student), enabling real-time monitoring at 11~Hz.
+Real-robot experiments on five Franka Panda tasks confirm the
+improvements transfer beyond simulation.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Method & F1 & Lat.\ (ms) & Task SR \\
+\midrule
+Rule-based & 71.3 & 2 & 48.2 \\
+GPT-4V zero-shot & 79.1 & 1820 & 52.7 \\
+VLM FT (no reasoning) & 81.6 & 91 & 57.4 \\
+\textbf{StageGuard} & \textbf{88.4} & \textbf{87} & \textbf{67.1} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Task SR = full long-horizon episode success rate on BEHAVIOR-1K simulation.
+StageGuard improves task success by 9.7 points over the best prior method
+(VLM FT) at essentially the same inference latency.
+
+\section{Ablations and Interpretation}
+
+\textbf{Removing state layer:} F1 drops 4.1 points; spatial
+relationship reasoning degrades without the structured state summary.
+
+\textbf{Removing task layer:} F1 drops 3.6 points; subtask completion
+criteria are not grounded without explicit task-plan mapping.
+
+\textbf{Unstructured distillation:} F1 = 83.9 (vs.\ 88.4); unstructured
+teacher traces dilute relevant decision factors with spurious reasoning.
+
+\textbf{History window $H$:} $H=5$ is optimal; $H=1$ loses 4.8 F1;
+$H=10$ gains 0.4 F1 at double the latency.
+
+\textbf{Student size:} 3B achieves full StageGuard F1; 1B loses 3.2 F1;
+7B adds only 0.5 F1 at 3$\times$ latency.
+
+\section*{Reference}
+
+Wenbo Cui, Jing Xu, Rui Zhao, Yunchao Liu, Chaobin Ye, Xinyu Zhang,
+Mingkui Tan.
+\textbf{StageGuard: Learning Stage Transitions for Long-Horizon Robot Tasks
+via Agentic Distillation.}
+arXiv:2609.20791, September 2026.
+\url{https://arxiv.org/abs/2609.20791}
+
+\end{document}

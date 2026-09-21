@@ -1,0 +1,263 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multi-modal image generation \textbullet{}
+  evaluation metrics \textbullet{}
+  condition alignment \textbullet{}
+  chain-of-evaluation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  UFO}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Atomized Chain-of-Evaluation Achieves 15\% Better Human-Correlation for
+  Multi-Modal Image Generation by Evaluating All Conditions Simultaneously}\par\vspace{6pt}
+
+{\small\textbf{By} Danning Zhang, Yijing Lin, Shuhan Zhuang, Mengqi Huang,
+  Shaojin Wu, Shancheng Fang \& Zhendong Mao
+  (University of Science and Technology of China)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.12397 \textbullet{} ICML 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multi-modal image generation is evaluated by checking each condition
+independently---a fundamentally wrong strategy when conditions interact
+and conflict. \textit{UFO} introduces Atomized Chain-of-Evaluation:
+decompose each condition into fine-grained Atomic Evaluation Units,
+order them by dependency, call purpose-built verifiers, and aggregate.
+On the new UFO-Bench (660 cases, 7 categories, 3 difficulty tiers),
+UFO achieves Spearman~$\rho{=}0.689$ with human rankings---a 15.25\%
+improvement over the best prior metric.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing multi-modal generation metrics evaluate each
+    condition (text, reference image, layout, style, identity) in
+    isolation, ignoring interactions that determine human preference.
+  \item[Why it matters:] Subject-driven customisation and layout-
+    conditioned generation are competitive research areas; unreliable
+    metrics stall progress and misrank models.
+  \item[Method:] Decompose each condition into Atomic Evaluation Units
+    (AEUs); categorise by modality-relevance class; order into a chain;
+    call structured (detector-based) or generic (MLLM) verifiers per AEU.
+  \item[Result:] Spearman $\rho=0.689$ vs.\ $\rho=0.598$ (VIEScore);
+    $+15.25\%$ average improvement. Largest gain on hard
+    (conflicting-condition) tier.
+  \item[Evidence:] UFO-Bench: 660 human-annotated cases, 5 raters each,
+    Krippendorff $\alpha{=}0.73$; evaluated on CLIP-T, DINO-I, HPS-v2,
+    VIEScore, and six other baselines.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Subject-driven text-to-image models accept a reference image (the
+subject), a text prompt, a layout specification, and optionally a style
+or identity condition---all simultaneously. The output is evaluated for
+how well it aligns with all provided conditions at once.
+
+Current metrics fail this task. CLIP-T measures text-image cosine
+similarity; DINO-I measures instance identity similarity; they are then
+averaged into a scalar. But this average hides condition priority: if a
+prompt says ``make the dog hold a red umbrella'' and the model produces
+a dog without an umbrella, no averaging of text and identity scores
+captures this failure correctly. Humans, presented with the same output,
+immediately rank it below a generation that at least includes the umbrella.
+
+UFO treats evaluation as a structured reasoning problem: enumerate what
+must be verified, verify each part with the best available tool, and
+combine respecting priority and dependency.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Embedding-based metrics} (CLIP-T, DINO-I, CLIP-I) measure
+condition-specific cosine similarity in a shared embedding space.
+Their scores are invariant to fine-grained compositional failures;
+a tiger wearing a hat and a tiger without a hat may have nearly
+identical CLIP scores with the same text prompt.
+
+\textbf{MLLM-based metrics} (VIEScore, Pick-Score) use a multimodal
+language model as a judge but ask it to evaluate all conditions
+holistically in a single prompt. The model must internally reason
+about interactions it was not specifically trained to handle; its
+judgments are inconsistent on conflicting-condition cases.
+
+\textbf{Human Preference Score (HPS-v2)} is trained on general human
+preferences that reflect aesthetics and realism as much as condition
+alignment, making it poorly calibrated for the specific task of
+measuring omni-condition satisfaction.
+
+\section{Core Mechanism}
+
+\textbf{AEU decomposition.} For a set of conditions $C = \{c_1, \ldots, c_K\}$
+(text prompt $c_T$, reference image $c_I$, layout $c_L$, style $c_S$, \ldots),
+each condition is parsed into binary claims about one attribute:
+\[
+\{u_{k,j}\} = \text{Parse}(c_k), \quad
+u_{k,j} : \text{``attribute } a_{k,j} \text{ of } c_k \text{ satisfied?''}
+\]
+
+\textbf{Chain ordering.} AEUs are sorted topologically over a dependency
+graph $G_C$ where edges encode precedence (subject identity must be
+located before subject pose can be verified). Mandatory conditions come
+first; preferred and contextual follow.
+
+\textbf{Specialised verifiers.}
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \emph{Text attributes:} MLLM with targeted yes/no prompts.
+  \item \emph{Identity conditions:} ArcFace (persons) or DINOv2
+    cosine similarity (objects).
+  \item \emph{Geometric conditions:} DWPose (body pose), Grounding-DINO
+    + SAM2 (object placement), DepthAnything (depth layout).
+  \item \emph{Style conditions:} CLIP style embedding vs.\ reference.
+\end{itemize}
+
+\textbf{Weighted aggregation.} Mandatory AEUs have weight 1.0,
+preferred 0.7, contextual 0.3:
+\[
+\text{OCA}_{\text{UFO}}(x,C) = \sum_{k,j} r_{k,j}\cdot V_{k,j}(x, c_k, a_{k,j}).
+\]
+
+\section{Technical Formulation}
+
+Let $\mathcal{U} = [u_1, \ldots, u_n]$ be the ordered chain of AEUs
+and $V_i$ the verifier for AEU $u_i$. The OCA score is:
+\[
+\text{OCA}(x,C) = \frac{\sum_{i=1}^n r_i V_i(x)}{\sum_{i=1}^n r_i},
+\quad r_i \in \{1.0, 0.7, 0.3\}.
+\]
+
+Spearman correlation with human rankings:
+\[
+\rho = 1 - \frac{6\sum_i d_i^2}{n(n^2-1)},
+\]
+where $d_i$ is the rank difference between UFO scores and human
+preference rankings over the $n=660$ UFO-Bench cases.
+
+For text prompt $c_T$ with $P$ phrases, each phrase $p$ is parsed into
+an AEU with attribute type (object, property, spatial, action, count)
+and relevance class. The dependency graph adds edges from objects to
+their attributes (the object must be localised before its colour or
+pose can be verified).
+
+\section{Learning or Inference Procedure}
+
+UFO is training-free. Inference steps:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Parse all conditions $C$ into AEUs; extract attribute types and
+    relevance classes.
+  \item Build dependency graph $G_C$; topologically sort into chain $\mathcal{U}$.
+  \item For each AEU $u_i$: call verifier $V_i$ with the generated image
+    $x$ and condition $c_k$.
+  \item Compute weighted aggregation $\text{OCA}_{\text{UFO}}(x,C)$.
+\end{enumerate}
+
+New condition types are added by registering an AEU parser and
+verifier function---no retraining. Total evaluation time per image is
+approximately 4~seconds on a single GPU.
+
+\section{What the Guarantee Says}
+
+UFO provides a theoretical lemma: under conditional independence between
+conditions, the chain-of-evaluation score is an unbiased estimator of
+the true omni-condition alignment. For the general (dependent) case,
+the mandatory-first ordering minimises the expected rank correlation
+error by prioritising the conditions humans weight most heavily, which
+the paper verifies empirically across annotation tiers.
+
+\section{Experimental Findings}
+
+Rank correlation with human preferences on UFO-Bench (660 test cases,
+5 annotators each):
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Spearman $\rho$ & Pearson $r$ & Kendall $\tau$ \\
+\midrule
+CLIP-T & 0.421 & 0.398 & 0.312 \\
+DINO-I & 0.389 & 0.374 & 0.288 \\
+HPS-v2 & 0.521 & 0.508 & 0.401 \\
+VIEScore & 0.598 & 0.581 & 0.463 \\
+\textbf{UFO} & \textbf{0.689} & \textbf{0.672} & \textbf{0.537} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+By difficulty tier: Easy $\rho=0.741$; Medium $\rho=0.693$;
+Hard $\rho=0.701$. UFO's advantage is largest on hard cases, where
+conflicting conditions are the norm and independent metrics collapse.
+
+\section{Ablations and Interpretation}
+
+\textbf{MLLM for all AEUs (no structured verifiers):} $\rho$ drops to
+0.631; geometric and identity AEUs are specifically hurt, confirming
+that dedicated detectors are needed for these types.
+
+\textbf{Random AEU ordering:} $\rho=0.657$; mandatory-first ordering
+resolves conflicting conditions more consistently.
+
+\textbf{Uniform weights ($r_i{=}1$ for all):} $\rho=0.672$; graded
+weights align with human priority on medium and hard tiers.
+
+\textbf{Sentence-level vs.\ phrase-level AEUs:} Phrase-level AEUs
+improve $\rho$ by 0.042; sub-phrase (word-level) adds only 0.003
+at 2$\times$ compute.
+
+\textbf{Model comparison on UFO-Bench:} FLUX.1 outranks SDXL by
+0.08 UFO score on hard cases but only 0.02 by CLIP-T average,
+illustrating UFO's superior discriminative power for state-of-the-art
+models that are close to each other on simple metrics.
+
+\section*{Reference}
+
+Danning Zhang, Yijing Lin, Shuhan Zhuang, Mengqi Huang, Shaojin Wu,
+Shancheng Fang, Zhendong Mao.
+\textbf{UFO: Chain-of-Evaluation for Omni-Condition Alignment in
+Multi-Modal Image Generation.}
+arXiv:2609.12397, September 2026. ICML 2026.
+\url{https://arxiv.org/abs/2609.12397}
+
+\end{document}

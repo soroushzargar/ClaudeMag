@@ -1,0 +1,264 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  3D articulation \textbullet{}
+  feed-forward inference \textbullet{}
+  multi-view point clouds \textbullet{}
+  transformer-based reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  FAMOS}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Multi-State Articulation Transformer Reconstructs Joint Parameters from
+  Sparse Unordered Point Clouds Without Category Priors}\par\vspace{6pt}
+
+{\small\textbf{By} Kevin Qu, Stefan Ainsworth, Jiahao Wang, Gordon Wetzstein
+  \& Qianqian Wang (Stanford University; ETH Z\"{u}rich)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.20817 \textbullet{} Submitted September 17, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Articulated object reconstruction no longer needs a single perfect view or a
+category-specific prior. \textit{FAMOS} (Feed-forward Articulation Modeling
+from Sparse Observations) accepts an unordered set of partial point clouds of
+the same object in different joint states, aggregates articulation evidence
+across views with a Multi-state Articulation Transformer, and predicts
+movable-part segmentation plus full joint parameters in a single forward
+pass---outperforming the best prior feed-forward method by up to 27.8 points
+on three standard benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing feed-forward methods infer articulation from a
+    single observation and rely on strong category priors that fail on novel
+    instances and unusual joint configurations.
+  \item[Why it matters:] Robots that can estimate joint parameters of
+    arbitrary objects from a few casual scans would generalise to
+    unstructured environments without per-object calibration.
+  \item[Method:] Multi-state Articulation Transformer with alternating
+    state-wise and global attention; Observed Articulation Span (OAS)
+    objective to exploit motion diversity; procedural synthetic data
+    generation to overcome dataset scarcity.
+  \item[Result:] +8.1, +27.8, +21.5 over Particulate on PartNet-Mobility,
+    ACD, and ArtiCraft-10K in joint axis error.
+  \item[Evidence:] Evaluation on three established articulated-object
+    benchmarks with ablations over attention variants, OAS, and
+    observation count.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Articulated objects---drawers, cabinets, scissors, robots---have rigid parts
+connected by kinematic joints. Knowing the joint type, axis, origin, and
+motion range is prerequisite for any downstream manipulation planner. The
+classical approach requires dense RGBD scans or repeated observations across
+many configurations; modern feed-forward methods aim to infer joint parameters
+in a single forward pass but have so far been limited to one observation and
+one category at a time.
+
+FAMOS abandons both restrictions. Its input is a sparse, unordered set of
+partial point clouds $\{X_n\}_{n=1}^N$ capturing the object in $N$ different
+joint states; its output is per-point part membership and per-part joint
+parameters. Because the model sees the object in multiple configurations, it
+can directly observe how parts move relative to one another, making the
+problem substantially easier without requiring explicit motion correspondence.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Optimization-based methods} (A-SDF, DITTO) fit a parametric model to
+each observation at test time. They are slow (minutes per object), sensitive
+to initialisation, and require category-specific shape templates---none of
+which generalise to novel object categories.
+
+\textbf{Single-view feed-forward methods} (Particulate, ArtSplat) amortise
+this cost by learning a category-level prior during training. Their critical
+weakness is that a single partial observation reveals only part of the object
+in one configuration. Without multi-view evidence, the model must hallucinate
+the motion range from prior experience, producing large errors on out-of-
+distribution instances where the prior is wrong.
+
+\textbf{Neither exploits the structure of multi-state observations.} When $N>1$
+partial scans are available, each pair of scans constrains the joint axis:
+the rigid-body transformation between a moving part's point clouds in two
+states lies in the joint's motion manifold. FAMOS is the first feed-forward
+model designed to reason jointly over all observations.
+
+\section{Core Mechanism}
+
+\textbf{Point encoding.} Each point cloud $X_n$ is encoded independently by
+a shared PointNet-style encoder $\phi$ into a feature map $F_n \in \mathbb{R}^{T\times D}$
+($D=768$). $K=16$ learnable part query vectors $\mathbf{q}_k$ are initialised
+for each forward pass.
+
+\textbf{Multi-state Articulation Transformer (MAT).} The $L=6$ transformer
+layers each alternate between two attention modes:
+
+\emph{State-wise attention:} For observation $n$, part queries cross-attend
+to point features of that observation only:
+$\mathbf{q}_k^{(n)} \leftarrow \text{Attn}(\mathbf{q}_k, F_n).$
+
+\emph{Global attention:} All part queries from all observations attend
+jointly:
+$\{\mathbf{q}_k^{(n)}\}_{n,k} \leftarrow \text{Attn}\!\left(\{\mathbf{q}_k^{(n)}\}_{n,k},\,\{\mathbf{q}_k^{(n)}\}_{n,k}\right).$
+
+Global attention is the key innovation: it lets the model compare
+articulation cues across observations and identify which joints are active
+in which views.
+
+\textbf{Decoding.} Separate MLP heads read each final query $\mathbf{q}_k$
+and output joint axis, origin, range, and part membership logits for
+every input point.
+
+\section{Technical Formulation}
+
+The Observed Articulation Span (OAS) objective augments standard joint-
+parameter regression. Let $\theta_n^{(m)}$ be the joint angle of part $m$
+in observation $n$. The observed motion range is:
+\[
+\Delta_m = \max_n \theta_n^{(m)} - \min_n \theta_n^{(m)}.
+\]
+A regression head predicts $\hat{\Delta}_m$ from the part query $\mathbf{q}_k$:
+\[
+\mathcal{L}_{\text{OAS}} = \sum_m \left(\hat{\Delta}_m - \Delta_m\right)^2.
+\]
+The full loss combines part segmentation (Hungarian-matched cross-entropy),
+joint axis regression (cosine loss), origin regression ($\ell_2$), motion
+range regression ($\ell_2$), and OAS:
+\[
+\mathcal{L} = \lambda_{\text{seg}}\mathcal{L}_{\text{seg}}
+           + \lambda_{\text{axis}}\mathcal{L}_{\text{axis}}
+           + \lambda_{\text{origin}}\mathcal{L}_{\text{origin}}
+           + \lambda_{\text{range}}\mathcal{L}_{\text{range}}
+           + \lambda_{\text{OAS}}\mathcal{L}_{\text{OAS}}.
+\]
+Joint axis loss uses the unsigned cosine:
+\[
+\mathcal{L}_{\text{axis}} = 1 - \left|\cos\!\left\langle \hat{\mathbf{a}}_m,\mathbf{a}_m\right\rangle\right|.
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Encode each observation independently with the shared PointNet
+    encoder to obtain $\{F_n\}$.
+  \item Initialise $K$ learnable part queries $\{\mathbf{q}_k\}$.
+  \item Run $L$ MAT layers alternating state-wise and global attention.
+  \item Decode part queries via MLP heads into joint parameters and
+    per-point part membership logits.
+  \item OAS head is used only during training; at inference, joint
+    parameters are read from the main decoders.
+\end{enumerate}
+
+Training data mixes real PartNet-Mobility instances with procedurally
+generated synthetic assets. The procedural generator samples random
+kinematic trees (depth 1--3), assigns primitive or CAD-derived meshes,
+and renders partial point clouds from multiple random configurations,
+yielding unlimited training variety.
+
+\section{What the Guarantee Says}
+
+FAMOS provides no formal approximation bound, but the paper demonstrates
+empirically that axis error drops monotonically as $N$ increases from 1 to
+4 observations on every benchmark. The largest single gain is from $N{=}1$
+to $N{=}2$ (4.3 geodesic degrees), confirming that even one additional view
+substantially constrains the joint parameter space.
+
+\section{Experimental Findings}
+
+Three benchmarks cover in-distribution and out-of-distribution object types:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{PartNet-Mobility:} 45 categories, 2,346 objects.
+  \item \textbf{ACD:} Articulated CAD objects with novel geometries.
+  \item \textbf{ArtiCraft-10K:} Large community-contributed dataset.
+\end{itemize}
+
+With 4 input observations (geodesic axis error in degrees, lower is better):
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Method & PN-Mob & ACD & ArtiCraft \\
+\midrule
+A-SDF & 24.1 & 31.4 & 38.7 \\
+DITTO & 21.3 & 28.6 & 35.2 \\
+Particulate & 18.4 & 22.5 & 29.1 \\
+\textbf{FAMOS} & \textbf{10.3} & \textbf{16.9} & \textbf{7.6} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+FAMOS's biggest gain is on ArtiCraft (21.5 point improvement), which contains
+the widest variety of object categories and thus most penalises methods that
+depend on category-specific shape priors.
+
+\section{Ablations and Interpretation}
+
+\textbf{Global attention is essential:} Removing global attention and using
+only state-wise attention degrades axis error by 3.6 geodesic degrees on
+PartNet-Mobility; without cross-view comparison the model cannot distinguish
+joint axes from part-shape variation.
+
+\textbf{OAS objective matters:} Removing OAS increases axis error by 2.9
+degrees; the model conflates partial observation with small range, mis-
+estimating joint limits.
+
+\textbf{Synthetic data is the enabler:} Removing procedural synthesis while
+keeping real data causes a 4.2-degree degradation; the real datasets alone
+are too small and category-limited for the multi-view model to generalise.
+
+\textbf{$N=1$ is a competitive single-view baseline:} Even with $N=1$,
+FAMOS outperforms Particulate by 1.7 degrees on PartNet-Mobility, because
+the MAT architecture is a better single-view reasoner than prior point-cloud
+networks.
+
+\section*{Reference}
+
+Kevin Qu, Stefan Ainsworth, Jiahao Wang, Gordon Wetzstein, Qianqian Wang.
+\textbf{FAMOS: Feed-Forward 3D Articulation Modeling from Sparse Observations.}
+arXiv:2609.20817, September 2026.
+\url{https://arxiv.org/abs/2609.20817}
+
+\end{document}

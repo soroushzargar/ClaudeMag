@@ -1,0 +1,260 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agentic reinforcement learning \textbullet{}
+  on-policy distillation \textbullet{}
+  GRPO \textbullet{}
+  adaptive training schedule}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RetireOPD}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Adaptive Retirement of Teacher Distillation Unlocks an 18-Point Gain for
+  Multi-Turn Agentic RL on ALFWorld and WebShop}\par\vspace{6pt}
+
+{\small\textbf{By} Yan Yu, Zhengxi Lu, Yizhou Liu, Yichen Pan, Aozhe Wang,
+  Qipeng Chen, Hua Yang, Wenqi Zhang, Weiming Lu, Qianglong Chen
+  \& Yongliang Shen (Zhejiang University; Alibaba Group)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.20784 \textbullet{} Submitted September 17, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Teacher distillation can harm as much as it helps when training agentic
+reinforcement learning---unless the student knows when to stop listening.
+\textit{RetireOPD} separates a skill-conditioned teacher from a skill-free
+student, trains them in sequence, and lets the student autonomously retire
+distillation once it has absorbed what the teacher can teach.
+The result: up to $+18.8\%$ success rate on ALFWorld and $+19.0\%$ on
+WebShop over pure RL across three model scales.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Multi-turn agents trained with sparse-reward RL receive
+    weak learning signals; on-policy distillation (OPD) from a privileged
+    teacher helps early but harms later when the teacher becomes a bottleneck.
+  \item[Why it matters:] Web and household agents must make long chains of
+    tool calls; sparse end-of-episode rewards provide almost no signal for
+    individual action improvements.
+  \item[Method:] Pre-train a skill-conditioned teacher with GRPO; jointly
+    train a skill-free student with RL\,+\,OPD; retire OPD automatically
+    once the student's discrepancy stops shrinking and it reaches a target
+    success fraction of the teacher.
+  \item[Result:] $+14.1$--$18.8\%$ on ALFWorld; $+11.8$--$19.0\%$ on
+    WebShop vs.\ RL-only at three model scales (1.5B, 3B, 7B).
+  \item[Evidence:] Ablations over teacher pre-training, retirement
+    triggers, and $\alpha$ threshold sensitivity; comparisons vs.\
+    SFT, GRPO, continuous OPD, and SAGE-OPD.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Long-horizon agentic tasks---booking a product on a website, completing a
+household chore sequence---require LLMs to make dozens of sequential decisions
+before receiving any feedback. Reinforcement learning can discover effective
+strategies from this sparse reward but converges slowly because the credit
+assignment problem is severe: which of the 40 actions in a successful
+trajectory were actually critical?
+
+On-policy distillation (OPD) offers a shortcut: a teacher that has privileged
+information (a task plan, a ground-truth action sequence, oracle environment
+state) generates dense token-level supervision, and the student imitates the
+teacher while simultaneously learning from RL. Prior work treats OPD as a
+fixed co-training objective. RetireOPD shows this is wrong: the benefit of
+distillation is not constant across training, and forcing the student to keep
+imitating a teacher it has already surpassed in some dimensions causes active
+regression.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Pure RL (GRPO)} trains with a clipped surrogate policy gradient but
+has no mechanism to bootstrap from the teacher's privileged knowledge. The
+agent must discover strategies entirely from environment feedback, requiring
+many more episodes to converge.
+
+\textbf{Continuous joint OPD\,+\,RL} combines distillation and RL throughout
+training. Two problems arise: (1) a teacher that was only marginally better
+than the student at initialisation, because privileged information alone does
+not make a teacher reliable in agentic settings where the teacher must also
+plan correctly, provides harmful early supervision; (2) later in training,
+the student explores behaviours beyond the teacher's repertoire that OPD
+actively suppresses.
+
+\textbf{SAGE-OPD} uses a predefined schedule to taper OPD linearly, which
+is better than constant OPD but cannot adapt to the variable rate at which
+different model scales or task complexities saturate distillation.
+
+\section{Core Mechanism}
+
+\textbf{Phase 1: Teacher pre-training.}
+A skill-conditioned teacher $\pi_T(a_t \mid s_t, z)$ is initialised from
+the base LLM and fine-tuned with GRPO on environment rewards augmented by
+a skill-following term that rewards use of the provided privilege $z$
+(e.g., sub-task labels, reference trajectories). This phase ensures the
+teacher is reliably better than a skill-free policy before distillation begins.
+
+\textbf{Phase 2: Student joint training.}
+A skill-free student $\pi_S(a_t \mid s_t)$ is trained with:
+\[
+\mathcal{L}_S = \mathcal{L}_{\text{GRPO}}(\pi_S)
+              + \beta \cdot \mathcal{L}_{\text{OPD}}(\pi_T, \pi_S),
+\]
+with teacher parameters frozen.
+
+\textbf{Adaptive Retirement.}
+At each training step, two signals are monitored:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item \emph{Discrepancy:} $\Delta_t = \mathrm{KL}(\pi_T \| \pi_S)$
+    averaged over recent rollouts.
+  \item \emph{Success gap:} $\rho_t = R_S^t / R_T$, the student's rolling
+    success rate relative to the teacher's fixed rate.
+\end{itemize}
+Retirement fires when:
+\[
+\Delta_t - \Delta_{t-k} < \epsilon_\Delta \quad \text{AND} \quad \rho_t \geq \alpha.
+\]
+After retirement, $\beta{=}0$ and only $\mathcal{L}_{\text{GRPO}}$ is used.
+
+\section{Technical Formulation}
+
+The GRPO loss is:
+\[
+\mathcal{L}_{\text{GRPO}} = -\mathbb{E}_\tau\sum_t \min\!\left(
+  \frac{\pi_S(a_t)}{\pi_{\text{ref}}(a_t)}\hat{A}_t,\;
+  \text{clip}\!\left(\frac{\pi_S}{\pi_{\text{ref}}}, 1\pm\epsilon\right)\hat{A}_t
+\right)
+\]
+where $\hat{A}_t$ is the group-relative advantage and $\pi_{\text{ref}}$ is
+the reference (SFT checkpoint or retirement-point snapshot).
+
+The OPD loss is:
+\[
+\mathcal{L}_{\text{OPD}} =
+  \mathbb{E}_\tau\sum_t
+  \mathrm{KL}\!\left(\pi_T(\cdot \mid s_t, z)\,\big\|\,\pi_S(\cdot\mid s_t)\right).
+\]
+
+The teacher pre-training loss adds a skill-following reward:
+\[
+r_T = r_{\text{env}} + \lambda_z \cdot \mathbf{1}\!\left[\pi_T \text{ uses } z\right].
+\]
+
+Default hyperparameters: rolling window $k=100$, convergence threshold
+$\epsilon_\Delta = 0.01$, success-fraction threshold $\alpha = 0.85$,
+distillation weight $\beta = 0.5$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-train skill-conditioned teacher with GRPO\,+\,skill reward for
+    $T_{\text{teacher}}$ steps until teacher success rate saturates.
+  \item Initialise student from base LLM (same checkpoint as teacher init).
+  \item Train student jointly with $\mathcal{L}_{\text{GRPO}} + \beta\mathcal{L}_{\text{OPD}}$.
+  \item At each step compute $\Delta_t$ and $\rho_t$; fire retirement
+    condition if met; set $\beta{=}0$ and continue RL-only.
+  \item At inference: deploy skill-free student $\pi_S$. Teacher and
+    privilege $z$ are not needed.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided. The paper motivates retirement theoretically:
+under a noisy oracle model where the teacher is correct with probability
+$p > 0.5$ on each token, continuing OPD past the saturation point has
+\emph{negative} expected alignment between the OPD gradient and the true
+reward gradient. Retirement is designed to detect this saturation empirically
+before the misalignment damages performance.
+
+\section{Experimental Findings}
+
+Evaluated on Qwen2.5 at three scales (1.5B, 3B, 7B):
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Method & ALFWorld & WebShop \\
+\midrule
+SFT & 54.2 & 59.3 \\
+GRPO only & 67.1 & 68.4 \\
+Continuous OPD+RL & 71.3 & 72.1 \\
+SAGE-OPD & 73.8 & 74.5 \\
+\textbf{RetireOPD} & \textbf{85.9} & \textbf{87.4} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Success rate (\%), 7B scale. RetireOPD exceeds SAGE-OPD by
+$12.1\%$ on ALFWorld and $12.9\%$ on WebShop, confirming that
+adaptive retirement, not just scheduled tapering, is the key.
+
+\section{Ablations and Interpretation}
+
+\textbf{No teacher pre-training:} $-8.3\%$ on ALFWorld; the teacher
+provides unreliable supervision at initialisation, corrupting early
+student gradients.
+
+\textbf{No retirement (continuous OPD):} $-14.6\%$; continued OPD
+past saturation actively suppresses productive student exploration.
+
+\textbf{Discrepancy-only retirement:} Premature retirement at 1.5B
+scale ($-4.1\%$); the student retires before reaching competence.
+
+\textbf{Success-gap-only retirement:} Over-extended distillation at
+7B scale ($-2.7\%$); threshold is met late after OPD stops improving.
+
+\textbf{$\alpha$ sensitivity:} $\alpha \in [0.80, 0.90]$ is robust;
+$\alpha < 0.70$ causes premature retirement; $\alpha > 0.95$ delays
+retirement past the benefit window.
+
+\section*{Reference}
+
+Yan Yu, Zhengxi Lu, Yizhou Liu, Yichen Pan, Aozhe Wang, Qipeng Chen,
+Hua Yang, Wenqi Zhang, Weiming Lu, Qianglong Chen, Yongliang Shen.
+\textbf{RetireOPD: Self-Retiring On-Policy Distillation for Agentic
+Reinforcement Learning.}
+arXiv:2609.20784, September 2026.
+\url{https://arxiv.org/abs/2609.20784}
+
+\end{document}

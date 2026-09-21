@@ -1,0 +1,93 @@
+ML Papers List — 2026-09-21
+Generated for ClaudeMag
+
+1. FAMOS: Feed-Forward 3D Articulation Modeling from Sparse Observations [arXiv 2026]
+   Authors: Kevin Qu, Stefan Ainsworth, Jiahao Wang, Gordon Wetzstein, Qianqian Wang
+   Affiliation: Stanford University; ETH Zürich
+   Venue/ID: arXiv:2609.20817
+   URL: https://arxiv.org/abs/2609.20817
+   Summary: Modeling articulated objects from sparse monocular views is hard because each
+   observation reveals only partial geometry and motion evidence. Existing feed-forward
+   methods infer articulation from a single view and rely heavily on category-level shape
+   priors. FAMOS predicts movable-part segmentation and joint parameters from an unordered
+   sparse set of partial point clouds by jointly reasoning over multiple observations.
+   The model introduces a Multi-state Articulation Transformer (MAT) with alternating
+   state-wise and global attention (K=16 part queries, L=6 transformer layers, D=768),
+   plus an Observed Articulation Span (OAS) objective that supervises the motion range
+   each part exhibits across the input set, encouraging the model to fully leverage
+   multi-view evidence. A procedural data generator synthesizes self-annotated assets to
+   overcome limited dataset diversity. Evaluated on PartNet-Mobility, ACD, and
+   ArtiCraft-10K, FAMOS outperforms Particulate by 8.1, 27.8, and 21.5 points respectively.
+
+2. RetireOPD: Self-Retiring On-Policy Distillation for Agentic Reinforcement Learning [arXiv 2026]
+   Authors: Yan Yu, Zhengxi Lu, Yizhou Liu, Yichen Pan, Aozhe Wang, Qipeng Chen,
+            Hua Yang, Wenqi Zhang, Weiming Lu, Qianglong Chen, Yongliang Shen
+   Affiliation: Zhejiang University; Alibaba Group
+   Venue/ID: arXiv:2609.20784
+   URL: https://arxiv.org/abs/2609.20784
+   Summary: Multi-turn agents trained with reinforcement learning (RL) receive a single
+   scalar reward per trajectory, motivating on-policy distillation (OPD) from a
+   skill-conditioned self-teacher to supply dense token-level supervision. RetireOPD
+   identifies two failure modes: privileged information does not always make a teacher
+   reliable in agentic tasks, and the benefit of distillation is stage-dependent. The
+   framework first trains a decoupled skill-conditioned teacher with environment rewards,
+   then jointly trains a skill-free student with RL and OPD. Adaptive Retirement allows
+   the student to automatically drop the teacher once their discrepancy stops shrinking
+   and the student reaches a target fraction of the teacher's success rate, after which
+   RL training continues alone. Across three model scales on ALFWorld, RetireOPD achieves
+   +14.1–18.8% success rate over RL-only; on WebShop, +11.8–19.0%.
+
+3. StageGuard: Learning Stage Transitions for Long-Horizon Robot Tasks via Agentic Distillation [arXiv 2026]
+   Authors: Wenbo Cui, Jing Xu, Rui Zhao, Yunchao Liu, Chaobin Ye, Xinyu Zhang, Mingkui Tan
+   Affiliation: South China University of Technology; Tencent Robotics X
+   Venue/ID: arXiv:2609.20791
+   URL: https://arxiv.org/abs/2609.20791
+   Summary: Hierarchical robot planning frameworks execute long-horizon tasks by chaining
+   skills from multiple control policies. Determining when to terminate the current skill
+   and advance to the next subtask (a stage transition) is essential but has relied on
+   manually designed completion signal checkers. Large VLMs offer strong reasoning but
+   have decision boundaries misaligned with task completion, and cloud deployment adds
+   latency incompatible with real-time monitoring. StageGuard uses agentic distillation:
+   a teacher VLM generates structured reasoning traces from demonstration trajectories
+   through a three-layer reasoning architecture (state layer, task layer, decision layer),
+   then a lightweight student VLM is fine-tuned on these traces to generate compact
+   self-explanations for efficient online stage-transition decisions. Evaluated on
+   BEHAVIOR-1K and validated on real robots, StageGuard substantially improves
+   stage-transition accuracy while supporting efficient closed-loop monitoring.
+
+4. AgriScope: Pixel-Grounded Multimodal Understanding for Agricultural Images [ICML 2026]
+   Authors: Abderrahmene Boudiaf, Mohamad Alanssari, Irfan Hussain, Sajid Javed
+   Affiliation: Khalifa University of Science and Technology
+   Venue/ID: arXiv:2609.20325 — Accepted, ICML 2026
+   URL: https://arxiv.org/abs/2609.20325
+   Summary: Agricultural image understanding requires fine-grained recognition of plant
+   diseases, pests, crop structures, and botanical species under complex real-world
+   conditions. Existing MLLMs produce text-only outputs without pixel-level grounding,
+   limiting actionability for precision agriculture. AgriScope is a unified framework
+   supporting image-level, region-level, and pixel-level understanding via biological-
+   semantic encoding, dense spatial representations, and a pixel decoder. It enables
+   grounded caption generation, referring expression segmentation, and multi-turn
+   multimodal interaction for agricultural imagery. To support training, the paper
+   introduces AgriGround: 500K images and 11M instruction-following samples spanning
+   plant disease, crop/weed identification, insect pest recognition, and botanical
+   understanding, built via a multi-stage automatic annotation pipeline. On grounded
+   caption generation, AgriScope raises CIDEr from 107.9 to 118.6 and mIoU from
+   55.0 to 59.4 over the best prior baseline.
+
+5. UFO: Chain-of-Evaluation for Omni-Condition Alignment in Multi-Modal Image Generation [ICML 2026]
+   Authors: Danning Zhang, Yijing Lin, Shuhan Zhuang, Mengqi Huang, Shaojin Wu,
+            Shancheng Fang, Zhendong Mao
+   Affiliation: University of Science and Technology of China
+   Venue/ID: arXiv:2609.12397 — Accepted, ICML 2026
+   URL: https://arxiv.org/abs/2609.12397
+   Summary: Multi-modal image generation models are conditioned on diverse inputs
+   (text, reference images, style, layout, etc.) simultaneously, but evaluation
+   methods assess each modality independently, contradicting the simultaneous alignment
+   objective and producing poor agreement with human judgments. UFO introduces an
+   Atomized Chain-of-Evaluation paradigm that decomposes omni-condition alignment into
+   a sequential chain of fine-grained, disentangled Atomic Evaluation Units (AEUs),
+   categorizes them by modality-relevance class, and calls general or dedicated
+   functional verifiers for each AEU type. UFO-Bench provides 660 test cases across
+   7 categories and 3 difficulty tiers designed to stress conflicting multi-modal
+   conditions. UFO achieves Spearman ρ=0.6889 correlation with human rankings,
+   a 15.25% average improvement over prior metrics.
