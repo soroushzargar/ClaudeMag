@@ -1,0 +1,264 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  LLM reasoning \textbullet{}
+  formal verification \textbullet{}
+  SMT solver \textbullet{}
+  chain-of-thought}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  LogicTrack}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Auditing LLM Reasoning Trajectories with Formal Logic Solvers and
+  Step-Level Backtracking Rewards}\par\vspace{6pt}
+
+{\small\textbf{By} Jingyu Hu, Shu Yang, Weiru Liu \& Di Wang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.21492 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+LogicTrack auto-formalizes each chain-of-thought step into an SMT-LIB
+specification, verifies it with a Z3-class solver, and converts the
+diagnostics into a Solver-Based Backtracking Reward that guides both
+inference-time tree search and supervised fine-tuning---improving
+step-level verifiability across 8 benchmarks and 7 LLMs.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RLVR optimises final-answer correctness but leaves the
+    logical validity of intermediate reasoning steps unverified and
+    potentially unsound.
+  \item[Why it matters:] Models that reach correct answers via logically
+    invalid steps are brittle, untrustworthy, and opaque to auditors.
+  \item[Method:] Decompose each CoT step into context, assumptions, and
+    conclusion; auto-formalize to SMT-LIB; verify with a theorem prover;
+    combine into a Solver-Based Backtracking Reward (SBR).
+  \item[Result:] Step-level verifiability improves 15--30 pp; final
+    accuracy preserved or improved across 8 benchmarks, 7 LLMs.
+  \item[Evidence:] Systematic evaluation on GSM8K, MATH, ARC, LogiQA,
+    FOLIO, ProntoQA, and custom multi-step deduction suites.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language model reasoning has been transformed by chain-of-thought
+(CoT) prompting and reinforcement learning with verifiable rewards (RLVR).
+Models now generate extended thinking traces before answering, and these
+traces substantially improve performance on complex tasks. But the training
+signal in RLVR is a binary or scalar reward over the final answer---not
+over the intermediate steps.
+
+This creates a subtle failure mode: models can learn to produce long,
+plausible-looking reasoning chains that are internally inconsistent or
+logically invalid, while still arriving at correct answers through
+pattern-matching or lucky leaps. Such traces are unauditable, brittle to
+distributional shift, and dangerous in high-stakes domains where the
+reasoning process---not just the answer---must be verified.
+
+LogicTrack addresses this gap with a neuro-symbolic framework that
+provides free, scalable, per-step logical verification as a training and
+inference-time signal.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Outcome-based RLVR} (GRPO, PPO-R1) provides a single reward per
+trajectory, giving no credit for valid intermediate steps or penalty for
+invalid ones. A model is rewarded equally for a logically sound path and
+a lucky leap.
+
+\textbf{Process reward models (PRMs)} score intermediate steps but are
+trained discriminatively on expensive human labels and do not carry
+logical soundness guarantees---they reflect human preferences, not logical
+validity.
+
+\textbf{Self-consistency and majority voting} increase answer reliability
+through repeated sampling but do not verify any individual trace.
+
+\textbf{Direct SMT encoding} cannot process natural language without a
+formalization layer, which has historically required domain-specific
+engineering and failed to generalize.
+
+LogicTrack pairs a neural auto-formalization module (an LLM translator)
+with a classical SMT solver, getting the generalization of neural models
+and the soundness guarantees of symbolic reasoning.
+
+\section{Core Mechanism}
+
+\textbf{Step Decomposition.} Each natural-language step $s_k$ is
+decomposed into three fields:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Context}: facts established by prior steps $s_1,\ldots,s_{k-1}$
+  \item \textbf{Background assumptions}: domain knowledge or definitions
+  \item \textbf{Conclusion}: the claimed logical consequence of 1 and 2
+\end{enumerate}
+
+\textbf{Auto-formalization.} An LLM translator maps each triple into
+an SMT-LIB specification covering linear arithmetic, equality, and
+propositional logic---the fragment that covers the large majority of
+mathematical and logical reasoning steps.
+
+\textbf{Solver Verification.} A Z3-class SMT solver checks the
+specification and returns one of:
+\textit{syntax error}, \textit{satisfiable}, \textit{entailed}
+(conclusion follows from context + assumptions),
+\textit{refuted} (conclusion contradicts them), or
+\textit{undecided} (solver timeout).
+
+\textbf{Solver-Based Backtracking Reward (SBR).} SBR combines:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item A \emph{premise-fidelity score} measuring how faithfully the
+    SMT context matches prior step conclusions
+  \item A \emph{solver verification score}: entailed $>$ satisfiable
+    $>$ undecided $>$ refuted
+\end{itemize}
+
+\textbf{Inference-time Backtracking.} SBR guides tree search: when the
+current path stalls, the search backtracks to the step with the
+lowest SBR score and regenerates from that branch.
+
+\textbf{SFT data construction.} Successful backtracking trajectories
+are formatted as SFT examples, teaching fine-tuned models to internalise
+step-wise auditing without requiring the solver at inference time.
+
+\section{Technical Formulation}
+
+Let trajectory $\tau = (s_1,\ldots,s_T, a)$ where $a$ is the final
+answer. Each step $s_k$ maps to an SMT triple
+$(\mathrm{ctx}_k, \mathrm{bg}_k, \mathrm{conc}_k)$.
+
+The SMT validity check:
+\[
+\mathrm{SMT\text{-}check}: \;\mathrm{ctx}_k \wedge \mathrm{bg}_k
+  \;\models\; \mathrm{conc}_k
+\]
+
+Step-level SBR:
+\[
+\mathrm{SBR}(s_k)
+= \alpha\cdot\mathrm{Fid}(s_k)
++ (1-\alpha)\cdot\mathrm{SolverScore}(s_k)
+\]
+
+Trajectory-level SBR (used as training reward):
+\[
+\mathrm{SBR}(\tau)
+= \frac{1}{T}\sum_{k=1}^{T}\mathrm{SBR}(s_k)
+  \cdot \mathbf{1}[a = a^*]
+\]
+
+Backtrack point selection:
+\[
+k^* = \operatorname*{arg\,min}_{k}\,\mathrm{SBR}(s_k)
+\]
+The search then regenerates $s_{k^*},\ldots,s_T$ from the new branch.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Inference-time:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Generate initial trajectory $\tau$.
+  \item Score each step with SBR; if $\mathrm{SBR}(\tau)<\delta$
+    backtrack to $k^*$ and regenerate.
+  \item Repeat until answer correct or budget exhausted.
+\end{enumerate}
+
+\textbf{Training-time SFT:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect successful backtracking trajectories.
+  \item Format with explicit \texttt{<backtrack>} markers.
+  \item Fine-tune base model; solver not required at inference.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+For steps in the linear-arithmetic and propositional-logic fragment,
+the SMT check is sound and (conditionally) complete: an \emph{entailed}
+verdict guarantees the conclusion logically follows from the stated
+context and assumptions. Steps marked \emph{refuted} are provably
+invalid under the formalized premises. The \emph{undecided} category
+handles solver incompleteness gracefully.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{8 benchmarks:} GSM8K, MATH, ARC-Challenge, LogiQA,
+    FOLIO, ProntoQA, HellaSwag-hard, custom multi-step deduction
+  \item \textbf{7 LLMs:} 7B to 70B parameter range
+  \item Step-level verifiability improves by 15--30 percentage points
+    across all model families
+  \item Final answer accuracy improves on 5 of 8 benchmarks;
+    negligible change on the remaining 3
+  \item SFT on backtracking traces provides lasting improvements without
+    runtime solver dependency
+  \item Largest gains on tasks requiring deductive chaining (FOLIO, ProntoQA)
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{SBR vs.\ outcome-only reward:} Outcome reward improves final
+accuracy but not step-level verifiability; SBR improves both, confirming
+that process supervision is strictly more informative.
+
+\textbf{Backtracking vs.\ repeated sampling:} At equal inference budget,
+backtracking achieves higher accuracy by directing search toward logical
+faults rather than sampling independently.
+
+\textbf{Auto-formalization quality:} $\approx$85\% of steps are
+successfully formalized; failures are handled as \emph{undecided} and
+penalised only lightly, preventing over-penalisation of complex steps
+that exceed the SMT-LIB fragment.
+
+\textbf{$\alpha$ sensitivity:} Performance is stable for
+$\alpha \in [0.3, 0.7]$, with a slight preference for $\alpha = 0.5$.
+
+\section*{Reference}
+
+Jingyu Hu, Shu Yang, Weiru Liu, Di Wang.
+\textbf{LogicTrack: Auditing Reasoning Trajectories of Large Language
+Models with Formal Logic Solvers}.
+arXiv:2609.21492, September 2026.\\
+\url{https://arxiv.org/abs/2609.21492}
+
+\end{document}

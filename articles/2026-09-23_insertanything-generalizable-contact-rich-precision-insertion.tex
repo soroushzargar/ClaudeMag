@@ -1,0 +1,244 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  sim-to-real transfer \textbullet{}
+  contact-rich manipulation \textbullet{}
+  reinforcement learning \textbullet{}
+  force feedback}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  InsertAnything}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Single Simulation-Trained Policy Achieves 95\% Success Across Eight
+  Real-World Precision Insertion Tasks at 0.02\,mm Clearance}\par\vspace{6pt}
+
+{\small\textbf{By} [Authors, arXiv:2609.24511]}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.24511 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+InsertAnything trains a reinforcement-learning insertion policy entirely
+in simulation using only target poses and compact 3-axis fingertip forces,
+then deploys it directly to real robots---achieving 95.0\% success across
+eight unseen geometries at sub-millimeter clearances and the first perfect
+score on ManipulationNet's peg-in-hole benchmark.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Precision peg-in-hole insertion at sub-mm clearances
+    requires geometry-specific demonstrations; policies do not transfer
+    across shapes.
+  \item[Why it matters:] Industrial assembly requires a single robot to
+    insert hundreds of distinct parts; retraining per geometry is
+    impractical.
+  \item[Method:] RL in simulation with decoupled gated reward, 3D
+    fingertip force feedback, force smoothing, and state-independent
+    action standard deviations.
+  \item[Result:] 95.0\% success across 8 real insertion tasks; 20/20 on
+    ManipulationNet; min clearance 0.02\,mm.
+  \item[Evidence:] Cross-geometry and cross-clearance evaluation;
+    4-axis ablation study confirming each design choice.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Precision insertion---placing a peg or bolt into a hole with clearances
+as small as 0.02\,mm---is an archetypal industrial assembly skill. It
+requires tolerating position estimation errors, searching for alignment
+under contact, and recovering from jams. These challenges compound
+dramatically across geometries: the contact mechanics for a hexagonal
+peg differ from a round one, and the jam-recovery strategy that works
+for one fails for the other.
+
+The standard robotics pipeline collects new demonstrations or builds a
+new controller for each geometry. InsertAnything takes the opposite
+approach: train a single RL policy in simulation on \emph{one} geometry
+(hexagonal), using only a minimal sensor suite---target poses plus compact
+3D fingertip forces---and show that the resulting policy generalizes to
+eight qualitatively different real geometries it has never seen.
+
+The key insight is that the \emph{skills} required for insertion---lateral
+alignment search, jam detection via force, and downward insertion progress
+once aligned---are geometry-agnostic. The policy must learn these skills,
+not geometry-specific trajectories.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Imitation learning from demonstrations} binds generalization to
+the demonstrated geometries; re-collection is required for each new part.
+
+\textbf{Model-based contact planning} requires accurate part geometry and
+contact-mode enumeration, intractable for arbitrary shapes at runtime.
+
+\textbf{Vision-based RL} adds perception errors on top of control errors
+and requires careful camera calibration; contact state is ambiguous from
+images.
+
+\textbf{Rich tactile sensors} (GelSight, TacTip) provide contact images
+but introduce high-dimensional observation spaces and complex sim-to-real
+transfer for the sensor model itself.
+
+InsertAnything uses the simplest possible contact signal---3D force
+vectors per fingertip---which is easy to simulate and calibrate to real
+hardware, while being sufficient to carry the alignment and jam-recovery
+information needed for precise insertion.
+
+\section{Core Mechanism}
+
+\textbf{Observation Space.} Two compact inputs:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item A 6-DoF target pose for the end-effector
+  \item Smoothed 3D fingertip force readings $\tilde{\mathbf{f}}_t$
+\end{enumerate}
+No camera input. The force signal provides the sole contact feedback.
+
+\textbf{Decoupled Gated Reward.} The reward is gated by an alignment
+threshold $\epsilon_{\mathrm{align}}$:
+\[
+r_t = \begin{cases}
+r_{\mathrm{align}}(s_t) & \text{if lateral error} > \epsilon_{\mathrm{align}} \\
+r_{\mathrm{insert}}(s_t) & \text{otherwise}
+\end{cases}
+\]
+$r_{\mathrm{align}}$ rewards lateral error reduction; $r_{\mathrm{insert}}$
+rewards downward depth progress. The gate prevents premature insertion
+reward before alignment, eliminating the jam-inducing failure mode.
+
+\textbf{Force-Signal Smoothing.} A sliding-window average reduces noise
+without lag:
+\[
+\tilde{\mathbf{f}}_t = \frac{1}{W}\sum_{w=0}^{W-1}\mathbf{f}_{t-w}
+\]
+
+\textbf{State-Independent Action Standard Deviations.} The stochastic
+policy uses learned but state-independent $\boldsymbol{\sigma}$, preventing
+entropy collapse during the precision insertion phase and preserving
+exploratory behavior for jam recovery.
+
+\section{Technical Formulation}
+
+Policy:
+\[
+\pi_\theta:
+(\mathbf{p},\,\tilde{\mathbf{f}})\;\mapsto\;
+\mathcal{N}\!\left(\boldsymbol{\mu}_\theta(\mathbf{p},\tilde{\mathbf{f}}),\,
+\mathrm{diag}(\boldsymbol{\sigma}^2)\right)
+\]
+where $\mathbf{p}\in\mathbb{R}^7$ is the target pose and
+$\tilde{\mathbf{f}}\in\mathbb{R}^{3n_f}$ the smoothed forces for $n_f$
+fingertips.
+
+Alignment reward (lateral distance to hole axis):
+\[
+r_{\mathrm{align}} = -\!\sqrt{(x-x^*)^2 + (y-y^*)^2}
+\]
+
+Insertion reward (depth progress):
+\[
+r_{\mathrm{insert}} = z^* - z_t
+\]
+
+Full episode return:
+\[
+R = \sum_t \gamma^t r_t
+  + R_{\mathrm{success}}\cdot\mathbf{1}[\mathrm{depth}\ge d_{\mathrm{target}}]
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Randomise hole position ($\pm5$\,mm), peg orientation ($\pm15°$),
+    friction in MuJoCo; train PPO on hexagonal insertion only.
+  \item Calibrate force scaling (simulation to real sensor).
+  \item Deploy on real robot---zero demonstrations, zero fine-tuning.
+  \item Evaluate on 8 novel real geometries (round, square, triangular,
+    star-shaped, L-slot, and more).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The decoupled gated reward provides a structural inductive bias: the
+policy \emph{cannot} earn insertion reward without first satisfying
+the alignment criterion. This eliminates the reward-hacking failure mode
+where policies achieve partial insertion depth by wedging the peg
+in a jammed position, which maximises depth reward but causes part damage.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Main result:} 95.0\% average success over 8 real tasks;
+    minimum clearance 0.02\,mm
+  \item \textbf{ManipulationNet:} First-ever 20/20 perfect score on the
+    peg-in-hole benchmark under the Human-in-the-Loop protocol with fully
+    autonomous insertion motions
+  \item \textbf{Cross-clearance:} Policy trained at 0.1\,mm generalises
+    to 0.05\,mm with modest success degradation
+  \item \textbf{Force reduction:} Peak contact force $\approx$30\% lower
+    than baseline without force feedback, reducing part wear
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{No force feedback (pose-only):} Success drops to $\approx$40\%;
+the policy cannot recover from jams without force information.
+
+\textbf{No decoupled gate (linear sum reward):} Success drops to
+$\approx$65\%; premature insertion attempts cause hard jams.
+
+\textbf{State-dependent $\sigma$:} Success drops to $\approx$70\%; the
+policy becomes near-deterministic during insertion, losing jam-recovery
+exploration.
+
+\textbf{No force smoothing:} Success drops to $\approx$80\%; noisy force
+signals cause erratic recovery oscillations that destabilise alignment.
+
+\section*{Reference}
+
+\textbf{InsertAnything: Generalizable Contact-Rich Precision Insertion
+from Simulation to Reality}.
+arXiv:2609.24511, September 2026.\\
+\url{https://arxiv.org/abs/2609.24511}
+
+\end{document}

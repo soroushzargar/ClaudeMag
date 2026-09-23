@@ -1,0 +1,259 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  RLVR \textbullet{}
+  entropy reward \textbullet{}
+  LLM reasoning efficiency \textbullet{}
+  chain-of-thought}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  ERR{+}: Sequential Entropy Resolution}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Rewarding Token-Level Entropy Drops Teaches Decisive Reasoning and
+  Cuts Chain-of-Thought Length on AIME, AMC, and STEM Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Juxin Chen et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2608.28771 \textbullet{} Findings of EMNLP 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Correct chain-of-thought traces collapse token-level entropy more
+frequently and more sharply than incorrect ones. ERR+ rewards these drops
+in Phase~1 and compresses trace length in Phase~2, improving accuracy by
+2--5 points and reducing trace length by 15--25\% on five math and STEM
+benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] RLVR-trained large reasoning models produce accurate but
+    verbose traces; existing length penalties cut indiscriminately and
+    degrade accuracy.
+  \item[Why it matters:] Long traces waste inference compute; for deployed
+    LRMs on math and STEM tasks, shorter decisive reasoning directly reduces
+    serving cost.
+  \item[Method:] Two-phase RLVR: Phase~1 rewards log-normalized cumulative
+    entropy drops (gated on correctness); Phase~2 compresses length
+    relative to rollout-group peers via GRPO.
+  \item[Result:] +2--5 pp accuracy, --15--25\% trace length on AIME,
+    AMC, MATH-500, GPQA-Diamond, STEM multi-step.
+  \item[Evidence:] Ablations across 4 design axes confirm both phases
+    are necessary; log normalization critical for preventing length gaming.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning with verifiable rewards (RLVR) has produced
+state-of-the-art reasoning models. These models generate extended
+chain-of-thought (CoT) traces---sometimes spanning thousands of tokens---
+before emitting a final answer. The length is partly necessary: complex
+multi-step problems genuinely require extended computation. But a
+substantial fraction of trace tokens represents redundant backtracking,
+repeated reformulation, and exploratory text that does not advance the
+reasoning.
+
+The tension is delicate. Simply penalising length reduces redundancy but
+also cuts useful deliberation, leading to accuracy regression. What is
+needed is a way to distinguish \emph{decisive} reasoning steps---moments
+when the model resolves uncertainty and commits to a path---from
+\emph{indecisive} ones that wander or repeat.
+
+ERR+ proposes that token-level entropy drops are precisely this signal.
+When the model collapses its next-token distribution sharply, it has made
+a committed inference. Correct reasoning chains do this more frequently
+than incorrect ones, and rewarding this pattern produces models that are
+simultaneously more accurate \emph{and} more concise.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Binary outcome RLVR} rewards all correct traces equally,
+regardless of whether they are decisive or verbose. It provides no
+gradient signal toward more efficient reasoning.
+
+\textbf{Length penalties} (absolute or relative) reduce trace length but
+penalise useful long reasoning steps alongside useless ones. The accuracy
+degradation is well-documented.
+
+\textbf{KL regularisation toward a reference model} prevents entropy
+collapse globally but does not specifically encourage entropy drops
+\emph{during} the thinking phase---it regulates the overall distribution,
+not the dynamics within a trace.
+
+\textbf{Min-token objectives} force early answer commitment, degrading
+accuracy on hard problems that genuinely require extended reasoning.
+
+ERR+ is the first method to use the temporal \emph{pattern} of entropy
+changes within the thinking phase as a training signal, rather than
+aggregate trace length or final-state entropy.
+
+\section{Core Mechanism}
+
+\textbf{The Entropy Drop Observation.} Let $H_t = -\sum_v p_\theta(v|x_{<t})
+\log p_\theta(v|x_{<t})$ be the next-token entropy at position $t$ within
+the thinking phase $\mathcal{T}_{\mathrm{think}}$. An entropy \emph{drop}
+at position $t$ is $\Delta H_t = H_{t-1} - H_t > 0$.
+
+Empirical analysis across multiple model families (7B--70B) reveals:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Correct reasoning traces have 30--50\% more entropy drops on
+    average than incorrect ones on MATH and AIME tasks
+  \item The magnitude of drops is also larger in correct traces
+  \item This pattern holds even when controlling for total trace length
+\end{itemize}
+
+\textbf{Phase~1: Entropy Relief Reward (ERR).} The cumulative entropy
+drop, log-normalized and gated on correctness, forms the ERR bonus:
+\[
+\mathrm{ERR}(\tau)
+= \frac{\sum_{t\in\mathcal{T}_{\mathrm{think}}}
+      \max(0,\,H_{t-1}-H_t)}
+      {\log(|\tau|+1)}
+  \cdot \mathbf{1}[a(\tau)=a^*]
+\]
+
+\textbf{Phase~2: Group-Relative Length Compression.} A GRPO-style penalty
+rewards traces that are shorter than their rollout-group average:
+\[
+r_{\mathrm{len}}(\tau)
+= -\gamma\cdot\frac{|\tau| - \bar{|\tau|}_{\mathrm{group}}}
+                   {\bar{|\tau|}_{\mathrm{group}}}
+\]
+
+\section{Technical Formulation}
+
+Token-level entropy:
+\[
+H_t = -\sum_{v\in\mathcal{V}}
+  p_\theta(v\mid x_{<t})\,\log p_\theta(v\mid x_{<t})
+\]
+
+Log-normalized entropy relief:
+\[
+\mathrm{ERR}(\tau)
+= \frac{1}{\log(|\tau|+1)}
+  \sum_{t\in\mathcal{T}_{\mathrm{think}}}
+  \max(0,\,H_{t-1}-H_t)
+  \cdot \mathbf{1}[a(\tau)=a^*]
+\]
+
+Phase~1 total reward:
+\[
+r_1(\tau) = r_{\mathrm{base}}(\tau) + \beta\cdot\mathrm{ERR}(\tau)
+\]
+
+Phase~2 total reward:
+\[
+r_2(\tau) = r_{\mathrm{base}}(\tau)
+  - \gamma\cdot\frac{|\tau|-\bar{|\tau|}_{\mathrm{group}}}
+                    {\bar{|\tau|}_{\mathrm{group}}}
+\]
+
+Phase~1 policy gradient:
+\[
+\nabla_\theta\mathcal{L}_1
+= -\mathbb{E}_\tau\!\left[r_1(\tau)\cdot
+  \nabla_\theta\log p_\theta(\tau)\right]
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Start from a CoT-fine-tuned base model.
+  \item \textbf{Phase~1:} Run RLVR with $r_1$ for $N_1$ steps;
+    monitor accuracy and mean CED (cumulative entropy drop).
+  \item \textbf{Phase~2:} Continue from Phase~1 checkpoint with $r_2$
+    for $N_2$ steps; monitor accuracy and trace length.
+  \item Evaluate at fixed inference budget (greedy, no search).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The log-normalization in ERR provides a formal argument against length
+gaming: the ERR bonus grows only as $O(\log |\tau|)$ with length, while
+the number of possible entropy drops grows as $O(|\tau|)$. A model that
+increases length purely to accumulate entropy drops earns a
+$O(|\tau| / \log|\tau|)$ bonus but pays increasing KL cost---net loss
+for long random traces.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Benchmarks:} AIME 2024, AMC 2023, MATH-500,
+    GPQA-Diamond, custom STEM multi-step dataset
+  \item Accuracy improves by 2--5 pp over RLVR-only baseline
+  \item Trace length decreases by 15--25\% relative to Phase~1 baseline
+  \item ERR+ outperforms length-penalty-only methods at matched length
+  \item Mean CED increases by $\approx$40\% after Phase~1 training,
+    confirming decisiveness is learned, not length
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Phase~1 only:} Accuracy improves; trace length unchanged.
+ERR alone drives decisiveness but not compression.
+
+\textbf{Phase~2 only (no Phase~1):} Length decreases; accuracy
+\emph{degrades} by 3--4 pp. Phase~1 first establishes the decisive
+reasoning style that Phase~2 then compresses.
+
+\textbf{No log-normalization:} Accuracy improves; trace length
+\emph{increases}---the model games the reward by generating more drops
+absolutely, confirming that normalization is essential.
+
+\textbf{No correctness gating:} Entropy drops in incorrect traces are
+also rewarded; reasoning quality degrades, confirming that decisive wrong
+reasoning is worse than exploratory wrong reasoning.
+
+\textbf{$\beta$ sweep:} Optimal $\beta\in[0.2, 0.5]$; large $\beta$
+collapses entropy across all positions, hurting exploration.
+
+\section*{Reference}
+
+Juxin Chen et al.
+\textbf{ERR{+}: Sequential Entropy Resolution for Efficient and
+Decisive LLM Reasoning}.
+arXiv:2608.28771. Findings of EMNLP 2026.\\
+\url{https://arxiv.org/abs/2608.28771}
+
+\end{document}

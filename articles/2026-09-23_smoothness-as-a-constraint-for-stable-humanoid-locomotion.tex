@@ -1,0 +1,252 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  humanoid locomotion \textbullet{}
+  constrained reinforcement learning \textbullet{}
+  smoothness \textbullet{}
+  sim-to-real}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Smoothness as a Constraint for Stable
+  Humanoid Locomotion}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  DeCap Decouples Upper- and Lower-Body Smoothness into Separate
+  Constraint Groups, Cutting Real-Robot Action Rate by 2.50$\times$
+  Without Reward Retuning Across Terrains}\par\vspace{6pt}
+
+{\small\textbf{By} Utsav Panchal, Denis Kleyko, Unal Artan \&
+  Amy Loutfi}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.24552 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reward-based smoothness penalties compete with locomotion objectives and
+treat the body uniformly. DeCap reformulates whole-body smoothness as
+explicit upper- and lower-body constraints with a bounded barrier penalty,
+reducing upper-body action rate by 2.50$\times$ and acceleration by
+2.18$\times$ on real humanoids while transferring to new terrains without
+reward retuning.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Reward-based smoothness competes with task rewards
+    and treats upper and lower body uniformly, ignoring their different
+    physical roles in humanoid stability.
+  \item[Why it matters:] Jerky upper-body motions destabilize center-of-mass
+    trajectories; over-smoothing the lower body prevents reactive stepping
+    on uneven terrain.
+  \item[Method:] DeCap: separate tight/loose bounded barrier constraints
+    for upper/lower body, formulated as an RL constraint term.
+  \item[Result:] 2.50$\times$ upper-body action-rate reduction,
+    2.18$\times$ acceleration reduction; terrain transfer without reward
+    retuning.
+  \item[Evidence:] Real humanoid whole-body control evaluation on flat
+    ground, stairs, slopes, and stepping stones; 4-axis ablation study.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Humanoid robots are expected to walk, carry objects, and navigate
+complex terrains while remaining stable and human-like in motion.
+Reinforcement learning has enabled impressive locomotion policies,
+but the physical quality of the motion---smoothness, absence of
+oscillations, predictability---has been an afterthought, typically
+handled by adding penalty terms to the reward function.
+
+This paper argues that treating smoothness as a reward penalty is
+the wrong abstraction for two reasons:
+
+\textbf{First, it creates objective competition.} A smoothness penalty
+competes with speed rewards and stability bonuses during gradient descent.
+The resulting trade-off must be re-tuned for every new terrain, speed
+target, and robot variant---a laborious process that does not transfer.
+
+\textbf{Second, it treats the body uniformly.} The upper body (torso,
+arms) must be tightly regulated to prevent tipping---inertial forces
+from fast arm motion directly perturb the center-of-mass. The lower body
+(hips, knees, ankles) must remain reactive to ground-contact perturbations;
+over-smoothing the legs leads to falls on uneven terrain.
+
+DeCap (Decoupled Constraint-aware Policy) addresses both problems by
+reformulating smoothness as explicit, body-part-specific constraints
+within the RL objective.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Reward-based action-rate penalties} are soft: the optimizer
+can trade smoothness for task performance whenever doing so increases
+total reward. The penalty coefficient requires extensive per-terrain tuning.
+
+\textbf{Lipschitz-constrained policies} bound the policy's output
+sensitivity globally but cannot differentiate between upper and lower
+body requirements.
+
+\textbf{Model predictive control (MPC)} provides smooth trajectories by
+design but requires accurate dynamics models and fails on highly uncertain
+terrain contacts.
+
+\textbf{Trajectory imitation} from motion capture data inherits human
+smoothness but is brittle to out-of-distribution perturbations and
+terrain types.
+
+\section{Core Mechanism}
+
+\textbf{Decoupled Constraint Groups.} DeCap partitions joints into
+upper-body set $\mathcal{U}$ (torso, arms, neck) and lower-body set
+$\mathcal{L}$ (hips, knees, ankles), reflecting their distinct physical
+roles. Smoothness is measured as joint action rate:
+\[
+\dot{a}_k^{(j)} = \frac{a_k^{(j)} - a_{k-1}^{(j)}}{\Delta t}
+\]
+
+Two separate constraint limits are set: tight $\kappa_U$ for the upper
+body (derived from human motion capture statistics), loose $\kappa_L$
+for the lower body (set to allow reactive stepping).
+
+\textbf{Bounded Barrier Penalty.} Instead of a standard log-barrier
+(which diverges at the constraint limit and causes training instability),
+DeCap uses a bounded barrier that activates proactively in the range
+$[\alpha\kappa,\kappa)$ and saturates at the limit:
+\[
+\phi(c,\kappa) = \begin{cases}
+0 & c \le \alpha\kappa \\[3pt]
+\dfrac{(c-\alpha\kappa)^2}{\kappa-\alpha\kappa} & \alpha\kappa < c < \kappa \\[3pt]
+\kappa - \alpha\kappa & c \ge \kappa
+\end{cases}
+\]
+where $c = \|\dot{\mathbf{a}}_k\|_2$ is the action-rate norm and
+$\alpha\in(0,1)$ is the activation threshold fraction.
+
+\section{Technical Formulation}
+
+Upper-body constraint barrier reward term:
+\[
+R_{\mathrm{smooth}}^U
+= -\lambda_U\cdot\phi\!\left(\|\dot{\mathbf{a}}_k^U\|_2,\;\kappa_U\right)
+\]
+
+Lower-body constraint barrier:
+\[
+R_{\mathrm{smooth}}^L
+= -\lambda_L\cdot\phi\!\left(\|\dot{\mathbf{a}}_k^L\|_2,\;\kappa_L\right)
+\]
+
+Second-order (acceleration) constraint for the upper body:
+\[
+\ddot{a}_k^{(j)} = \frac{\dot{a}_k^{(j)} - \dot{a}_{k-1}^{(j)}}{\Delta t},
+\quad
+R_{\mathrm{acc}}^U
+= -\lambda_{\mathrm{acc}}\cdot\phi\!\left(
+  \|\ddot{\mathbf{a}}_k^U\|_2,\;\kappa_U^{\mathrm{acc}}\right)
+\]
+
+Full RL objective:
+\[
+\mathcal{L}(\theta) = \mathcal{L}_{\mathrm{task}}(\theta)
+  + R_{\mathrm{smooth}}^U + R_{\mathrm{smooth}}^L + R_{\mathrm{acc}}^U
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Partition robot URDF joints into $\mathcal{U}$ and $\mathcal{L}$.
+  \item Set $\kappa_U$ from human motion-capture action-rate statistics;
+    set $\kappa_L$ empirically to allow reactive stepping.
+  \item Train PPO in Isaac Gym on flat ground with domain randomisation.
+  \item Deploy on real humanoid; evaluate on flat ground and 3 novel
+    terrains (stairs, slopes, stepping stones) without reward retuning.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The bounded barrier provides a formal advantage over log-barriers: the
+gradient is bounded everywhere (including at the constraint limit),
+preventing catastrophic gradient magnitudes that destabilise RL training.
+For $c \ge \kappa$, the barrier saturates at $\kappa - \alpha\kappa$, a
+finite value that continues to penalise violations while remaining numerically
+stable. The proactive activation at $\alpha\kappa$ teaches the policy to
+stay away from the limit before it is reached.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Upper-body action rate:} 2.50$\times$ reduction over
+    reward-based smoothness baseline on flat ground
+  \item \textbf{Upper-body acceleration:} 2.18$\times$ reduction
+  \item \textbf{Lower-body smoothness:} Marginal improvement;
+    reactive range preserved
+  \item \textbf{Transient motion:} Reduced oscillations in torso and
+    arm joints during gait transitions
+  \item \textbf{Terrain transfer:} Fixed constraints transfer to stairs,
+    slopes, and stepping stones without reward retuning; reward-based
+    baselines require significant coefficient adjustment on each terrain
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{No decoupling (single constraint group):} Upper-body smoothness
+improves, but lower-body reactivity degrades on uneven terrain, leading
+to falls; confirms that separate limits are necessary.
+
+\textbf{Standard log-barrier:} Training instability due to gradient
+explosions near the constraint limit; DeCap's bounded barrier resolves this.
+
+\textbf{Reward term instead of constraint:} Smoothness improvement is
+$\approx$40\% of DeCap's at matched task-reward coefficient, confirming
+that the constraint formulation provides direct, stable control over the
+smoothness quantities.
+
+\textbf{$\alpha$ sensitivity:} $\alpha=0.7$ provides the best balance;
+smaller $\alpha$ (earlier activation) over-constrains and reduces
+task reward by $\approx 5\%$.
+
+\section*{Reference}
+
+Utsav Panchal, Denis Kleyko, Unal Artan, Amy Loutfi.
+\textbf{Smoothness as a Constraint for Stable Humanoid Locomotion}.
+arXiv:2609.24552, September 2026.\\
+\url{https://arxiv.org/abs/2609.24552}
+
+\end{document}
