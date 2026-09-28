@@ -1,0 +1,71 @@
+ML Papers List — 2026-09-28
+Generated for ClaudeMag
+
+1. Beyond Repeated Sampling: Learning Search Policies for LLM Reasoning [arXiv 2026]
+   Authors: Ismail Labiad, Matthieu Kowalski, Marc Schoenauer, Rémi Munos, Julia Kempe
+   Affiliation: Meta FAIR
+   Venue/ID: arXiv:2609.26704
+   URL: https://arxiv.org/abs/2609.26704
+   Summary: Naive repeated sampling for LLM test-time compute generates near-duplicate attempts
+   because exploration occurs only through local decoding noise. This paper proposes semantic-level
+   exploration by first sampling problem-specific concepts, hints, or strategies and conditioning
+   answer generation on them. A small concept generator is optimized with reinforcement learning
+   to maximize the downstream pass@k of a larger, frozen answer generator. The trained concept
+   generator substantially outperforms naive repeated sampling and untuned larger models on hard
+   mathematical reasoning problems, and transfers to answer generators it was never trained against,
+   including models from different families.
+
+2. Hallucination Neurons and Where to Find Them: An Investigation into the Existence of Hallucination Neurons [arXiv 2026]
+   Authors: Not specified
+   Affiliation: Not specified
+   Venue/ID: arXiv:2609.29781
+   URL: https://arxiv.org/abs/2609.29781
+   Summary: Sparse probing methods claim to identify small sets of neurons that causally detect
+   hallucinations in LLMs, but these claims are rarely tested against known failure modes of
+   L1-regularized probing in correlated, high-dimensional feature spaces. This paper proposes a
+   five-step diagnostic protocol covering feature correlation, bootstrap stability, sparse vs dense
+   ranking disagreement, intervention baselines, and cross-dataset evaluation. Applied to H-Neurons
+   in Gemma 3 4B across TriviaQA, BioASQ, and NQ-Open, it finds 19 of 22 selected neurons have
+   |r| > 0.7 with other features, moderate bootstrap stability, and weak sparse-dense ranking
+   overlap, showing that sparse predictive structure coexists with non-unique neuron selection.
+
+3. Scaling of Capability and Efficiency at Inference Time in Large Reasoning Models [arXiv 2026]
+   Authors: Not specified
+   Affiliation: Not specified
+   Venue/ID: arXiv:2609.27166
+   URL: https://arxiv.org/abs/2609.27166
+   Summary: Capability (solve rate) and efficiency (tokens to solution) in large reasoning models
+   are characterized jointly using hierarchical Bayesian models on the DeepSeek-R1-Distill family
+   across four classes of arithmetic and algorithmic problems. At fixed model size, solve probability
+   decays approximately exponentially with instance size. The characteristic scale of this decay
+   increases as a power law with model parameters. Among correctly solved instances, output length
+   grows approximately as a power law with instance size, providing the first quantitative joint
+   account of capability and efficiency scaling at inference time.
+
+4. Body-Grounded Replanning for Physically Adaptive Manipulation [arXiv 2026]
+   Authors: Namiko Saito, Hiroshi Kera
+   Affiliation: Microsoft Research Asia (Tokyo); Waseda University; Chiba University; National Institute of Informatics
+   Venue/ID: arXiv:2609.30024
+   URL: https://arxiv.org/abs/2609.30024
+   Summary: A manipulation strategy may remain geometrically feasible while becoming physically
+   unsuitable due to increased joint load or limited mobility. This paper proposes body-grounded
+   high-level replanning, where body-state events trigger LLM-based strategy selection that
+   interprets joint-level state, recent execution statistics, and execution history to choose a
+   context-dependent alternative while leaving the task objective and low-level controller
+   unchanged. Evaluated on a reaching task under controlled load and asymmetric mobility
+   constraints, body-grounded replanning maintains high task success while reducing physical
+   effort and enabling more efficient strategy adaptation.
+
+5. On the Diffusibility of High-Dimensional Latents [ECCV 2026]
+   Authors: Chao Feng, Zhiyang Xu, Bowei Chen, Yuanjun Xiong, Xiyao Wang, Jui-Hsien Wang, Richard Zhang, Zhe Lin, Andrew Owens, Yijun Li
+   Affiliation: Not fully specified
+   Venue/ID: arXiv:2609.28473 — Accepted, ECCV 2026
+   URL: https://arxiv.org/abs/2609.28473
+   Summary: Representation Autoencoders (RAEs) let diffusion models operate in pretrained visual
+   encoder feature spaces, but reconstruction-finetuned encoders exhibit a sharp collapse in
+   effective dimensionality. Standard velocity prediction in flow matching must then fit orthogonal
+   noise directions outside the low-dimensional signal manifold, making optimization inefficient.
+   This paper shows that switching to the clean data parameterization (x₀-prediction) focuses
+   learning on the signal manifold and substantially improves generation quality in high-dimensional
+   RAE latent spaces, providing an analysis grounded in the geometry of reconstruction-tuned
+   representations.

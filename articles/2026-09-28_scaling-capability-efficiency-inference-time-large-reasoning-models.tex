@@ -1,0 +1,239 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  scaling laws \textbullet{}
+  inference-time compute \textbullet{}
+  chain-of-thought \textbullet{}
+  Bayesian analysis}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Scaling of Capability and Efficiency}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Joint Quantitative Laws for Solve Rate and Token Cost
+  in Large Reasoning Models}\par\vspace{6pt}
+
+{\small\textbf{By} (authors not specified in pre-print metadata)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.27166 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Using hierarchical Bayesian models applied to the DeepSeek-R1-Distill family,
+this paper shows that solve probability decays exponentially with problem
+hardness while the characteristic scale grows as a power law with model
+parameters---and that among solved instances, output length grows as a power
+law with instance size, providing the first joint quantitative account of
+capability and efficiency scaling at inference time.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Capability and efficiency in chain-of-thought reasoning
+    both depend on problem hardness and model size, but their joint scaling
+    behaviour has not been quantitatively characterized.
+  \item[Why it matters:] Without joint scaling laws, predicting compute
+    requirements for a given problem difficulty and model size is guesswork.
+  \item[Method:] Hierarchical Bayesian models fit to the DeepSeek-R1-Distill
+    family across four algorithmic problem classes with controlled hardness.
+  \item[Result:] Exponential capability decay with power-law characteristic
+    scale; power-law token cost growth among correctly solved instances.
+  \item[Evidence:] 1.5B--70B parameter DeepSeek-R1-Distill models on
+    arithmetic, multiplication, sorting, and path-finding.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large reasoning models (LRMs) achieve state-of-the-art results by generating
+extended chain-of-thought traces before producing final answers. The amount
+of computation consumed at inference time---measured in output tokens---grows
+substantially with problem difficulty, and harder problems are solved by
+larger models. Both capability (solve rate) and efficiency (tokens per
+correct solution) thus depend on at least two variables: problem hardness and
+model size.
+
+Despite the obvious importance of understanding this dependency, it has not
+been characterized in the form of quantitative scaling laws. Practitioners
+must therefore guess how many tokens a given model will require to solve
+problems of a given difficulty, and how much larger a model must be to solve
+problems that the current model cannot.
+
+This paper provides the first joint quantitative account of capability and
+efficiency scaling at inference time, using controlled algorithmic problem
+classes where hardness is operationalized as instance size and correctness
+is verified exactly.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Average accuracy evaluations} aggregate performance across problem
+difficulties, masking the exponential decay with hardness and conflating
+easy-instance dominance with true capability on hard instances.
+
+\textbf{Single-model comparisons} at fixed compute budgets cannot reveal
+how model scale shifts the capability-efficiency frontier.
+
+\textbf{Simple regression on token counts} ignores the joint structure of
+success and token cost, treating failed attempts identically to efficient
+successes.
+
+\textbf{Prior scaling laws} (Chinchilla, etc.) address training compute and
+not inference-time token generation conditioned on problem difficulty, leaving
+the test-time compute dimension uncharacterized.
+
+\section{Core Mechanism}
+
+\textbf{Hierarchical Bayesian Model.} The paper fits a generative model
+to solve indicators and token counts across models and problem instances.
+The model has three layers:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Instance level:} binary solve indicator and token count per
+    instance per model.
+  \item \textbf{Class level:} partial pooling of scaling exponents across
+    four problem classes.
+  \item \textbf{Model level:} power-law relationship between model size and
+    scaling parameters.
+\end{enumerate}
+
+\textbf{Problem Classes.} Four algorithmic tasks with exact verifiers:
+arithmetic computation, digit multiplication, list sorting, and path-finding.
+Hardness is controlled by instance size $n$ (digits, list length, or graph
+nodes).
+
+\textbf{Model Family.} DeepSeek-R1-Distill at 1.5B, 7B, 14B, 32B, and 70B
+parameters---a controlled family where differences arise from model scale
+alone.
+
+\section{Technical Formulation}
+
+Solve probability at instance size $n$ and model parameter count $m$:
+\[
+p(n, m) = p_0(m) \cdot \exp\!\left(-\frac{n}{\lambda(m)}\right)
+\]
+
+Characteristic scale as a power law in model parameters:
+\[
+\lambda(m) = \alpha \cdot m^\beta
+\]
+
+Conditional output length (correctly solved instances):
+\[
+\mathbb{E}[L \mid \text{solved},\, n,\, m]
+= \gamma(m) \cdot n^{\delta}
+\]
+
+Hierarchical priors (partial pooling across problem classes $k=1,\ldots,K$):
+\[
+\beta_k \sim \mathcal{N}(\mu_\beta,\, \sigma_\beta^2),
+\quad
+\delta_k \sim \mathcal{N}(\mu_\delta,\, \sigma_\delta^2)
+\]
+
+All parameters are jointly estimated by MCMC, yielding posterior distributions
+over scaling exponents $\beta$ and $\delta$ per class.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item For each (model, problem class, instance size): generate up to $R$
+    attempts; record solve indicator and output token count.
+  \item Fit the hierarchical Bayesian model to the full dataset using MCMC
+    (Stan or equivalent).
+  \item Report posterior means and 90\% credible intervals for
+    $\alpha, \beta, \gamma, \delta$ per class.
+  \item Use fitted model to predict solve probability and expected token cost
+    for new (model size, instance size) pairs.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The hierarchical model provides posterior uncertainty over scaling exponents.
+Within the linear-arithmetic and combinatorial-algorithmic problem classes
+studied, exponential solve-rate decay with power-law characteristic scale is
+a consistent structural finding, not an artifact of a single model or
+problem class. Cross-class partial pooling provides regularization that
+stabilizes estimates at large difficulty where data is sparse.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{5 models:} 1.5B to 70B DeepSeek-R1-Distill
+  \item \textbf{4 problem classes:} arithmetic, digit multiplication, list
+    sorting, path-finding
+  \item Solve probability fits exponential decay with hardness ($R^2 > 0.92$)
+    across all classes
+  \item Characteristic scale exponent $\beta \approx 0.3$--$0.5$ by class;
+    path-finding has the steepest decay
+  \item DeepSeek-R1-Distill-70B achieves approximately $10\times$ larger
+    characteristic scale than the 1.5B model on arithmetic
+  \item Output length exponent $\delta \approx 1.0$--$1.5$: near-linear to
+    super-linear growth with instance size
+  \item Efficiency degrades faster than capability with hardness: diminishing
+    returns to scale on the hardest instances
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Problem class differences:} Path-finding shows the steepest capability
+decay, suggesting it requires qualitatively more extensive search. Arithmetic
+shows the shallowest, consistent with near-algorithmic solutions.
+
+\textbf{Pooling vs.\ no pooling:} Hierarchical pooling across classes stabilizes
+estimates at large difficulty; without pooling, estimates at the hardest
+difficulty levels have large variance.
+
+\textbf{Efficiency vs.\ capability trade-off:} The power-law exponent
+$\delta > 1$ for output length implies that even when a larger model can solve
+harder instances, it pays a super-linear token cost. Compute-optimal scaling
+must balance capability and efficiency gains.
+
+\textbf{Implications:} Given model size $m$ and a target solve probability
+$p^*$ on instances of size $n^*$, the minimum required model size is:
+$m^* = (\lambda^{-1}(-n^*/\ln p^*)/\alpha)^{1/\beta}$---a prediction the
+framework makes interpretable and calibrated.
+
+\section*{Reference}
+
+\textbf{Scaling of Capability and Efficiency at Inference Time in Large
+Reasoning Models}. arXiv:2609.27166, September 2026.\\
+\url{https://arxiv.org/abs/2609.27166}
+
+\end{document}

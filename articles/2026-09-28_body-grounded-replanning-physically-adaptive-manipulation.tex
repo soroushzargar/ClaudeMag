@@ -1,0 +1,243 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  robot manipulation \textbullet{}
+  LLM planning \textbullet{}
+  adaptive control \textbullet{}
+  physical state}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Body-Grounded Replanning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Physically Adaptive Robot Manipulation via
+  LLM-Based Internal State Replanning}\par\vspace{6pt}
+
+{\small\textbf{By} Namiko Saito \& Hiroshi Kera
+  (Microsoft Research Asia Tokyo; Waseda University;
+  Chiba University; National Institute of Informatics)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.30024 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Body-grounded high-level replanning uses internal physical signals---joint
+torques and mobility constraints---to trigger LLM-based strategy switching
+during manipulation, maintaining task success while substantially reducing
+physical effort under load and asymmetric mobility conditions.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] A manipulation strategy may remain geometrically feasible
+    while becoming physically unsuitable due to increased joint load or
+    limited mobility; current planners have no mechanism to detect or
+    respond to this.
+  \item[Why it matters:] Robots deployed in real environments accumulate
+    physical state changes that degrade performance and increase wear; without
+    adaptation, task success and hardware longevity both suffer.
+  \item[Method:] Body-state events trigger an LLM that interprets joint-level
+    state and execution history to select a physically appropriate alternative
+    strategy from a library, without changing the task objective or low-level
+    controller.
+  \item[Result:] High task success maintained; physical effort reduced; more
+    efficient strategy adaptation than without body state awareness.
+  \item[Evidence:] Reaching task under controlled load and asymmetric mobility
+    constraints, simulation and real robot.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Robotic manipulation planners reason carefully about the external world:
+obstacle geometry, object poses, grasp feasibility, and collision avoidance.
+But they typically treat the robot's own body as a fixed, ideal actuator
+whose physical state does not change during execution.
+
+In practice, this assumption fails. A joint under sustained load accumulates
+fatigue. A component subject to hardware wear constrains the workspace
+asymmetrically. A strategy that was geometrically and dynamically feasible
+at planning time may become physically unsuitable minutes later. The standard
+response is to run the low-level controller harder---increasing torque
+outputs to compensate---but this accelerates wear, increases energy
+consumption, and can ultimately cause failure.
+
+Body-grounded replanning introduces a new level in the robot's deliberative
+hierarchy: the ability to recognize when internal physical state has made
+the current high-level strategy inappropriate, and to select a physically
+better alternative without changing the task objective or the low-level
+controller.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard task-and-motion planning (TAMP)} optimizes over geometry
+and kinematics. Joint torque, fatigue, and mobility constraints are not
+modeled at the planning level; they are delegated to the controller.
+
+\textbf{Adaptive controllers} adjust joint-level torques and impedances
+in response to physical state but do not change high-level strategy (e.g.,
+which direction to approach, which grasp type to use).
+
+\textbf{LLM-based planners} condition on task descriptions and environmental
+observations---scene graphs, object attributes, occupancy maps---but have no
+access to joint-level physical signals.
+
+\textbf{Fault-tolerant planning} handles discrete, identifiable hardware
+failures (a joint locked at zero torque) but not continuous, graded physical
+state degradation.
+
+\section{Core Mechanism}
+
+\textbf{Body-State Event Detection.} Physical state $s_t = (\tau_t, q_t,
+v_t)$ is monitored continuously. An event triggers when:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Joint load: $\max_j \tau_{j,t} > \tau_\text{thresh}$
+  \item Mobility constraint: reachability $R(q_t) < R_\text{thresh}$
+\end{itemize}
+
+\textbf{LLM Strategy Selector.} On event, the LLM receives a prompt encoding:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Joint-level state:} current torques and a natural-language
+    summary of load distribution and mobility limits.
+  \item \textbf{Execution statistics:} success rate and mean completion time
+    of recent strategy attempts.
+  \item \textbf{Execution history:} which strategies were tried and with
+    what outcomes.
+\end{enumerate}
+
+The LLM selects a new strategy from the strategy library (e.g., ``approach
+from the side,'' ``use extended-arm reach,'' ``shift load to stronger joints'').
+
+\textbf{Decoupled Architecture.} High-level replanning and low-level
+execution are fully decoupled: replanning changes the strategy but not the
+task objective or the controller's internal parameters.
+
+\section{Technical Formulation}
+
+Let $\sigma \in \mathcal{S}$ be the current strategy from library $\mathcal{S}$.
+Event condition at time $t$:
+\[
+e_t = \mathbf{1}\!\left[
+  \max_j \tau_{j,t} > \tau_\text{thresh}
+  \;\vee\;
+  R(q_t) < R_\text{thresh}
+\right]
+\]
+
+On $e_t = 1$, the LLM is queried:
+\[
+\sigma_{t+1} = \mathrm{LLM}\!\left(
+  \mathcal{P}(s_{t-T:t},\; h_{0:t},\; \sigma_\text{hist})
+\right)
+\]
+
+where $\mathcal{P}$ encodes physical state over window $T$, execution
+history $h$, and prior strategies $\sigma_\text{hist}$.
+
+The optimization objective:
+\[
+\max_{\sigma_{0:\infty}} \Pr[\text{task success}]
+\;\;\text{s.t.}\;\;
+\sum_t \|\tau_t\|_2 \leq E_\text{budget}
+\]
+
+\section{Learning or Inference Procedure}
+
+No model training is required. At execution time:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Execute strategy $\sigma$ with the low-level controller.
+  \item Monitor $s_t$ at each control step.
+  \item On $e_t = 1$: construct prompt $\mathcal{P}$, query the LLM.
+  \item Update $\sigma \leftarrow \sigma_{t+1}$ and resume.
+  \item Repeat until success or timeout.
+\end{enumerate}
+
+The LLM runs at inference time only, with no task-specific fine-tuning.
+
+\section{What the Guarantee Says}
+
+The framework does not require training a new model. Its correctness relies
+on: (i) the strategy library covering alternative strategies that are
+physically better in the relevant conditions, and (ii) the LLM's ability to
+interpret physical state descriptions and select appropriate alternatives.
+Evaluation shows that both conditions hold for the tested configurations.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Task:} Reaching under two constraint types---controlled
+    joint load (added deadweight) and asymmetric mobility (reduced joint range)
+  \item \textbf{Platforms:} Simulated and real robot arm
+  \item Body-grounded replanning maintains high task success rates where
+    fixed-strategy baselines fail under increasing load
+  \item Cumulative joint torque is substantially reduced by selecting
+    strategies that distribute load across available joints
+  \item Strategy adaptation is more efficient (fewer failed attempts before
+    success) than random strategy switching when mobility is asymmetric
+  \item Performance is robust across multiple off-the-shelf LLMs; stronger
+    models provide modestly better strategy selection
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Event threshold:} Too low $\tau_\text{thresh}$ causes excessive
+replanning; too high causes physical overload. Performance is robust within
+a reasonable range.
+
+\textbf{History window:} More execution history improves strategy selection
+for mobility constraints; load constraints show less sensitivity.
+
+\textbf{Strategy library size:} A larger library with more alternatives
+improves success under diverse constraints; the LLM selects appropriately
+among them.
+
+\textbf{Architecture decoupling:} The clean separation between replanning and
+execution means the framework can be added to any existing manipulation
+system without modifying the low-level controller.
+
+\section*{Reference}
+
+Namiko Saito, Hiroshi Kera.
+\textbf{Body-Grounded Replanning for Physically Adaptive Manipulation}.
+arXiv:2609.30024, September 2026.\\
+\url{https://arxiv.org/abs/2609.30024}
+
+\end{document}

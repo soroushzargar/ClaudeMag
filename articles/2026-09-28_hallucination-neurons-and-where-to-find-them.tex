@@ -1,0 +1,239 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mechanistic interpretability \textbullet{}
+  hallucination \textbullet{}
+  sparse probing \textbullet{}
+  neuron localization}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Hallucination Neurons and Where to Find Them}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  An Investigation into the Existence of Hallucination Neurons in LLMs
+  via Diagnostic Protocol}\par\vspace{6pt}
+
+{\small\textbf{By} (authors not specified in pre-print metadata)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.29781 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A five-step diagnostic protocol reveals that 19 of 22 claimed hallucination
+neurons in Gemma~3~4B have Pearson $|r|>0.7$ with other features, exhibit
+only moderate bootstrap stability, and show weak sparse-dense ranking overlap
+--- demonstrating that sparse predictive structure coexists with non-unique
+neuron selection, and that routine diagnostic validation is necessary before
+making causal localization claims.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Sparse probing claims specific neurons causally drive LLM
+    hallucination, but these claims are not tested against known failure modes
+    of L1-regularized probing in correlated feature spaces.
+  \item[Why it matters:] Non-unique neuron selection undermines the validity
+    of targeted steering and auditing based on claimed hallucination neurons.
+  \item[Method:] A five-step diagnostic protocol: feature correlation,
+    bootstrap stability, sparse vs.\ dense ranking, intervention baselines,
+    and cross-dataset evaluation.
+  \item[Result:] 19/22 H-Neurons fail the feature correlation criterion in
+    Gemma~3~4B; bootstrap stability and sparse-dense agreement are weak.
+  \item[Evidence:] TriviaQA, BioASQ, and NQ-Open across Gemma~3~4B and
+    MedGemma~4B.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Mechanistic interpretability of large language models has made rapid progress
+in identifying circuits, features, and neurons associated with specific
+behaviors. A particularly consequential line of work claims to identify
+``hallucination neurons''---small sets of neurons whose activation levels
+predict and causally drive factual hallucinations. If such neurons exist and
+are uniquely identifiable, they offer a compelling target for behavioral
+steering: suppress the neuron, suppress the hallucination.
+
+But neuron identification typically relies on L1-regularized (Lasso-style)
+sparse probing, which is well-known to select non-unique solutions in the
+presence of correlated features. A Lasso probe that achieves high AUROC does
+not establish that the selected neurons are the unique causal locus of the
+behavior---only that they are predictive given the regularization and the
+training data. In high-dimensional, highly correlated neural activation
+spaces, this distinction matters enormously.
+
+This paper proposes a minimum diagnostic standard for neuron-localization
+claims and applies it to the H-Neuron literature, revealing systematic
+non-uniqueness in the claimed hallucination neurons.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{L1-regularized probing} selects solutions non-uniquely when features
+are correlated: many alternative neuron sets achieve similar or better
+discrimination. The selected set depends on regularization strength,
+initialization, and the specific training instances.
+
+\textbf{High AUROC} is a necessary but not sufficient condition for
+localization. Many overlapping neuron subsets may achieve high AUROC; the
+probe's predictive success does not establish which neurons are causally
+necessary.
+
+\textbf{Ablation studies} (removing a selected neuron and measuring behavior
+change) are often compared against no-ablation baselines rather than against
+equally predictive alternative neurons, making causal claims fragile.
+
+\textbf{Single-dataset evaluation} cannot distinguish neurons that detect
+hallucination generically from neurons whose predictive power is specific to
+the evaluation dataset's format or domain.
+
+\section{Core Mechanism}
+
+\textbf{Five-Step Diagnostic Protocol.} The paper proposes five diagnostic
+criteria that should be satisfied before claiming unique neuron localization:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Feature correlation:} Flag selected neurons with Pearson
+    $|r|>0.7$ with unselected features as potentially non-unique.
+  \item \textbf{Bootstrap stability:} Measure Jaccard overlap of the selected
+    neuron set across bootstrap samples of the probe training data.
+  \item \textbf{Sparse vs.\ dense ranking:} Compare the ranking of neurons
+    by the L1 probe with their ranking by a dense (non-regularized) importance
+    score; low overlap signals L1-driven selection, not importance.
+  \item \textbf{Intervention baselines:} Compare ablation of selected neurons
+    against ablation of equally predictive randomly drawn neurons; a uniquely
+    causal neuron should show strictly greater behavior change.
+  \item \textbf{Cross-dataset evaluation:} Evaluate selected neurons on
+    held-out datasets not used for selection; poor transfer indicates
+    dataset-specific rather than general hallucination neurons.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+Let $\mathbf{h} \in \mathbb{R}^d$ be activations at a layer, $y \in \{0,1\}$
+the hallucination label. The L1-regularized probe solves:
+\[
+\hat{\beta} = \arg\min_\beta \;\mathcal{L}(y,\, \mathbf{h}^\top\beta)
+  + \lambda \|\beta\|_1
+\]
+Selected neuron set: $S = \{i : \hat{\beta}_i \neq 0\}$.
+
+Criterion 1 (feature correlation): Flag $S$ if
+$\exists\, j \notin S, i \in S$ such that $|\text{Corr}(h_i, h_j)| > 0.7$.
+
+Criterion 2 (bootstrap stability): $J_B = |S \cap S_b| / |S \cup S_b|$
+for bootstrap sample $b$; flag if $\mathbb{E}[J_B] < 0.8$.
+
+Criterion 3 (ranking disagreement): Spearman $\rho(\hat{\beta},
+\tilde{\beta})$ where $\tilde{\beta}$ is the dense-probe importance;
+flag if $\rho < 0.5$.
+
+Cross-dataset AUROC gaps (Gemma~3~4B vs MedGemma~4B):
+\[
+\Delta_\text{TriviaQA} = +0.311 \;\text{vs}\; +0.235
+\]
+\[
+\Delta_\text{BioASQ} = +0.474 \;\text{vs}\; +0.455
+\]
+\[
+\Delta_\text{NQ-Open} = +0.128 \;\text{vs}\; +0.112
+\]
+
+\section{Learning or Inference Procedure}
+
+The diagnostic is applied post-hoc to trained probes:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train an L1 probe on each (model, dataset) pair.
+  \item Record the selected neuron set $S$.
+  \item Apply each diagnostic criterion.
+  \item Report pass/fail and overall diagnostic verdict.
+\end{enumerate}
+No model training is performed; the protocol is a validation framework.
+
+\section{What the Guarantee Says}
+
+When all five criteria are satisfied, the selected neuron set is consistent
+with being a unique causal locus of the behavior. When criteria 1--3 fail
+(as they do here), the probe's predictive power is consistent with a broader
+class of alternative neuron sets, and the causal localization claim is not
+established. This does not falsify hallucination detection; it shows the
+detection is distributed, not localized.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{19 of 22} H-Neurons in Gemma~3~4B have Pearson $|r|>0.7$
+    with at least one unselected feature---failing criterion~1
+  \item Bootstrap Jaccard overlap is moderate, confirming sensitivity to
+    training subsample---failing criterion~2
+  \item Sparse-dense rank correlation is weak, indicating L1 regularization
+    drives the selection---failing criterion~3
+  \item Gemma~3~4B consistently outperforms MedGemma~4B on hallucination
+    probe AUROC across all three datasets
+  \item Cross-dataset probe quality varies, suggesting partial dataset
+    specificity in neuron selection
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{AUROC vs.\ uniqueness:} High AUROC is achieved by many overlapping
+neuron sets; the reported probe AUROC does not support localization.
+
+\textbf{Dataset specificity:} Different datasets select partially different
+neuron sets, consistent with distributed rather than universal hallucination
+neurons.
+
+\textbf{Implications for steering:} Interventions on L1-selected neurons may
+or may not generalize because many correlated alternatives exist. Robust
+steering likely requires denser probes, ensemble methods, or causal
+identification beyond predictive accuracy.
+
+\textbf{Broader message:} Routine diagnostic validation---particularly feature
+correlation and bootstrap stability checks---should be a minimum requirement
+for sparse-neuron localization claims in interpretability research.
+
+\section*{Reference}
+
+\textbf{Hallucination Neurons and Where to Find Them: An Investigation
+into the Existence of Hallucination Neurons}.
+arXiv:2609.29781, September 2026.\\
+\url{https://arxiv.org/abs/2609.29781}
+
+\end{document}

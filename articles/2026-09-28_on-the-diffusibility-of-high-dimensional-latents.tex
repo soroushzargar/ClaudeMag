@@ -1,0 +1,265 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  flow matching \textbullet{}
+  latent space \textbullet{}
+  representation learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  On the Diffusibility of High-Dimensional Latents}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Reconstruction-Finetuned Encoders Collapse to Low-Dimensional
+  Manifolds---Switch to Data Prediction to Fix Flow Matching}\par\vspace{6pt}
+
+{\small\textbf{By} Chao Feng, Zhiyang Xu, Bowei Chen, Yuanjun Xiong,
+  Xiyao Wang, Jui-Hsien Wang, Richard Zhang, Zhe Lin, Andrew Owens
+  \& Yijun Li}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.28473 \textbullet{} ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reconstruction-finetuned visual encoders exhibit a sharp collapse in effective
+dimensionality, leaving standard velocity prediction in flow matching to fit
+orthogonal noise directions outside the signal manifold; switching to
+$\mathbf{x}_0$-prediction (clean data parameterization) focuses optimization
+on the true signal subspace and substantially improves generation quality in
+high-dimensional Representation Autoencoder latent spaces.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Finetuning visual encoders for reconstruction collapses
+    their effective dimensionality, making standard velocity prediction in
+    flow matching inefficient because it must fit noise directions orthogonal
+    to the signal manifold.
+  \item[Why it matters:] Using pretrained visual encoder feature spaces as
+    diffusion latents is desirable for rich semantic representations, but
+    generation quality is poor without addressing this geometric mismatch.
+  \item[Method:] Analyze effective dimensionality collapse in reconstruction-
+    finetuned RAEs; show $\mathbf{x}_0$-prediction avoids fitting orthogonal
+    noise directions.
+  \item[Result:] Substantial improvement in FID and CLIP scores by switching
+    parameterization without any other change.
+  \item[Evidence:] CLIP ViT-L/14 and DINOv2 RAEs, ECCV 2026 evaluation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Latent diffusion models (LDMs) achieve high-quality image generation by
+operating in the compressed latent space of a variational autoencoder (VAE)
+rather than pixel space. A natural extension is to use the feature spaces of
+powerful pretrained visual encoders---CLIP, DINOv2, and their variants---as
+the latent space, combining the generative power of diffusion with the rich
+semantic representations learned by these encoders.
+
+Representation Autoencoders (RAEs) equip pretrained encoders with a learned
+decoder to enable image reconstruction from features. But many off-the-shelf
+encoders are trained for classification or contrastive objectives and discard
+fine-grained visual details. To enable high-quality reconstruction, RAEs
+fine-tune the encoder on reconstruction objectives.
+
+This finetuning introduces a subtle but consequential geometric problem:
+while the nominal feature dimension remains large (768, 1024, or more),
+the learned features concentrate near a much lower-dimensional subspace.
+Standard flow matching with velocity prediction must fit noise directions
+orthogonal to this subspace, making optimization inefficient and generation
+quality poor. This paper diagnoses the problem and proposes a simple,
+principled fix.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard VAE latents} (Stable Diffusion) are designed for diffusion:
+their dimensionality is explicitly controlled and their geometry is well-
+conditioned. RAE latents inherit neither property by design.
+
+\textbf{Velocity prediction} ($v$-prediction, $\varepsilon$-prediction) in
+flow matching assumes data fills the ambient space. When data concentrates
+on a low-dimensional manifold, the velocity field has large orthogonal
+components that carry no signal but must be learned, wasting capacity.
+
+\textbf{Higher nominal dimensionality} makes this worse: more dimensions
+implies more orthogonal directions to fit, even though no additional signal
+is present.
+
+\textbf{Dimensionality reduction} (PCA projection before diffusion) partially
+addresses the problem but requires separate engineering, discards
+representation structure, and introduces artifacts at reconstruction.
+
+\section{Core Mechanism}
+
+\textbf{Effective Dimensionality Analysis.} Feature dimensionality is
+quantified via the participation ratio of the feature covariance:
+\[
+d_\text{eff} = \frac{\left(\sum_i \lambda_i\right)^2}{\sum_i \lambda_i^2}
+\]
+where $\lambda_i$ are the eigenvalues of the feature covariance matrix.
+RAE features show a sharp collapse: $d_\text{eff} \ll d_\text{nominal}$---
+typically 5--15\% of the nominal dimension after reconstruction finetuning.
+
+\textbf{$\mathbf{x}_0$-Prediction.} In flow matching with linear interpolation:
+\[
+\mathbf{x}_t = (1-t)\,\mathbf{x}_0 + t\,\boldsymbol{\varepsilon},
+\quad \boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0},\mathbf{I}_d)
+\]
+
+Velocity target: $\mathbf{v} = \mathbf{x}_0 - \boldsymbol{\varepsilon}$,
+which has a large noise component $-\boldsymbol{\varepsilon}$ that spans the
+full $d$-dimensional space, forcing the model to fit orthogonal directions.
+
+Data target: $\mathbf{x}_0$, which lies on the $d_\text{eff}$-dimensional
+signal manifold. Predicting $\mathbf{x}_0$ avoids the orthogonal noise
+component entirely.
+
+\section{Technical Formulation}
+
+Let $\mathbf{x}_0 \in \mathbb{R}^d$ be an RAE feature with
+$d_\text{eff} \ll d$, and $\boldsymbol{\varepsilon} \sim \mathcal{N}(\mathbf{0},
+\mathbf{I}_d)$.
+
+The noisy sample at time $t$:
+\[
+\mathbf{x}_t = (1-t)\,\mathbf{x}_0 + t\,\boldsymbol{\varepsilon}
+\]
+
+Velocity-prediction loss:
+\[
+\mathcal{L}_v = \mathbb{E}_{t,\mathbf{x}_0,\boldsymbol{\varepsilon}}\!\left[
+  \|f_\theta(\mathbf{x}_t, t) - (\mathbf{x}_0 - \boldsymbol{\varepsilon})\|^2
+\right]
+\]
+
+Data-prediction loss:
+\[
+\mathcal{L}_{x_0} = \mathbb{E}_{t,\mathbf{x}_0,\boldsymbol{\varepsilon}}\!\left[
+  \|f_\theta(\mathbf{x}_t, t) - \mathbf{x}_0\|^2
+\right]
+\]
+
+The velocity residual decomposes as:
+\[
+\mathbf{x}_0 - \boldsymbol{\varepsilon}
+= \underbrace{\mathbf{x}_0}_{\text{signal, on manifold}}
+  - \underbrace{\boldsymbol{\varepsilon}}_{\text{noise, spans } \mathbb{R}^d}
+\]
+
+Fitting $\mathbf{x}_0$ only is equivalent to solving a projection onto the
+signal manifold, avoiding the orthogonal noise component. The optimization
+landscape for $\mathcal{L}_{x_0}$ is lower-dimensional and better-conditioned
+than for $\mathcal{L}_v$ when $d_\text{eff} \ll d$.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Finetune the pretrained visual encoder as a Representation
+    Autoencoder (RAE) for reconstruction quality.
+  \item Extract RAE features for the training image set.
+  \item Compute $d_\text{eff}$ to characterize the signal manifold.
+  \item Train a flow-matching generator with $\mathcal{L}_{x_0}$ instead
+    of $\mathcal{L}_v$.
+\end{enumerate}
+
+\textbf{Inference:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_d)$.
+  \item Integrate the learned flow from $t=T$ to $t=0$ using the
+    $\mathbf{x}_0$ prediction.
+  \item Decode the generated feature $\mathbf{x}_0$ with the RAE decoder.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+When $d_\text{eff} \ll d$, $\mathcal{L}_v$ is provably harder to optimize
+than $\mathcal{L}_{x_0}$ because the orthogonal noise components constitute
+a high-dimensional regression problem with no signal---they can only be
+fitted by memorization. The data parameterization eliminates this by
+construction. The benefit scales with $d/d_\text{eff}$: the greater the
+effective dimensionality collapse, the larger the expected improvement.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Evaluated with CLIP ViT-L/14 and DINOv2 RAEs at feature dimensions
+    768 and 1024
+  \item $d_\text{eff}$ is 5--15\% of $d_\text{nominal}$ after reconstruction
+    finetuning
+  \item $\mathbf{x}_0$-prediction achieves substantially better FID compared
+    to velocity prediction in the same RAE latent space
+  \item CLIP similarity scores also improve, confirming benefit beyond
+    distributional statistics
+  \item Results are robust across encoder types and RAE decoder architectures
+  \item FID gap between parameterizations correlates with $d/d_\text{eff}$,
+    directly supporting the manifold mismatch hypothesis
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{No RAE finetuning (frozen encoder):} When the encoder is not
+finetuned for reconstruction, $d_\text{eff}$ is higher and the gap between
+parameterizations is smaller, confirming the mechanism.
+
+\textbf{Alternative fix (PCA projection):} Projecting to the principal
+subspace before velocity prediction partially recovers quality but is less
+elegant: it requires separate PCA fitting, discards features, and underperforms
+$\mathbf{x}_0$-prediction.
+
+\textbf{Time $t$ dependence:} The difficulty of velocity prediction is
+greatest at intermediate $t$ values where $\boldsymbol{\varepsilon}$ and
+$\mathbf{x}_0$ contribute equally; $\mathbf{x}_0$-prediction remains
+well-conditioned throughout.
+
+\textbf{Nominal vs.\ effective dimensionality:} Higher nominal dimension is
+strictly worse under velocity prediction but not under $\mathbf{x}_0$-prediction,
+removing the disincentive to use richer representations.
+
+\section*{Reference}
+
+Chao Feng, Zhiyang Xu, Bowei Chen, Yuanjun Xiong, Xiyao Wang, Jui-Hsien Wang,
+Richard Zhang, Zhe Lin, Andrew Owens, Yijun Li.
+\textbf{On the Diffusibility of High-Dimensional Latents}.
+arXiv:2609.28473, ECCV 2026.\\
+\url{https://arxiv.org/abs/2609.28473}
+
+\end{document}

@@ -1,0 +1,237 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  test-time compute \textbullet{}
+  search policy \textbullet{}
+  reinforcement learning \textbullet{}
+  LLM reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Beyond Repeated Sampling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Learning Search Policies for LLM Reasoning via
+  Reinforcement-Trained Concept Generation}\par\vspace{6pt}
+
+{\small\textbf{By} Ismail Labiad, Matthieu Kowalski, Marc Schoenauer,
+  R\'emi Munos \& Julia Kempe (Meta FAIR)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26704 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A small concept generator, trained with reinforcement learning to maximize
+the pass@k of a frozen large answer generator, achieves substantially higher
+diversity and downstream accuracy than naive repeated sampling at the same
+compute budget---and transfers to answer generators it was never trained
+against, including those from a different model family.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Naive repeated sampling for test-time compute explores only
+    through local decoding noise, producing near-duplicate attempts rather
+    than semantically diverse solutions.
+  \item[Why it matters:] Hard reasoning problems require qualitatively
+    different strategies; pass@k saturates quickly when all samples share the
+    same implicit approach.
+  \item[Method:] Train a small concept generator with RL to emit problem-specific
+    hints and strategies that maximize downstream success of a frozen large
+    answer generator.
+  \item[Result:] Trained concept generator substantially outperforms repeated
+    sampling and untuned large models; transfers to unseen answer generators.
+  \item[Evidence:] Hard mathematical reasoning benchmarks at equal answer-
+    generation compute budget.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The dominant paradigm for allocating test-time compute to large language models
+is naive repeated sampling: draw $k$ independent answers from the model at
+high temperature, then select the best by a verifier or majority vote. This
+strategy is seductively simple and, at moderate $k$, effective. But it has a
+fundamental limitation: each sample explores only through local decoding
+noise. Temperature and top-p diversify token choices within a trajectory,
+but they cannot steer the model toward qualitatively different approaches to
+the same problem.
+
+On hard mathematical reasoning tasks---where correct solutions often require
+an insight, decomposition, or analogy that is far from the model's prior
+mode---repeated sampling saturates quickly. The $k$-th sample is nearly as
+redundant as the second: the model keeps attempting the same dominant
+strategy with minor surface variations.
+
+This paper asks whether test-time exploration can instead be steered at a
+\emph{semantic} level. The answer is yes, and the key is to separate the role
+of \emph{exploration} (finding diverse approaches) from \emph{execution}
+(implementing a given approach): a small, trainable concept generator proposes
+strategies; a large, frozen answer generator executes them.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Repeated sampling} (best-of-$N$, majority vote) explores only through
+decoding stochasticity. Diversity is local; semantically distinct strategies
+require explicit steering.
+
+\textbf{Self-consistency} aggregates repeated samples but does not improve
+the diversity of those samples---it is a better aggregator, not a better
+explorer.
+
+\textbf{Tree search (MCTS)} explores explicitly but requires a well-trained
+per-step verifier, which is expensive to obtain and domain-specific.
+
+\textbf{Prompting for diversity} (e.g., asking the model to use different
+methods) provides one alternative per call; emitting a library of diverse
+concepts in a single trajectory is more efficient.
+
+\textbf{Scaling the answer generator} at inference time is expensive;
+the goal is to make a fixed frozen model explore more effectively with a
+lightweight companion.
+
+\section{Core Mechanism}
+
+\textbf{Concept-Conditioned Generation.} Given a problem $x$, the method
+first samples a \emph{concept} $c$---a natural-language hint, strategy
+keyword, or approach description---then generates an answer from the large
+model conditioned on $(x, c)$. The concept shifts the answer generator
+toward a different region of solution space.
+
+\textbf{Multi-Concept Trajectories.} Rather than one concept per call, the
+concept generator emits a diverse list of concepts in a single forward pass,
+covering different strategies before any answer is generated. This maximizes
+spread at minimal additional cost.
+
+\textbf{Reinforcement-Learned Concept Generator.} A small model $\pi_\theta$
+is trained with RL to emit concepts that maximize the downstream binary
+reward (answer correctness). The reward flows back to the concept generator
+but not to the frozen answer generator $f$.
+
+\section{Technical Formulation}
+
+Let $x$ denote a problem, $c$ a concept sampled from $\pi_\theta(\cdot \mid x)$,
+and $f$ the frozen large answer generator. The concept-conditioned pass@k:
+\[
+\text{pass@k}(x) = 1 - \frac{\binom{n-s}{k}}{\binom{n}{k}}
+\]
+where $n$ total samples are generated and $s$ are correct. The RL objective:
+\[
+\max_\theta \;\mathbb{E}_{x \sim \mathcal{D}}\!\left[
+  \text{pass@k}_{c \sim \pi_\theta(\cdot|x)}(f(x, \cdot))
+\right]
+\]
+
+The policy gradient update uses binary correctness as the scalar reward:
+\[
+\nabla_\theta \mathcal{L}(\theta) = -\mathbb{E}_{c \sim \pi_\theta}\!\left[
+  R(x, c) \, \nabla_\theta \log \pi_\theta(c \mid x)
+\right]
+\]
+where $R(x, c) = \mathbf{1}[f(x,c) \text{ is correct}]$ (or a normalized
+group-relative variant for variance reduction).
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialize $\pi_\theta$ from a small pretrained LM.
+  \item For each training problem $x$: sample $K$ concepts from $\pi_\theta$,
+    query $f$ for each, record correctness.
+  \item Update $\pi_\theta$ with policy gradient on the correctness reward.
+\end{enumerate}
+
+\textbf{Inference:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a batch of concepts $c_1,\ldots,c_K \sim \pi_\theta(\cdot \mid x)$.
+  \item Generate answers $a_i = f(x, c_i)$ for each concept.
+  \item Return the most frequent or highest-confidence answer.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The trained concept generator is a reusable search policy: it does not learn
+to solve problems directly but learns which types of strategies lead the
+answer generator to success on the training distribution. Transfer to new
+answer generators follows because the learned strategies are problem-structural
+rather than model-specific.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Hard mathematical reasoning benchmarks where repeated sampling
+    pass@k plateaus at high $k$
+  \item Concept-conditioned generation with trained $\pi_\theta$ achieves
+    substantially higher pass@k than naive repeated sampling at equal
+    answer-generation compute budget
+  \item Trained small generator outperforms concepts from untuned models
+    many times larger, confirming that RL training---not model scale---is
+    the key factor
+  \item Zero-shot transfer to an answer generator from a different model
+    family succeeds: concepts learned for one model improve another
+  \item Multi-concept trajectories (many concepts per call) further improve
+    pass@k by reducing concept redundancy
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Single vs.\ multi-concept:} Emitting a diverse list of concepts in
+one trajectory reduces redundancy and improves pass@k compared to sampling
+one concept per call.
+
+\textbf{Generator size:} Smaller trained generators outperform larger
+zero-shot generators, demonstrating the value of training over scale.
+
+\textbf{Reward signal:} Binary correctness alone is sufficient as the RL
+reward; no dense process reward model or verifier is needed during training.
+
+\textbf{Transfer:} Concept quality transfers across answer generators from
+different model families, suggesting that the search policy captures
+problem-structural strategies rather than artifacts of a specific model's
+output distribution.
+
+\section*{Reference}
+
+Ismail Labiad, Matthieu Kowalski, Marc Schoenauer, R\'emi Munos, Julia Kempe.
+\textbf{Beyond Repeated Sampling: Learning Search Policies for LLM Reasoning}.
+arXiv:2609.26704, September 2026.\\
+\url{https://arxiv.org/abs/2609.26704}
+
+\end{document}
