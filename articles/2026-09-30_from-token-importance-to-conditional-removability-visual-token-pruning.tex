@@ -1,0 +1,224 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-30}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  visual token pruning \textbullet{}
+  multimodal LLMs \textbullet{}
+  conditional removability \textbullet{}
+  inference efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CoRePrune}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  From Token Importance to Conditional Removability:
+  Rethinking Visual Token Pruning in Multimodal Large Language Models}\par\vspace{6pt}
+
+{\small\textbf{By} Shengli He et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26484 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Token importance and redundancy are poor proxies for removability because
+they ignore representation depth and deletion-set context; CoRePrune's
+progressive depth-aware perturbation tracking and set-conditioned refinement
+retain 90.3\% of dense-model performance with 128 visual tokens while cutting
+prefill time by 51\% across five multimodal LLM backbones.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Visual token pruning methods score tokens by importance or
+    redundancy but miss that removability is conditioned on transformer depth
+    and the surrounding deletion set.
+  \item[Why it matters:] Incorrect removability estimates cause unexpected
+    quality drops at aggressive budgets; fixing the estimate recovers performance.
+  \item[Method:] Two-stage CoRePrune: progressive perturbation-aware visual
+    pruning across depth, followed by set-conditioned refinement after
+    visual-text interaction.
+  \item[Result:] 90.3\% dense-model performance with 128 tokens; 51.0\%
+    prefill speedup on five MLLM backbones.
+  \item[Evidence:] Standard image, high-resolution, and video benchmarks
+    across LLaVA-1.5, InternVL2, LLaVA-HR, and VideoLLM.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Multimodal large language models (MLLMs) convert images into sequences of
+visual tokens---typically hundreds to thousands---that dominate the cost of
+the prefill phase. Training-free token pruning addresses this by scoring each
+visual token and discarding the lowest-scoring ones before or during the
+forward pass. The appeal is obvious: no fine-tuning, no architecture change,
+just a cheaper forward pass.
+
+The trouble is that existing scoring functions---attention weight, activation
+norm, pairwise similarity---treat removability as a static per-token property.
+CoRePrune shows that it is not. Removing the same token at layer 5 versus
+layer 20 causes substantially different output perturbations because the
+representations have been increasingly fused with context. Removing a token
+when 100 others are already gone has a different effect than removing it from
+the full set because the remaining tokens have compensated for prior deletions.
+These two dependencies---\emph{depth} and \emph{deletion set}---are precisely
+what existing methods ignore.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Importance-based methods} (attention score, gradient norm) score tokens
+in isolation and at a single layer; they cannot predict how importance changes
+as representations propagate through depth.
+
+\textbf{Redundancy-based methods} (cosine similarity) identify tokens that are
+similar to their neighbours, but spatial similarity at one layer does not imply
+similarity after additional self-attention mixing.
+
+\textbf{Static depth assignment:} Most methods apply pruning at a fixed layer
+(early or late), ignoring that the same token may be safe to remove at depth 20
+but harmful to remove at depth 5.
+
+\textbf{Set-agnostic scoring:} All existing methods score each candidate
+independently, ignoring that removing token $v_i$ with $v_j$ already gone
+may have a very different effect than removing $v_i$ from the full set.
+
+\section{Core Mechanism}
+
+\textbf{Conditional Removability.} CoRePrune operationalises removability as
+the downstream perturbation caused by removing a token or set of tokens,
+measured at the current depth under the current deletion set. This quantity
+is tracked dynamically rather than estimated once at a fixed layer.
+
+\textbf{Stage 1: Progressive Perturbation-Aware Visual Pruning (PPVP).}
+As the forward pass proceeds through successive transformer layer blocks,
+PPVP re-estimates the perturbation each candidate removal would cause. A token
+whose removal perturbation \emph{shrinks} as depth increases has been
+compensated for by the model's own representation mixing---it is safe to remove.
+Tokens whose perturbation grows are promoted in priority.
+
+\textbf{Stage 2: Set-Conditioned Refinement (SCR).}
+After the first visual-text interaction layer (where visual and text tokens
+first attend to each other), SCR re-evaluates each remaining candidate under
+the \emph{current} deletion set. Tokens that now provide net benefit given
+what has already been removed are recovered; tokens whose marginal contribution
+has collapsed are added to the deletion set.
+
+\section{Technical Formulation}
+
+Let $V = \{v_1, \ldots, v_N\}$ be the visual token sequence and
+$f_l(S)$ the representations at layer $l$ for token set $S$.
+
+\textbf{Perturbation at depth $l$ for deletion set $D$:}
+\[
+P_l(D) = \bigl\|f_l(V \setminus D) - f_l(V)\bigr\|_F
+\]
+
+\textbf{PPVP priority update for candidate $v_i$:}
+\[
+\text{safe at } l_2 \iff P_{l_2}(\{v_i\}) < P_{l_1}(\{v_i\}),
+\quad l_2 > l_1
+\]
+
+\textbf{SCR marginal contribution} under current deletion set $D$ at layer $l^*$:
+\[
+r(v_j; D) = P_{l^*}(D) - P_{l^*}(D \cup \{v_j\})
+\]
+Recover $v_j$ if $r(v_j; D) > 0$;
+add $v_j$ to $D$ if $r(v_j; D) \ll 0$.
+
+\section{Learning or Inference Procedure}
+
+CoRePrune is \textbf{training-free} and runs during the prefill phase:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Forward pass to layer $l_1$: compute initial perturbation estimates.
+  \item Continue to layer $l_2 > l_1$: update estimates via PPVP; rank candidates.
+  \item Tentatively remove lowest-priority tokens to meet the token budget.
+  \item Continue to visual-text interaction layer $l^*$.
+  \item Apply SCR: recover tokens with $r(v_j; D) > 0$; finalise deletion set.
+  \item Continue forward pass with the pruned set; generate output.
+\end{enumerate}
+
+Overhead: two additional perturbation probes during prefill, negligible relative
+to the attention savings from the reduced token count.
+
+\section{What the Guarantee Says}
+
+PPVP provides a constructive argument: if $P_{l_2}(\{v_i\}) < P_{l_1}(\{v_i\})$,
+the model has already compensated for $v_i$'s absence by depth $l_2$, making
+removal safe. SCR provides a greedy local-optimum guarantee: after SCR, no
+single token swap (recovery or addition) would reduce the deletion-set perturbation.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{5 MLLM backbones:} LLaVA-1.5, InternVL2, LLaVA-HR,
+    VideoLLM, and one additional model
+  \item At \textbf{128 visual tokens}: CoRePrune retains \textbf{90.3\%}
+    of dense-model performance (vs.\ 83--86\% for prior methods) and reduces
+    aggregate prefill time by \textbf{51.0\%} (vs.\ 45--48\% prior)
+  \item At 64 tokens: advantage over baselines grows due to stronger
+    deletion-set interaction effects
+  \item Largest gains on global reasoning tasks (VQA, video QA); smaller
+    gains on local patch tasks where interaction effects are weaker
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{PPVP alone} removes the depth-static assumption and recovers half
+the total gain over attention-based baselines.
+
+\textbf{SCR alone} removes the set-agnostic assumption and recovers the
+other half. The joint gain exceeds the sum, revealing non-linear interaction.
+
+\textbf{PPVP probe depth:} Tracking across $\geq$3 layer blocks is necessary;
+fewer blocks converges to depth-static behaviour.
+
+\textbf{SCR timing:} Applying SCR before visual-text interaction or at the
+final layer both degrade performance; the visual-text fusion layer is the
+optimal intervention point.
+
+\section*{Reference}
+
+Shengli He et al.
+\textbf{From Token Importance to Conditional Removability: Rethinking
+Visual Token Pruning in Multimodal Large Language Models}.
+arXiv:2609.26484, September 2026.\\
+\url{https://arxiv.org/abs/2609.26484}
+
+\end{document}

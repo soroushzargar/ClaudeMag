@@ -1,0 +1,235 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-30}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  floating-point precision \textbullet{}
+  greedy decoding \textbullet{}
+  LLM reproducibility \textbullet{}
+  numerical divergence}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Greedy Decoding Is Not Precision-Invariant}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Cross-Precision Output Divergence in Large Language Model Inference}\par\vspace{6pt}
+
+{\small\textbf{By} Gaoyuan Du, Anam Nawaz Khan, Rex Zhou, Xiaoyang Liu,
+  Deepayan Chakrabarti, Fnu Suya \& Xueping Li\\
+  (UTK \textbullet{} University of Chicago \textbullet{} Amazon \textbullet{} UT Austin)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26621 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+BF16 and FP16 greedy decoding from the same model on the same hardware
+diverges for 49--100\% of prompts across six models and three benchmarks;
+the divergence is predicted not by deep-layer error accumulation but by
+the top-two logit margin at the language model head, and selective
+FP32 recomputation of that head at tight-margin steps recovers
++22--36\,pp exact agreement at only $\pm$4\% latency overhead.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Greedy decoding is assumed to be deterministic given a
+    fixed model and prompt, but BF16 and FP16 produce different outputs
+    on identical hardware at a surprisingly high rate.
+  \item[Why it matters:] Cross-precision divergence confounds evaluations,
+    complicates deployment, and undermines reproducibility guarantees.
+  \item[Method:] Empirical error-propagation analysis traces divergence to
+    the top-two logit margin at the LM head; selective FP32 recomputation
+    at low-margin steps corrects most divergences.
+  \item[Result:] +22--36\,pp exact agreement recovered on A10G at $\pm$4\%
+    latency overhead; approach validated across three GPU architectures.
+  \item[Evidence:] Six models (1.1B--7B, four families), three benchmarks
+    (MMLU, TriviaQA, GSM8K).
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language model evaluations routinely compare numbers across
+frameworks, hardware generations, and model serving stacks. An implicit
+assumption underlies all such comparisons: greedy decoding is
+\emph{deterministic} given a fixed model. Feed in the same model weights,
+the same prompt, and the same hardware, and you get the same output.
+
+This paper breaks that assumption. It shows that switching between BF16
+and FP16---two floating-point formats in equally widespread use---produces
+different greedy outputs from the same model on the same GPU for 49 to
+100\% of prompts, depending on the model and benchmark. The divergence is
+not marginal: a single token flip typically cascades into a fully different
+response trajectory.
+
+The culprit is not the 22 layers of accumulated numerical error that one
+might expect. It is a \emph{local} phenomenon: whether the top-two logits
+at the language model head are separated by more than the cross-precision
+perturbation at that point in the computation.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Same-precision nondeterminism} (parallelism-order variation within
+BF16 or FP16) is well-studied and mitigated by deterministic CUDA kernels.
+It does not explain \emph{cross-precision} divergence, which is systematic
+and reproducible.
+
+\textbf{Full FP32 inference} eliminates the problem but doubles memory usage
+and costs roughly 1.8$\times$ in latency---impractical for production.
+
+\textbf{Precision-agnostic evaluation} (reporting numbers without specifying
+precision) silently inflates or deflates benchmark scores by comparison-format
+mismatches.
+
+No targeted, low-cost mitigation existed before this work.
+
+\section{Core Mechanism}
+
+\textbf{Systematic Characterization.} The authors evaluate six LLMs
+(1.1B--7B, four families) with greedy decoding in BF16 and FP16 on MMLU,
+TriviaQA, and GSM8K on identical A10G hardware. For each prompt, they record
+whether the full trajectory diverges.
+
+\textbf{Error-Propagation Analysis.} For each diverging prompt, they trace
+the first-flip location and measure accumulated numerical error at each layer
+and at the LM head. The finding: 22 layers of body error do not differentiate
+flipping from non-flipping steps. Divergence is determined at the LM head.
+
+\textbf{Selective FP32 Head Recomputation.} When the top-two logit margin
+at the LM head falls below a threshold $\tau$, the head matrix multiplication
+is re-run at FP32 for that decoding step. Steps with large margins are left
+at native precision.
+
+\section{Technical Formulation}
+
+Let $\mathbf{h} \in \mathbb{R}^d$ be the last-layer hidden state and
+$\mathbf{W} \in \mathbb{R}^{V \times d}$ the LM head weight matrix.
+Logits under precision $p \in \{\mathrm{bf16}, \mathrm{fp16}\}$:
+\[
+\mathbf{z}^{(p)} = \mathbf{W}^{(p)} \mathbf{h}^{(p)} + \boldsymbol{\epsilon}^{(p)}
+\]
+where $\boldsymbol{\epsilon}^{(p)}$ is accumulated rounding error.
+
+A token flip occurs when:
+\[
+\arg\max \mathbf{z}^{(\mathrm{bf16})} \neq \arg\max \mathbf{z}^{(\mathrm{fp16})}
+\]
+
+Empirically, the flip probability is well-predicted by:
+\[
+\Pr[\mathrm{flip}] \approx
+  \Pr\!\left[\Delta_{\mathrm{top2}} <
+    \bigl\|\boldsymbol{\epsilon}^{(\mathrm{bf16})} - \boldsymbol{\epsilon}^{(\mathrm{fp16})}
+    \bigr\|_{\mathrm{top2\text{-}dir}}\right]
+\]
+where $\Delta_{\mathrm{top2}} = z_{(1)} - z_{(2)}$ is the top-two margin.
+
+\textbf{Selective FP32 trigger:}
+\[
+\text{recompute at FP32} \iff \Delta_{\mathrm{top2}} < \tau
+\]
+
+\section{Learning or Inference Procedure}
+
+No training is required. The mitigation applies at each decoding step:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run the transformer forward pass in native precision (BF16 or FP16).
+  \item Compute logits and the top-two margin $\Delta_{\mathrm{top2}}$.
+  \item If $\Delta_{\mathrm{top2}} < \tau$: re-run the LM head matmul in FP32;
+    use FP32 logits for this step.
+  \item Select the greedy token; proceed.
+\end{enumerate}
+The threshold $\tau$ is calibrated per hardware on a small validation set.
+
+\section{What the Guarantee Says}
+
+Selective FP32 head recomputation is an empirical, not worst-case, mitigation.
+It cannot guarantee identical outputs to any reference because cross-precision
+error accumulates throughout the forward pass, not only at the head. However,
+because the head is the single decision point and body error is shown not to
+be predictive, covering tight-margin head steps recovers most of the divergence.
+The remaining divergence (about 10--30\%) stems from body-precision differences
+that the head-only fix does not address.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Divergence rate:} 49--100\% of prompts across 6 models
+    and 3 benchmarks; rate varies by model family and task type.
+  \item \textbf{Cascade effect:} A single first-token flip cascades into
+    full trajectory divergence in $>$80\% of cases.
+  \item \textbf{Error-propagation:} Accumulated body error over 22 layers
+    does not predict flipping; top-two margin at the LM head is the dominant
+    predictor.
+  \item \textbf{Selective FP32 on A10G:} +22--36\,pp exact-agreement
+    recovery at $\pm$4\% latency overhead.
+  \item \textbf{L4 and A100:} +12--21\,pp recovery (smaller because
+    baseline divergence rates differ by GPU architecture).
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Threshold sensitivity:} Agreement recovery is robust across a 5$\times$
+range of $\tau$; the optimal value balances coverage (catching flip-prone steps)
+against unnecessary FP32 overhead.
+
+\textbf{Full FP32:} Achieves near-zero divergence but at 2$\times$ memory and
+$\sim$1.8$\times$ latency---impractical for production serving.
+
+\textbf{Body recomputation:} Re-running the full transformer in FP32 at
+flip-predicted steps adds disproportionate overhead for marginal additional gain.
+
+\textbf{Vocabulary size effect:} Larger vocabularies have smaller average
+top-two margins (more competing candidates per step) and higher divergence rates,
+suggesting the problem worsens as vocabulary size grows.
+
+\textbf{Task type:} Open-ended generation (TriviaQA) shows higher divergence
+than constrained generation (MMLU multiple-choice), as cascading divergence
+has more opportunity to propagate in longer unconstrained outputs.
+
+\section*{Reference}
+
+Gaoyuan Du, Anam Nawaz Khan, Rex Zhou, Xiaoyang Liu, Deepayan Chakrabarti,
+Fnu Suya, Xueping Li.
+\textbf{Greedy Decoding Is Not Precision-Invariant: Cross-Precision Output
+Divergence in LLM Inference}.
+arXiv:2609.26621, September 2026.\\
+\url{https://arxiv.org/abs/2609.26621}
+
+\end{document}

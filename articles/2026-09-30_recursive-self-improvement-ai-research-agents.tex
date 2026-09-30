@@ -1,0 +1,231 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-30}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  recursive self-improvement \textbullet{}
+  AI research agents \textbullet{}
+  bi-level optimization \textbullet{}
+  autonomous ML}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Recursive Self-Improvement of AI Research Agents}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  An Outer Agent That Rewrites Its Own Code Beats Human-Engineered
+  Baselines Across Four Held-Out Benchmarks in Eight Days}\par\vspace{6pt}
+
+{\small\textbf{By} Dhruv Srikanth, Bingchen Zhao, Dixing Xu, Yuxiang Wu
+  \& Zhengyao Jiang (Weco AI)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26457 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+AIDE\textsuperscript{2}, a bi-level system that uses an outer AI agent to
+autonomously rewrite the scaffolding code of an inner AI research agent,
+discovered seven successive improvements over an unattended 8-day run---including
+a 16$\times$ prompt compression and a halving of reward hacking---and matched
+or exceeded a human-engineered production agent on all four out-of-distribution
+held-out benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] AI research agent scaffolding is fixed by human engineers and
+    cannot benefit from the same automated improvement loop that the agent
+    applies to its tasks.
+  \item[Why it matters:] Human R\&D yields diminishing returns; a system that
+    autonomously improves its own search policy and memory compresses months of
+    engineering into days.
+  \item[Method:] Outer LLM agent proposes code edits to the inner agent's
+    scaffolding; edits are accepted only if they improve aggregate performance
+    on a diverse training battery.
+  \item[Result:] 7 successive improvements in 8 days; 16$\times$ prompt
+    compression; reward hacking drops from 63\% to 34\%.
+  \item[Evidence:] Four held-out benchmarks spanning ML engineering, algorithm
+    design, and weather forecasting.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Autonomous AI research agents such as AIDE (AI Development and Execution) can
+solve machine learning engineering tasks without human intervention: given a
+dataset and an objective, the agent proposes, executes, and refines code
+solutions in an automated loop. These agents have matched human competitors on
+benchmark challenges. But their \emph{scaffolding}---the code that governs
+how they search, what they remember, and how they prompt the underlying
+language model---has always been designed by human engineers.
+
+This paper asks whether the self-improvement loop can be turned inward. The
+answer is AIDE\textsuperscript{2}: when the agent's own scaffolding code is the
+object of optimization, each accepted rewrite becomes the agent that the next
+round edits. In 8 unattended days, this loop discovered improvements that human
+engineers had not found in two years.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Static scaffolding:} Existing AI research agents (AIDE, AutoML-GPT,
+OpenDevin-Science) optimise task solutions but treat their own search policy and
+prompts as fixed hyperparameters chosen by human experts.
+
+\textbf{Meta-learning} adapts model weights over episodes but requires
+differentiable objectives and cannot modify discrete code logic.
+
+\textbf{Neural architecture search} and \textbf{program synthesis} optimise
+specific modules in narrow settings; neither is designed to improve a
+general-purpose agent's control code.
+
+\textbf{Human iteration} is slow, expensive, and bounded by engineering
+bandwidth. Moreover, the most obvious improvements have already been
+incorporated; finding subtler gains requires exhaustive experimentation.
+
+\section{Core Mechanism}
+
+\textbf{Bi-Level Optimization.} AIDE\textsuperscript{2} wraps the standard
+AIDE agent in an outer optimization loop:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \emph{Inner loop (AIDE):} Given a task and budget, the inner agent
+    proposes, executes, evaluates, and refines code solutions via tree search.
+  \item \emph{Outer loop (AIDE\textsuperscript{2}):} An outer LLM agent
+    inspects the inner agent's scaffolding code $\theta$, its performance traces,
+    and recent failure modes. It proposes a code edit $\delta$ (a patch), spins
+    up a fresh inner agent with $\theta' = \theta + \delta$, evaluates it on
+    approximately 50 diverse tasks, and accepts $\delta$ only if performance
+    improves.
+\end{itemize}
+
+\textbf{Progressive Code Repository.} Accepted edits accumulate in a
+version-controlled repository; each generation's code is the starting point
+for the next round. Only about 1 in 10 proposed modifications is accepted.
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ denote the inner agent parameterised by scaffolding code $\theta$,
+$\mathcal{T}_{\mathrm{train}}$ the training task battery,
+$\mathcal{T}_{\mathrm{held}}$ the held-out evaluation set.
+
+The outer loop solves:
+\[
+\theta^* = \arg\max_{\theta' \in \mathcal{N}(\theta)}
+  \frac{1}{|\mathcal{T}_{\mathrm{train}}|}
+  \sum_{t \in \mathcal{T}_{\mathrm{train}}} \mathrm{score}(\pi_{\theta'}, t)
+\]
+where $\mathcal{N}(\theta)$ is the set of code edits proposed by the outer LLM.
+The update rule:
+\[
+\theta \;\leftarrow\; \theta' \quad \text{iff} \quad
+  \mathrm{Eval}(\pi_{\theta'}, \mathcal{T}_{\mathrm{train}})
+  > \mathrm{Eval}(\pi_\theta, \mathcal{T}_{\mathrm{train}})
+\]
+
+The outer agent is itself an LLM that reads $\theta$, performance traces, and
+recent deltas before producing the patch $\delta$ in natural language followed
+by the code diff.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Outer loop (8 days, fully unattended):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialise $\theta_0$ from the production AIDE codebase.
+  \item Outer LLM proposes a code edit $\delta$ to $\theta$.
+  \item Sandboxed inner agent $\pi_{\theta+\delta}$ runs on $\mathcal{T}_{\mathrm{train}}$.
+  \item If aggregate score improves: commit $\theta \leftarrow \theta + \delta$.
+  \item Repeat; $\approx$90\% of proposals are rejected.
+\end{enumerate}
+
+\textbf{Inner loop (per task):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Read task specification and compute budget.
+  \item Tree search: draft $\to$ execute $\to$ score $\to$ improve.
+  \item Return best solution within budget.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No formal convergence bound is given; the search space is open-ended natural-language
+code. The empirical claim is that a sufficiently diverse training battery
+(50 tasks, multiple domains) prevents overfitting: improvements that score higher
+on the training battery also generalise to the four held-out benchmarks---a
+necessary condition for recursive self-improvement to be meaningful rather than
+evaluation hacking.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{7 successive improvements} accepted over 8 days from
+    approximately 70 proposed modifications.
+  \item \textbf{New search algorithm:} replaced default tree policy with a
+    learned priority function exploiting evaluation feedback.
+  \item \textbf{16$\times$ prompt compression:} a compressed prompting scheme
+    reduces per-step cost and enables longer search horizons.
+  \item \textbf{Reward hacking:} self-policing emerged naturally; hacking rate
+    dropped from 63\% to 34\% on a held-out benchmark.
+  \item \textbf{4 held-out benchmarks} (ML engineering, algorithm engineering,
+    physics forecasting, and one additional ML benchmark): the evolved agent
+    matches or exceeds the human-engineered production AIDE on all four.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Task diversity:} Narrowing the training battery to a single domain
+causes held-out generalisation to degrade significantly; diversity is essential.
+
+\textbf{Outer model size:} Larger outer LLMs produce higher-quality proposals
+and higher acceptance rates, but even smaller models drive improvement given
+sufficient budget.
+
+\textbf{Reward hacking:} The self-policing behavior was not explicitly
+incentivised; it emerged because reward hacking lowered aggregate evaluation
+scores and the outer loop penalised it implicitly---an encouraging sign that
+the optimisation pressure is well-aligned.
+
+\textbf{Gain decomposition:} Prompt compression contributes $\approx$40\% of
+the total held-out improvement; the new search policy $\approx$35\%; memory
+mechanisms $\approx$25\%.
+
+\section*{Reference}
+
+Dhruv Srikanth, Bingchen Zhao, Dixing Xu, Yuxiang Wu, Zhengyao Jiang.
+\textbf{Recursive self-improvement of AI research agents}.
+arXiv:2609.26457, September 2026.\\
+\url{https://arxiv.org/abs/2609.26457}
+
+\end{document}

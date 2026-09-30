@@ -1,0 +1,210 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-30}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  KV cache \textbullet{}
+  sparse attention \textbullet{}
+  long-context inference \textbullet{}
+  attention compensation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CompKV}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Compensation-Aware KV Selection for Long-Context LLM Inference}\par\vspace{6pt}
+
+{\small\textbf{By} Anonymous et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26300 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+By pairing block-level KV selection with mean compensation---which yields an exact
+log-partition identity---CompKV derives a selection priority proportional to block
+attention mass times within-block logit variation, consistently outperforming
+prior sparse-attention methods on RULER and LongBench-Pro at tight token budgets.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Sparse-attention KV selection methods discard unselected
+    context entirely, introducing approximation error that biases the softmax
+    partition function.
+  \item[Why it matters:] Long-context tasks requiring global aggregation fail
+    most under naive selection; more principled compensation preserves performance
+    at aggressive memory budgets.
+  \item[Method:] Mean compensation for unselected blocks yields an exact
+    log-partition identity; the resulting optimal selection priority is
+    block attention mass $\times$ within-block logit variation.
+  \item[Result:] CompKV consistently beats selection-only and eviction-based
+    sparse attention on Llama-3.1-8B and Qwen3 models.
+  \item[Evidence:] RULER and LongBench-Pro benchmarks at context lengths
+    up to 128K tokens.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Long-context LLM inference is memory-bound. Fitting a 128K-token context in a
+transformer requires gigabytes of key-value (KV) cache that exceed typical GPU
+memory. Sparse-attention methods reduce pressure by loading only a selected
+subset of KV blocks per query. The dominant selection heuristic---loading the
+top-$K$ blocks by attention mass---has a hidden flaw: it treats unselected
+blocks as if they carry zero weight, silently biasing the softmax partition
+function and the attention output.
+
+CompKV revisits this approximation and asks: given that some blocks will not
+be loaded, what is the best way to account for them? The answer is mean
+compensation---replacing each unselected block with its mean---combined with a
+principled selection criterion derived from the compensation's residual error.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Eviction methods} (H2O, StreamingLLM) permanently discard tokens,
+making them unrecoverable for later attention layers.
+
+\textbf{Selection without compensation} loads the top-$K$ blocks and zeroes
+the rest, which underestimates the softmax denominator whenever unselected
+blocks carry non-trivial mass.
+
+\textbf{KV quantization} reduces per-token size but does not reduce the number
+of tokens read per attention call.
+
+\textbf{IO-aware kernels} overlap memory transfers with compute but leave the
+approximation error unaddressed.
+
+None of these methods reason about how unselected context should be summarised
+to correct the partition function.
+
+\section{Core Mechanism}
+
+\textbf{Mean Compensation.} For each unselected block $j$, CompKV replaces
+every logit with the block mean $\bar{e}_j$. This is the unique single-number
+summary that preserves the block's contribution to the log-partition function
+to first order---a property that zero-padding and other approximations lack.
+
+\textbf{Compensation-Aware Priority.} After fixing mean compensation, the
+residual approximation error for block $j$ is bounded by the product of its
+attention mass $m_j$ (how much it contributes to the output) and its within-block
+logit standard deviation $\sigma_j$ (how much individual weights differ from the
+mean). CompKV selects the blocks with the largest $m_j \cdot \sigma_j$---those
+for which mean compensation is most inadequate.
+
+\section{Technical Formulation}
+
+Let the KV cache be partitioned into blocks of size $b$. For block $j$, denote
+the attention logits $\mathbf{e}_j \in \mathbb{R}^b$ and the block mean
+$\bar{e}_j = \frac{1}{b}\sum_i e_{j,i}$.
+
+The log-partition under mean compensation:
+\[
+\log Z_j^{\text{approx}} = \bar{e}_j + \log b
+\]
+which equals the exact value when all within-block logits are equal. The
+residual error is bounded:
+\[
+\Delta_j \;\leq\; m_j \cdot \sigma_j
+\]
+where $m_j = \mathrm{softmax\_mass}(\mathbf{e}_j)$ and
+$\sigma_j = \mathrm{std}(\mathbf{e}_j)$. The CompKV selection priority score is:
+\[
+s_j = m_j \cdot \sigma_j
+\]
+The top-$K$ blocks by $s_j$ are loaded; the rest contribute via their mean.
+
+\section{Learning or Inference Procedure}
+
+CompKV is training-free and applies at inference time:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item A fused GPU kernel computes per-block mass estimates and logit
+    standard deviations using grouped variance projection of the query
+    against pre-computed block mean keys.
+  \item Blocks are ranked by $s_j = m_j \cdot \sigma_j$; top-$K$ are selected.
+  \item Selected blocks contribute via exact attention; unselected blocks
+    contribute via their mean, with the partition function adjusted accordingly.
+\end{enumerate}
+
+\textbf{Implementation:} BF16 KV cache and FP32 block summaries are kept in
+pinned CPU memory. A main CUDA stream handles selection-region transfer and
+exact-attention kernels; an auxiliary stream transfers mean values in parallel,
+eliminating blocking synchronization.
+
+\section{What the Guarantee Says}
+
+Mean compensation guarantees exact log-partition preservation (to first order)
+when within-block logits are uniform. For non-uniform blocks, the residual
+error is bounded by $m_j \cdot \sigma_j$---precisely the quantity used for
+selection. Under a fixed budget of $K$ blocks, CompKV minimises the total
+approximation error bound by choosing the blocks for which the bound is largest.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Models: Llama-3.1-8B-Instruct, Qwen3-8B, Qwen3-32B
+  \item Benchmarks: RULER (controlled retrieval and aggregation), LongBench-Pro
+    (realistic long-context tasks), context lengths to 128K tokens
+  \item CompKV outperforms selection-only (top-$K$ by mass), H2O, and
+    StreamingLLM variants consistently across all models and benchmarks
+  \item Gains are largest on aggregation tasks and at tighter budgets ($K$
+    is small), where the compensation correction matters most
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Selection criterion:} Replacing $m_j \cdot \sigma_j$ with mass-only
+or variation-only degrades performance, confirming that the joint criterion is
+necessary.
+
+\textbf{Compensation type:} Mean compensation outperforms zero compensation;
+the gap grows with block size (larger within-block variation).
+
+\textbf{IO overhead:} The fused kernel architecture hides transfer latency by
+overlapping streams; throughput is competitive with GPU-only sparse attention
+at high batch sizes.
+
+\section*{Reference}
+
+Anonymous et al.
+\textbf{CompKV: Compensation-Aware KV Selection for Long-Context LLM Inference}.
+arXiv:2609.26300, September 2026.\\
+\url{https://arxiv.org/abs/2609.26300}
+
+\end{document}

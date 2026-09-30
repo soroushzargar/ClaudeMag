@@ -1,0 +1,77 @@
+ML Papers List — 2026-09-30
+Generated for ClaudeMag
+
+1. CompKV: Compensation-Aware KV Selection for Long-Context LLM Inference [arXiv 2026]
+   Authors: Anonymous et al.
+   Affiliation: Not publicly available
+   Venue/ID: arXiv:2609.26300
+   URL: https://arxiv.org/abs/2609.26300
+   Summary: Existing sparse-attention KV cache methods select blocks based on attention mass alone
+   and discard the unselected context outright. CompKV derives a joint compensation-aware selection
+   criterion by pairing block selection with mean compensation—replacing every logit in an unselected
+   block with its block mean—which admits an exact log-partition identity. Analysis shows that the
+   optimal selection priority depends jointly on a block's attention mass and the within-block logit
+   variation. An efficient GPU implementation keeps the complete BF16 KV cache and FP32 block
+   summaries in pinned CPU memory with a fused kernel architecture. Evaluated on Llama-3.1-8B-Instruct,
+   Qwen3-8B, and Qwen3-32B over RULER and LongBench-Pro, CompKV consistently outperforms prior
+   selection-only and eviction methods under tight exact-read budgets.
+
+2. Flash-dLLM: IO-Aware KV Caching and Parallel Decoding for Fast, Memory-Efficient Diffusion LLMs [arXiv 2026]
+   Authors: Quan Nguyen-Tri, Mukul Ranjan, Zhiqiang Shen
+   Affiliation: VILA Lab, Mohamed bin Zayed University of Artificial Intelligence (MBZUAI)
+   Venue/ID: arXiv:2609.26796
+   URL: https://arxiv.org/abs/2609.26796
+   Summary: Diffusion language models (dLLMs) offer non-autoregressive generation but their inference
+   is bottlenecked by GPU memory I/O rather than compute when KV caching is naively applied. Flash-dLLM
+   identifies this IO bottleneck and addresses it with an IO-aware fused KV-cache kernel that eliminates
+   redundant memory movement. It further proposes a KV-cache-driven draft-and-verify decoding strategy
+   in which the dLLM itself serves as both drafter and verifier, eliminating the need for an auxiliary
+   model. On mathematical reasoning (GSM8K) and code generation (HumanEval), Flash-dLLM achieves 5.1×
+   and 11.0× speedups respectively over the Elastic-Cache baseline while improving memory efficiency.
+
+3. Recursive self-improvement of AI research agents [arXiv 2026]
+   Authors: Dhruv Srikanth, Bingchen Zhao, Dixing Xu, Yuxiang Wu, Zhengyao Jiang
+   Affiliation: Weco AI
+   Venue/ID: arXiv:2609.26457
+   URL: https://arxiv.org/abs/2609.26457
+   Summary: This paper introduces AIDE² (AI Development and Execution squared), a bi-level system
+   for recursive self-improvement of an AI research agent. An outer agent rewrites the inner AIDE
+   agent's own code—its search policy, prompts, and memory mechanisms—evaluates each proposed
+   modification against a diverse battery of AI R&D tasks, and retains only changes that improve
+   held-out performance. In an unattended 8-day run, AIDE² discovered seven successive improvements
+   including a novel search algorithm and 16× prompt compression. The evolved agent reduced its
+   reward-hacking rate from 63% to 34% on a held-out benchmark and matched or exceeded a
+   human-engineered production research agent on four out-of-distribution held-out benchmarks
+   spanning ML engineering, heuristic algorithm engineering, and physics-based weather forecasting.
+
+4. From Token Importance to Conditional Removability: Rethinking Visual Token Pruning in Multimodal Large Language Models [arXiv 2026]
+   Authors: Shengli He et al.
+   Affiliation: Not fully specified
+   Venue/ID: arXiv:2609.26484
+   URL: https://arxiv.org/abs/2609.26484
+   Summary: Training-free visual token pruning in multimodal LLMs typically scores tokens by importance
+   or redundancy and removes low-scoring ones, but these criteria do not fully capture removability,
+   which is conditioned on representation depth and the surrounding deletion set. Controlled
+   interventions show that removing the same tokens at different transformer layers produces
+   substantially different downstream perturbations, and that changing only the deletion context
+   alters pruning-boundary decisions. The paper proposes CoRePrune, a two-stage training-free
+   framework: Progressive Perturbation-Aware Visual Pruning refreshes deletion-effect estimates as
+   representations evolve through depth, while Set-Conditioned Refinement re-evaluates candidates
+   under the current deletion set after visual-text interaction. Across five MLLM backbones covering
+   standard images, high-resolution inputs, and video, CoRePrune retains 90.3% of dense-model
+   performance with 128 visual tokens while reducing aggregate prefill time by 51.0%.
+
+5. Greedy Decoding Is Not Precision-Invariant: Cross-Precision Output Divergence in LLM Inference [arXiv 2026]
+   Authors: Gaoyuan Du, Anam Nawaz Khan, Rex Zhou, Xiaoyang Liu, Deepayan Chakrabarti, Fnu Suya, Xueping Li
+   Affiliation: University of Tennessee Knoxville; University of Chicago; Amazon; University of Texas at Austin
+   Venue/ID: arXiv:2609.26621
+   URL: https://arxiv.org/abs/2609.26621
+   Summary: Greedy decoding is commonly assumed to be deterministic given a fixed model and prompt,
+   but this paper demonstrates that BF16 and FP16 produce different outputs on identical hardware
+   for the same model. Across six models (1.1B–7B parameters, four families) and three benchmarks,
+   49–100% of prompts diverge, with a single token flip often cascading into full trajectory-level
+   divergence. Empirical error-propagation analysis shows that 22 layers of accumulated body error
+   do not predict divergence; rather, the outcome depends on the top-two logit margin at the language
+   model head relative to the directional perturbation between the top-two candidates. Selective FP32
+   lm-head recomputation, triggered only when the margin falls below a threshold, achieves +22–36
+   percentage-point exact agreement at only ±4% latency overhead on A10G.

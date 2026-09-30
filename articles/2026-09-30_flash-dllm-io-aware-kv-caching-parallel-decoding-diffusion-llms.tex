@@ -1,0 +1,214 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-09-30}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion LLMs \textbullet{}
+  KV caching \textbullet{}
+  speculative decoding \textbullet{}
+  inference acceleration}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Flash-dLLM}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  IO-Aware KV Caching and Parallel Decoding for Fast,
+  Memory-Efficient Diffusion LLMs}\par\vspace{6pt}
+
+{\small\textbf{By} Quan Nguyen-Tri, Mukul Ranjan \&
+  Zhiqiang Shen (VILA Lab, MBZUAI)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2609.26796 \textbullet{} September 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+An IO-aware fused KV-cache kernel combined with a self-drafting decode strategy
+eliminates the HBM bandwidth bottleneck that has crippled diffusion LLM
+inference, delivering 5.1$\times$ and 11.0$\times$ speedups over the strongest
+prior method on GSM8K and HumanEval without any model modification.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Diffusion LLMs require full KV-cache reads at every denoising
+    step; GPU HBM I/O is the dominant bottleneck, not compute.
+  \item[Why it matters:] dLLMs promise parallel token generation, but the IO
+    bottleneck has prevented them from reaching autoregressive LLM speeds.
+  \item[Method:] Fused IO-aware CUDA kernel reduces redundant HBM reads;
+    the dLLM itself serves as drafter and verifier, eliminating auxiliary models.
+  \item[Result:] 5.1$\times$ speedup on GSM8K and 11.0$\times$ on HumanEval
+    vs.\ Elastic-Cache; improved memory efficiency at equal quality.
+  \item[Evidence:] Mathematical reasoning and code generation benchmarks
+    on A10G, A100, and L4 GPUs.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Diffusion language models (dLLMs) generate text by iteratively denoising
+masked tokens rather than decoding one token at a time. Their non-autoregressive
+structure should, in principle, allow far more parallelism than autoregressive
+models. In practice, dLLM inference has remained slow because every denoising
+step requires reading the entire KV cache---a cost proportional to sequence
+length that must be paid at each of the $T$ iterations.
+
+Flash-dLLM diagnosises this as an I/O bottleneck: on all tested GPUs, the
+attention computation in a KV-cache-enabled dLLM is \emph{memory-bandwidth-bound},
+not compute-bound. Arithmetic intensity (FLOPs per HBM byte) falls far below
+the GPU's compute-to-memory ratio, meaning that the GPU arithmetic units are
+idle most of the time, waiting for data.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard autoregressive KV caching} exploits left-to-right structure;
+dLLMs access the full bidirectional context at every step, so per-step IO cost
+is proportional to sequence length regardless of generation position.
+
+\textbf{Elastic-Cache and token eviction} reduce cache size but preserve the
+naive kernel structure: the remaining tokens still require an unfused
+read-attend-write pipeline that is IO-inefficient.
+
+\textbf{Auxiliary-model draft-and-verify} (as used in speculative decoding for
+autoregressive models) adds a second model to load and run, increasing memory
+and latency per step.
+
+\textbf{Flash Attention} for autoregressive models was designed for compute-bound
+settings; its tiling strategy does not generalise to the full-sequence,
+bidirectional reads required by dLLMs.
+
+\section{Core Mechanism}
+
+\textbf{IO-Aware Fused Kernel.} Flash-dLLM fuses the KV-cache read, attention
+computation, and output write into a single kernel. Intermediate values are
+kept in on-chip SRAM, eliminating round-trips to HBM for the intermediate
+attention maps. The tiling strategy is tuned for the bidirectional, full-sequence
+access pattern of dLLMs rather than the causal sliding-window pattern of
+autoregressive models.
+
+\textbf{Self-Drafting Decode Strategy.} Early denoising steps operate at high
+noise levels and produce coarse but fast predictions. Flash-dLLM uses these
+as a draft: the KV cache computed in early steps is reused by later steps,
+and positions where the early draft matches the final refined output avoid
+recomputation. The dLLM itself is both drafter and verifier---no auxiliary
+model is loaded.
+
+\section{Technical Formulation}
+
+Let $\mathbf{x}^{(t)}$ be the partially denoised sequence at step $t$,
+$f_\theta$ the dLLM, $L$ the sequence length, $d$ the head dimension,
+$H$ the number of heads, $l$ the number of layers.
+
+Naive KV-cache IO cost per step:
+\[
+\mathrm{IO}(t) = 2 \cdot L \cdot d \cdot H \cdot l \cdot \mathrm{sizeof}(\mathrm{fp16})
+\]
+
+Fused-kernel IO cost (tile size $B_{\mathrm{SRAM}}$):
+\[
+\mathrm{IO}_{\mathrm{fused}}(t)
+  = \frac{L \cdot d \cdot H \cdot l}{B_{\mathrm{SRAM}}} \cdot \mathrm{sizeof}(\mathrm{fp16})
+\]
+
+The draft-and-verify step amortises IO over $T_{\mathrm{draft}}$ steps: positions
+where the draft $\hat{\mathbf{x}}^{(0)}$ at step $t$ matches the verified output
+at step $t-1$ skip re-attention, contributing a further multiplicative reduction
+in total IO.
+
+\section{Learning or Inference Procedure}
+
+Flash-dLLM requires no training and no model modification:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Compile the IO-aware fused CUDA kernel for the target GPU architecture.
+  \item Run the first $T_{\mathrm{draft}}$ denoising steps with the fused kernel;
+    record draft token predictions from early steps.
+  \item Verify drafts in the remaining $T - T_{\mathrm{draft}}$ steps; reuse
+    KV cache for positions where draft is accepted.
+  \item Return the fully denoised sequence.
+\end{enumerate}
+
+The kernel and draft parameters are tuned once per GPU model; no per-task
+adaptation is needed.
+
+\section{What the Guarantee Says}
+
+The fused kernel is numerically exact: it computes the same attention values
+as the unfused baseline up to floating-point rounding. Speedup is achieved
+purely by reducing memory traffic, not by approximation. The self-drafting
+strategy introduces an optimism bias (assuming later steps will agree with
+earlier ones), but the verification step guarantees that accepted tokens are
+correct.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Versus Elastic-Cache (strongest prior baseline):
+    \textbf{5.1$\times$ speedup} on GSM8K (mathematical reasoning);
+    \textbf{11.0$\times$ speedup} on HumanEval (code generation)
+  \item Memory efficiency: lower peak HBM usage at equal or better quality
+  \item Code benchmark shows larger gains because longer sequences and sparser
+    denoising trajectories amplify IO savings
+  \item Inference speed approaches autoregressive LLMs with Flash Attention
+    at the same model size
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Fused kernel alone} accounts for 3--5$\times$ of the speedup; the
+self-drafting strategy contributes 1.5--2$\times$.
+
+\textbf{Draft length $T_{\mathrm{draft}}$:} Shorter drafts reduce reuse and
+speedup; longer drafts risk more corrections but still improve throughput
+because IO savings outweigh correction costs.
+
+\textbf{IO profile:} On all tested GPUs, attention accounts for over 70\% of
+total inference time with KV caching, confirming the IO-bottleneck hypothesis.
+
+\textbf{Arithmetic intensity:} Before the fused kernel, dLLM attention falls
+below 10\% of the GPU roofline; after, it approaches 60--80\%, indicating
+near-full utilisation of HBM bandwidth.
+
+\section*{Reference}
+
+Quan Nguyen-Tri, Mukul Ranjan, Zhiqiang Shen.
+\textbf{Flash-dLLM: IO-Aware KV Caching and Parallel Decoding for Fast,
+Memory-Efficient Diffusion LLMs}.
+arXiv:2609.26796, September 2026.\\
+\url{https://arxiv.org/abs/2609.26796}
+
+\end{document}
