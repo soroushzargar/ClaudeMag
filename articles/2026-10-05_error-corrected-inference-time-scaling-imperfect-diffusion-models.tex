@@ -1,0 +1,214 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  inference-time scaling \textbullet{}
+  Feynman-Kac correction \textbullet{}
+  molecular free energy}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Error-Corrected Inference-Time Scaling for Imperfect Diffusion Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  The Energy-based Feynman-Kac Corrector Removes Systematic Model Bias
+  at Inference Time, Achieving Accurate Molecular Free-Energy Profiles
+  Where Standard Particle Methods Fail}\par\vspace{6pt}
+
+{\small\textbf{By} Zuokai Wen, Louis Grenioux, Weinan E \& Jiequn Han
+  (Princeton University; Flatiron Institute, Simons Foundation)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.01933 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Inference-time scaling for diffusion models---running more particles through sequential
+Monte Carlo---reduces variance but cannot remove the systematic bias introduced by an
+imperfect pretrained score function. The Energy-based Feynman-Kac Corrector (EBFKC)
+derives dynamics that track a prescribed probability path exactly in the population limit
+regardless of model error, and demonstrates accurate molecular free-energy profiling
+on alanine dipeptide and tetrapeptide where standard methods fail.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard inference-time scaling inherits the systematic bias of an
+    imperfect diffusion model; more particles reduce variance but not bias.
+  \item[Why it matters:] Scientific applications (molecule generation, free-energy
+    computation) require accurate tail distributions, not just good mode coverage.
+  \item[Method:] Feynman-Kac potential derived from an energy-based reference corrects
+    the imperfect score on the fly; approximated via sequential Monte Carlo with
+    variance-controlling guidance.
+  \item[Result:] Closely matches ground-truth free-energy surfaces on alanine dipeptide
+    and tetrapeptide; standard SMC baselines retain several $k_BT$ of error.
+  \item[Evidence:] Gaussian mixture models, particle systems, two alanine peptides under
+    annealing and reward tilting.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Inference-time scaling has emerged as a key technique for improving diffusion model
+quality: by running a sequential Monte Carlo (SMC) procedure with many particles, one
+can steer generation toward a target distribution or reward signal without retraining
+the model. Applications range from image generation with aesthetic rewards to
+molecular conformation sampling with energy-based targets.
+
+All existing approaches, however, share a silent assumption: that the pretrained
+diffusion model's score function is exact. In practice, score functions are trained
+on finite data with finite compute and carry systematic approximation error.
+Standard SMC reduces the statistical error of the particle approximation but cannot
+remove this model-level bias: every particle evolves under the same imperfect dynamics,
+so the distribution they jointly represent converges to the wrong target.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Monte Carlo only reduces variance, not bias.} Adding more particles in standard
+SMC reduces $O(1/\sqrt{N})$ variance, leaving a fixed systematic error proportional
+to the score function mismatch $\epsilon_t = \hat{s}_\theta - \nabla\log p_t$.
+
+\textbf{Path tracking error.} Imperfect scores cause particles to drift off the
+prescribed probability path, accumulating errors that compound over diffusion timesteps.
+
+\textbf{Reward tilting.} Reward-guided diffusion reweights samples assuming a correct
+model; systematic score error introduces additional bias into the tilted distribution
+that no reweighting scheme can correct post-hoc.
+
+\section{Core Mechanism}
+
+\textbf{Energy-based Feynman-Kac Corrector (EBFKC).}
+Given a reference energy $E_t(\mathbf{x})$ defining the desired path $\pi_t \propto e^{-E_t(\mathbf{x})}$,
+the paper derives a Feynman-Kac potential $G_t$ that, when incorporated as a
+multiplicative weight in the SMC procedure, ensures the particle ensemble tracks
+the prescribed path $\{p_t\}$ exactly in the continuous-time population limit,
+regardless of the score function error $\epsilon_t$.
+
+The key insight is that the Feynman-Kac formula from stochastic analysis provides a
+closed-form expression for the correction term that neutralizes the effect of
+$\epsilon_t$ without requiring access to the true score function---only the reference
+energy is needed.
+
+\section{Technical Formulation}
+
+Let $\hat{s}_\theta(\mathbf{x},t)$ be the imperfect score with error
+$\epsilon_t(\mathbf{x}) = \hat{s}_\theta - \nabla\log p_t$.
+Standard SMC propagates under:
+\[
+d\mathbf{x}_t = \hat{s}_\theta(\mathbf{x}_t,t)\,dt + \sqrt{2}\,dW_t
+\]
+and tracks $p_t$ only when $\epsilon_t = 0$.
+
+EBFKC derives the Feynman-Kac potential:
+\[
+G_t(\mathbf{x}) = \exp\!\left(-\int_0^t \bigl\langle \epsilon_\tau(\mathbf{x}_\tau),\,
+  \nabla\log p_\tau(\mathbf{x}_\tau)\bigr\rangle \, d\tau\right)
+\]
+The corrected particle system with weights proportional to $G_t$ converges to $p_t$
+in the population limit. A variance-controlling guidance term:
+\[
+\hat{s}_\theta^{\text{VC}}(\mathbf{x},t) = \hat{s}_\theta(\mathbf{x},t)
+  - \gamma \nabla_{\mathbf{x}} \log w_t(\mathbf{x})
+\]
+prevents particle collapse by penalizing low-weight regions, where $\gamma > 0$
+is a guidance strength parameter.
+
+\section{Learning or Inference Procedure}
+
+EBFKC requires no additional training---it operates on a frozen pretrained diffusion model.
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Specify} reference energy $E_t$ (free energy functional or reward model).
+  \item \textbf{Initialize} $N$ particles $\{\mathbf{x}_T^{(i)}\}_{i=1}^N$ from the
+    prior $p_T$.
+  \item \textbf{Propagate} with $\hat{s}_\theta$ plus variance-controlling guidance,
+    accumulating Feynman-Kac weights $G_t^{(i)}$ at each step.
+  \item \textbf{Resample} when the effective sample size
+    $N_{\text{eff}} = (\sum_i w_i^2)^{-1}$ drops below $N/2$.
+  \item \textbf{Return} the weighted ensemble $\{(\mathbf{x}_0^{(i)}, w_0^{(i)})\}$.
+\end{enumerate}
+
+The overhead relative to standard SMC is one energy evaluation per particle per step.
+
+\section{What the Guarantee Says}
+
+In the continuous-time population limit ($N \to \infty$, $\Delta t \to 0$), EBFKC
+tracks the prescribed path $\{p_t\}$ exactly, independent of $\epsilon_t$.
+For finite $N$, the error scales as $O(1/\sqrt{N})$ in particle count and
+$O(\Delta t)$ in discretization step size. Crucially, unlike standard SMC,
+the $N \to \infty$ limit converges to the correct target rather than a biased surrogate.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Gaussian mixture models:} EBFKC recovers all modes of a multi-modal
+    2D target; standard SMC with imperfect model overweights dominant modes.
+  \item \textbf{Particle systems:} EBFKC accurately recovers equilibrium distributions
+    for interacting particles; standard baselines show persistent density errors.
+  \item \textbf{Alanine dipeptide:} EBFKC matches the ground-truth Ramachandran
+    free-energy surface within statistical uncertainty; standard SMC exhibits errors
+    of several $k_BT$ in high-barrier regions.
+  \item \textbf{Alanine tetrapeptide:} EBFKC scales to the larger system and maintains
+    accurate free-energy profiles under both annealing and reward-tilting regimes.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Particle count:} EBFKC converges faster to the correct target than standard
+SMC as $N$ increases; at low $N$, variance-controlling guidance is essential.
+
+\textbf{Model imperfection level:} As score error $\epsilon_t$ is artificially
+increased, standard SMC degrades rapidly while EBFKC remains accurate.
+
+\textbf{Variance-controlling guidance:} Removing this term causes particle collapse
+at long horizons, confirming its necessity.
+
+\textbf{Feynman-Kac vs.\ naive reweighting:} Simple importance weighting without
+the Feynman-Kac path correction tracks a biased distribution even with large $N$,
+underscoring that the correction must operate on the dynamics, not just the terminal
+weights.
+
+\section*{Reference}
+
+Zuokai Wen, Louis Grenioux, Weinan E, Jiequn Han.
+\textbf{Error-Corrected Inference-Time Scaling for Imperfect Diffusion Models}.
+arXiv:2610.01933, October 2026.\\
+\url{https://arxiv.org/abs/2610.01933}
+
+\end{document}

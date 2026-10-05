@@ -1,0 +1,205 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  time series foundation models \textbullet{}
+  zero-shot forecasting \textbullet{}
+  benchmarking \textbullet{}
+  temporal inductive bias}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Foundations without Fundamentals: Zero-Shot Blind Spots in Time Series Foundation Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Chronos-2, Moirai, and Toto Fail Unit Tests for Monotonic Trends, Periodic Signals,
+  and Leading Indicators That Classical Models Pass Trivially}\par\vspace{6pt}
+
+{\small\textbf{By} Nafiseh Ghoroghchian, Haipeng Zhang, Shuyi Han,
+  Alex Labach \& George Stein (ServiceNow Research; McGill University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.02058 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Despite strong performance on broad benchmarks, prominent Time Series Foundation Models
+fail surprisingly basic unit tests---monotonic trends, periodic signals, and leading-indicator
+exploitation---that simple classical models handle trivially, revealing a gap between
+pre-training scale and fundamental temporal inductive biases that persists on real-world
+sensor data.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] TSFMs may lack inductive biases for basic temporal patterns despite
+    strong broad-benchmark performance.
+  \item[Why it matters:] Monotonic trends, periodicity, and causal leading indicators
+    are ubiquitous in industrial, scientific, and healthcare time series.
+  \item[Method:] SimpleTimeBench---a diagnostic suite of unit tests for temporal
+    primitives (trend, periodicity, leading indicators) at multiple difficulty levels.
+  \item[Result:] Chronos-2, Moirai, and Toto frequently fail zero-shot unit tests;
+    ARIMA/Theta match or exceed them on basic primitives.
+  \item[Evidence:] Synthetic controlled series plus real-world building energy meters and
+    meteorological stations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Time Series Foundation Models (TSFMs) trained on massive corpora---Chronos-2 on
+billions of time points, Moirai on diverse multi-domain data---have achieved
+impressive zero-shot performance on established benchmarks such as Monash and ETT.
+The natural inference is that these models have internalized general temporal structure,
+including basic primitives like monotonic trends, cyclical seasonality, and causal
+leading indicators.
+
+This paper challenges that inference by constructing SimpleTimeBench: a diagnostic
+benchmark of unit tests for temporal primitives where any well-calibrated forecaster
+should produce near-perfect zero-shot results. If a model with billions of training
+examples fails these trivial tests, the gap between pre-training scale and genuine
+temporal reasoning is larger than aggregate benchmarks suggest.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Conflation problem:} Aggregate benchmark performance combines hundreds of
+heterogeneous series; strong performance on diverse data does not guarantee competence
+on any individual temporal primitive.
+
+\textbf{No unit tests:} There is no existing benchmark analogous to software unit tests
+that verifies whether a model handles basic temporal building blocks correctly.
+
+\textbf{Invisible covariate gaps:} Existing benchmarks rarely test whether models
+exploit available exogenous covariates (leading indicators), so systematic failure
+to use causal information goes undetected.
+
+\section{Core Mechanism}
+
+\textbf{SimpleTimeBench} comprises three test families:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \emph{Monotonic trend:} Univariate series $x_t = \alpha t + \sigma\epsilon_t$
+    with varying slope $\alpha$ and noise $\sigma$. The oracle continues the trend;
+    reversals or early flattening constitute failures.
+  \item \emph{Periodic signals:} Series with known periods (daily/weekly/annual)
+    and controlled amplitudes. A model with temporal periodicity inductive bias
+    should closely track cycles.
+  \item \emph{Leading indicators:} Multivariate series where channel $x_{t-k}$
+    Granger-causes $y_t$ with a known lag $k$, providing complete information
+    for an accurate forecast.
+\end{itemize}
+
+Each family spans multiple noise levels, slopes, periods, and lag lengths to
+characterize sensitivity rather than produce a binary pass/fail verdict.
+
+\section{Technical Formulation}
+
+For the monotonic trend test at noise level $\sigma$ and slope $\alpha$:
+\[
+x_t = \alpha t + \sigma \epsilon_t, \quad \epsilon_t \sim \mathcal{N}(0,1)
+\]
+The oracle forecast for horizon $h$ is $\hat{x}_{T+h} = \alpha(T+h)$, achieving MASE $\approx 1$.
+A model \emph{passes} if $\text{MASE}_{\text{model}} / \text{MASE}_{\text{oracle}} < \delta$
+for threshold $\delta = 2.0$.
+
+For the leading indicator test with lag $k$:
+\[
+y_t = \phi(x_{t-k}) + \sigma\epsilon_t
+\]
+The oracle MSE is $\sigma^2$. The leading-indicator utilization rate $\rho$ is:
+\[
+\rho = 1 - \frac{\text{MSE}_{\text{model}} - \sigma^2}{\text{MSE}_{\text{no-cov}} - \sigma^2}
+\]
+where $\text{MSE}_{\text{no-cov}}$ is the MSE of a univariate model that ignores $x$.
+A $\rho$ near 1 indicates full utilization; TSFMs average $\rho < 0.4$.
+
+\section{Learning or Inference Procedure}
+
+SimpleTimeBench is evaluation-only. The procedure:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Generate controlled synthetic series at multiple difficulty levels.
+  \item Run each TSFM (Chronos-2, Moirai, Toto) in zero-shot mode with
+    the model's default context window.
+  \item Compute MASE, sMAPE, and $\rho$ for each test family.
+  \item Compare against oracle forecasters and classical baselines
+    (ARIMA, Theta, ARIMAX).
+  \item Validate on real-world sensor datasets containing the tested primitives.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+SimpleTimeBench provides a falsifiability guarantee: failure on any test family certifies
+the existence of natural inputs (with no distributional shift) for which the model
+underperforms a trivially simple oracle. This is a constructive, worst-case
+characterization---not a claim about average performance.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Trend reversal:} Chronos-2 reverses an increasing trend in
+    $\approx18\%$ of test cases at low noise; Moirai flattens trends early
+    in $\approx23\%$.
+  \item \textbf{Periodic signals:} All three models exhibit MASE ratios above 2.0
+    relative to the oracle in $>30\%$ of annual-period instances.
+  \item \textbf{Leading indicators:} Average utilization rate $\rho < 0.40$
+    for all three TSFMs; ARIMAX achieves $\rho > 0.80$ on the same series.
+  \item \textbf{Real-world sensors:} On building energy meters, TSFMs consistently
+    underperform a tuned Fourier decomposition model on strongly periodic signals.
+  \item \textbf{Classical model comparison:} ARIMA and Theta match or exceed TSFMs
+    on monotonic trend and leading indicator tests despite being far simpler.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Context window:} Longer context modestly improves periodic performance
+(5--10\% MASE reduction) but does not eliminate failures.
+
+\textbf{Model size:} Larger model variants do not substantially improve
+SimpleTimeBench pass rates---the blind spots are not simply a parameter-count issue.
+
+\textbf{Fine-tuning:} A small amount of domain fine-tuning on primitive-containing
+examples raises pass rates to $>85\%$, confirming the biases are learnable but
+absent in zero-shot pre-trained form.
+
+\section*{Reference}
+
+Nafiseh Ghoroghchian, Haipeng Zhang, Shuyi Han, Alex Labach, George Stein.
+\textbf{Foundations without Fundamentals: Zero-Shot Blind Spots in Time Series FMs}.
+arXiv:2610.02058, October 2026.\\
+\url{https://arxiv.org/abs/2610.02058}
+
+\end{document}

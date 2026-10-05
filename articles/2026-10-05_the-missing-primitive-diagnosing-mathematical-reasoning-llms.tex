@@ -1,0 +1,204 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mathematical reasoning \textbullet{}
+  LLM interpretability \textbullet{}
+  structural understanding \textbullet{}
+  primitive-guided post-training}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  The Missing Primitive: Diagnosing and Repairing Mathematical Reasoning in Large Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A New Benchmark Reveals that Discovery---Not Execution---Is the Universal Bottleneck
+  to LLM Mathematical Reasoning, and That Targeting It Yields Consistent Gains}\par\vspace{6pt}
+
+{\small\textbf{By} Shuo Xing, Zilin Dai, Chengyuan Qian, Fangzhou Lin, Wenjing Chen,
+  Ping He, Pan Lu, Alvaro Velasquez, Mohit Bansal \& Zhengzhong Tu
+  (Texas A\&M University; UNC Chapel Hill; UCLA; University of Colorado Denver)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.02191 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+LLMs that routinely solve competition-level mathematics often lack the structural understanding
+underlying their solutions: given the correct foundational idea---a \emph{Mathematical Primitive}---the
+same models execute near-perfectly, but independently discovering that primitive is the dominant
+bottleneck across all frontier architectures tested. Primitive-guided post-training closes the gap.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLM mathematical reasoning accuracy does not reveal whether models
+    possess the structural understanding behind their solutions.
+  \item[Why it matters:] Models with identical benchmark scores may rely on brittle
+    heuristics; diagnosing structural gaps enables targeted improvement.
+  \item[Method:] Mathematical Primitive concept plus the Prim benchmark spanning
+    Discovery, Generation, Digestion, and Execution dimensions.
+  \item[Result:] Discovery lags Execution by up to 30 pp; primitive-guided post-training
+    consistently raises both Discovery and overall task accuracy.
+  \item[Evidence:] Evaluated across multiple frontier LLMs on Prim and held-out
+    downstream math benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models have crossed remarkable thresholds in mathematical reasoning: the best
+contemporary systems solve a substantial fraction of AMC and AIME problems and approach expert
+performance on graduate-level benchmarks. Yet this aggregate success conceals a potentially
+critical gap: does solving a problem indicate that the model grasped the foundational idea
+organizing the solution, or merely that it reproduced a pattern from training data?
+
+This paper takes a first step toward answering that question by introducing the concept of
+the \emph{Mathematical Primitive}---a concise, non-procedural description of the core insight
+that, once identified, makes the detailed execution steps straightforward. For example,
+a combinatorics problem's primitive might be ``map to a stars-and-bars counting argument''
+rather than the specific arithmetic that follows from it.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Benchmark saturation:} State-of-the-art LLMs now score near ceiling on MATH and
+AMC; high scores mask vastly different capability profiles.
+
+\textbf{No structural audit:} Existing benchmarks measure correct final answers, not whether
+the model identified the organizing idea. Two models with identical accuracy may differ
+dramatically in structural understanding.
+
+\textbf{Post-training targeting:} Standard chain-of-thought fine-tuning and process reward
+models treat all reasoning steps equally; they do not specifically target primitive
+discovery where diagnosis reveals the greatest weakness.
+
+\section{Core Mechanism}
+
+\textbf{Mathematical Primitive.} A primitive is defined as the single, concise, non-procedural
+representation of the foundational idea that organizes a solution. It is shorter than a proof
+sketch, more specific than a problem category, and must identify the key conceptual move.
+
+\textbf{Prim Benchmark.} The paper constructs Prim with four complementary dimensions:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \emph{Discovery:} Given the problem, identify the primitive.
+  \item \emph{Generation:} Given the primitive, produce a valid solution.
+  \item \emph{Digestion:} Given a complete solution, extract the primitive it relies on.
+  \item \emph{Execution:} Given both problem and primitive, carry out the solution steps.
+\end{itemize}
+
+\section{Technical Formulation}
+
+Let $\mathcal{P}$ be the space of primitives and $\mathcal{Q}$ the space of problems.
+Define four binary capability indicators for a model $\mathcal{M}$ on problem $q$ with
+ground-truth primitive $p^*(q)$:
+\[
+\text{Disc}(q) = \mathbf{1}[\hat{p}(q) = p^*(q)]
+\]
+\[
+\text{Exec}(q,p^*) = \mathbf{1}[\hat{s}(q,p^*(q))\text{ is correct}]
+\]
+The central finding is:
+\[
+\mathbb{E}_q\bigl[\text{Exec}(q,p^*(q))\bigr] \gg \mathbb{E}_q\bigl[\text{Disc}(q)\bigr]
+\]
+for all tested models, establishing that \textbf{Discovery is the dominant bottleneck}.
+Primitive-guided post-training minimizes a combined loss:
+\[
+\mathcal{L} = \mathcal{L}_{\text{solve}} + \lambda \mathcal{L}_{\text{discover}}
+\]
+where $\mathcal{L}_{\text{discover}}$ is a cross-entropy term on primitive Discovery, and
+$\lambda$ is a balancing hyperparameter.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Evaluation:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run each Prim dimension independently on the same model.
+  \item Compute per-dimension accuracy and capability profile.
+  \item Compare profiles across models with similar aggregate task accuracy.
+\end{enumerate}
+
+\textbf{Post-training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Annotate training problems with ground-truth or LLM-generated primitives.
+  \item Add a primitive Discovery objective alongside the standard solution objective.
+  \item Fine-tune with combined loss $\mathcal{L}$; evaluate on held-out Prim dimensions
+    and downstream benchmarks.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No formal convergence bound is given; the Discovery bottleneck is an empirical finding.
+The central claim is: across all tested frontier LLMs, Execution given a correct primitive
+substantially exceeds unconditioned Discovery, establishing the latter as universally limiting.
+Post-training improvement transfers to held-out benchmarks not seen during fine-tuning.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Discovery gap:} Execution given the correct primitive exceeds unconditioned
+    Discovery by up to 30 percentage points across all frontier LLMs.
+  \item \textbf{Hidden differences:} Two models with identical MATH accuracy can differ
+    by over 20 pp on the Discovery dimension alone.
+  \item \textbf{Latent execution capacity:} Providing correct primitives to models that
+    cannot discover them independently unlocks near-full solution accuracy.
+  \item \textbf{Post-training gains:} Primitive-guided fine-tuning consistently improves
+    Discovery accuracy and overall task performance, with gains transferring to held-out sets.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Primitive granularity:} Coarser primitives yield lower Execution improvement;
+fine-grained primitives that specify the exact conceptual move are most effective.
+
+\textbf{Imperfect primitives:} Using LLM-generated rather than ground-truth primitives
+reduces but does not eliminate the Execution advantage---even imperfect discovery guidance helps.
+
+\textbf{Digestion vs.\ Discovery:} High Digestion accuracy does not predict high Discovery
+accuracy, establishing that recognizing a primitive in a given solution and independently
+finding it from a problem statement are distinct capabilities.
+
+\section*{Reference}
+
+Shuo Xing et al.
+\textbf{The Missing Primitive: Diagnosing and Repairing Mathematical Reasoning in
+Large Language Models}.
+arXiv:2610.02191, October 2026.\\
+\url{https://arxiv.org/abs/2610.02191}
+
+\end{document}

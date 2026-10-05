@@ -1,0 +1,220 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mechanistic interpretability \textbullet{}
+  non-linear manifolds \textbullet{}
+  concept alignment \textbullet{}
+  LLM representations}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Beyond Linear Concepts: Discovering and Aligning Non-Linear Concept Manifolds
+  in Large Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Modelling Concepts as Low-Dimensional Riemannian Manifolds Reveals
+  Consistent Block Structures and a Syntax-to-Semantics Transition
+  Universal Across Architectures}\par\vspace{6pt}
+
+{\small\textbf{By} Tido Specht, Elias Benedict Krey, Nils Neukirch
+  \& Nils Strodthoff (University of Oldenburg; DFKI)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.01821 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Adapting Non-Linear Multi-Dimensional Concept Discovery (NLMCD) from computer vision
+to token-level LLM activations and introducing the Concept-Based Alignment (CBA)
+score, this work reveals that concept organization in LLMs exhibits consistent
+block structures across layers and architectures, with representations staying
+syntax-dominated through 70\% of the network before transitioning to mixed
+syntactic-semantic structure in late layers---patterns invisible to linear methods.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing MI methods assume linear concept representations,
+    missing the non-linear geometric structure of LLM activations.
+  \item[Why it matters:] Linear methods may produce incomplete or misleading
+    interpretations of how concepts are organized in large models.
+  \item[Method:] NLMCD fits low-dimensional manifolds to token activations;
+    CBA score (generalized Rand index) compares manifolds across layers and models
+    without requiring explicit feature matching.
+  \item[Result:] Consistent block structures at intermediate layers; syntax-dominated
+    through 70\% of network then mixed syntactic-semantic; CBA is 15--30\% more
+    sensitive than PCA or CKA.
+  \item[Evidence:] Five LLM architectures (Llama, Mistral, Falcon, and others)
+    on Wikipedia $+$ code corpora.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Mechanistic interpretability seeks to decode the internal representations of large
+language models---how concepts are organized, transformed, and composed across layers.
+Dominant methods (probes, sparse autoencoders, dictionary learning) rest on a shared
+linearity assumption: each concept occupies a direction in activation space, and its
+presence is measured by a linear classifier or inner product.
+
+This assumption is increasingly challenged by empirical evidence showing curved,
+non-linearly distributed activation clusters. If concepts genuinely occupy
+low-dimensional manifolds rather than directions, linear methods will systematically
+miss or mischaracterize them. This paper takes the manifold hypothesis seriously
+and develops tools to act on it, revealing organizational principles in LLMs
+that linear baselines cannot detect.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Linear probes} measure concept presence as a dot product with a learned
+direction, entirely missing curved or non-linearly distributed concept regions.
+
+\textbf{Sparse autoencoders (SAEs)} decompose activations into sparse linear
+combinations; each dictionary feature is a direction, and compositions are linear
+sums. Non-linear manifold structure is encoded only incidentally.
+
+\textbf{CKA and PCA-based comparisons} compare linear subspaces across layers
+using canonical angles; they are insensitive to non-linear geometry and cannot
+detect manifold-level structural differences.
+
+\textbf{No cross-model alignment:} Existing methods lack a rigorous way to compare
+concept organization across different architectures without explicit feature
+matching, which assumes a known bijection between concepts---not generally available.
+
+\section{Core Mechanism}
+
+\textbf{NLMCD on LLM Activations.} For each concept category $c$ (syntactic
+POS tag, dependency role, semantic entity type) and each layer $l$, the paper
+collects token activation sets $\mathcal{H}_c^l$ and fits a low-dimensional
+Riemannian manifold $\mathcal{M}_c^l$ using a neural network atlas.
+
+\textbf{Concept-Based Alignment (CBA) Score.} CBA measures whether two manifolds
+partition the same token set into the same neighborhoods, without requiring
+explicit feature matching:
+\[
+\text{CBA}(\mathcal{M}_c^l, \mathcal{M}_c^{l'})
+= \text{RandIndex}(G_c^l,\, G_c^{l'})
+\]
+where $G_c^l$ is a neighborhood graph on tokens $\mathcal{T}_c$ derived from
+geodesic distances on $\mathcal{M}_c^l$. CBA is 1.0 when both manifolds partition
+the token space identically and 0.5 at chance.
+
+\section{Technical Formulation}
+
+Let $\mathbf{h}_l^{(t)} \in \mathbb{R}^d$ be the activation of token $t$ at layer $l$.
+The NLMCD atlas $\phi_c^l : \mathbb{R}^k \to \mathbb{R}^d$ (with $k \ll d$) is fitted by:
+\[
+\min_{\phi} \sum_{t \in \mathcal{T}_c}
+  \|\mathbf{h}_l^{(t)} - \phi(z^{(t)})\|^2 + \lambda\,\mathrm{Reg}(\phi)
+\]
+where $z^{(t)} \in \mathbb{R}^k$ are latent coordinates learned jointly, and
+$\mathrm{Reg}(\phi)$ is a smoothness regularizer.
+
+The CBA between concept $c$ at layers $l$ and $l'$ uses the generalized Rand index:
+\[
+\text{CBA} = \frac{|\{(i,j): \text{near in }G_c^l \Leftrightarrow \text{near in }G_c^{l'}\}|}{|\mathcal{T}_c|^2}
+\]
+All-pairs CBA matrices across layers $\{1, \ldots, L\}$ reveal which layer intervals
+share similar concept geometry.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Manifold fitting (offline):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run the LLM on a large corpus ($\approx$10M tokens).
+  \item Extract activations $\{\mathbf{h}_l^{(t)}\}$ for all tokens and layers.
+  \item For each concept category $c$ and layer $l$, fit NLMCD atlas $\phi_c^l$
+    using stochastic gradient descent.
+\end{enumerate}
+
+\textbf{CBA computation (post-fitting):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Compute pairwise geodesic distances on each fitted manifold.
+  \item Build neighborhood graphs $G_c^l$ and compute Rand index between
+    all (layer, model) pairs.
+  \item Visualize as CBA alignment matrices to identify block structures.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+NLMCD provides a consistent manifold estimate as sample size grows, under standard
+regularity conditions on manifold geometry. CBA is a metric on the space of
+neighborhood partitions. The main empirical claim---cross-architecture consistency
+of block structures---is validated by replicating CBA patterns across five model
+families including architectures trained on different data regimes.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Block structures:} CBA matrices show consistent high-alignment blocks
+    at intermediate layers ($\approx$layers 10--20 in a 32-layer model).
+  \item \textbf{Syntax-to-semantics:} Syntactic concepts dominate CBA structure
+    through $\approx$70\% of network depth; semantic concepts become prominent
+    in the final 30\% of layers across all tested models.
+  \item \textbf{Cross-architecture:} Block structures are consistent across Llama,
+    Mistral, Falcon and two additional families at equivalent depth fractions.
+  \item \textbf{CBA sensitivity:} CBA is 15--30\% more sensitive than PCA-based
+    or CKA-based baselines, as measured by detection of synthetic perturbations.
+  \item \textbf{Non-linearity:} Linear probes in place of NLMCD miss the block
+    transitions entirely, confirming that non-linear geometry carries genuine
+    structural information.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Manifold dimension $k$:} Values $k \in \{2,4,8\}$ all produce similar CBA
+patterns; $k=4$ offers the best fidelity-cost trade-off.
+
+\textbf{Corpus composition:} Code-heavy vs.\ text-heavy corpora show similar
+syntactic block patterns but differ in semantic concept structure of late layers,
+aligned with known training data differences.
+
+\textbf{Tokenization:} Character-level tokens show less pronounced block structure
+than subword tokens, suggesting the patterns are tightly coupled to the tokenization
+scheme.
+
+\section*{Reference}
+
+Tido Specht, Elias Benedict Krey, Nils Neukirch, Nils Strodthoff.
+\textbf{Beyond Linear Concepts: Discovering and Aligning Non-Linear Concept Manifolds
+in Large Language Models}.
+arXiv:2610.01821, October 2026.\\
+\url{https://arxiv.org/abs/2610.01821}
+
+\end{document}

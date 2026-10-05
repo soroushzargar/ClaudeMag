@@ -1,0 +1,69 @@
+ML Papers List — 2026-10-05
+Generated for ClaudeMag
+
+1. The Missing Primitive: Diagnosing and Repairing Mathematical Reasoning in Large Language Models
+   Authors: Shuo Xing, Zilin Dai, Chengyuan Qian, Fangzhou Lin, Wenjing Chen, Ping He, Pan Lu, Alvaro Velasquez, Mohit Bansal, Zhengzhong Tu
+   Affiliation: Texas A&M University; UNC Chapel Hill; UCLA; University of Colorado Denver
+   Venue/ID: arXiv:2610.02191
+   URL: https://arxiv.org/abs/2610.02191
+   Summary: LLMs display impressive solving accuracy on frontier math problems while potentially lacking structural
+   mathematical understanding. This paper introduces the concept of Mathematical Primitive—a concise, non-procedural
+   representation of the foundational idea organizing a solution—and proposes the Prim benchmark spanning four
+   complementary dimensions: Discovery, Generation, Digestion, and Execution. Diagnosis reveals that similar
+   solving accuracy can mask markedly different capability profiles, correct primitives unlock substantial latent
+   execution capacity, and Independent Discovery is the dominant bottleneck to mathematical reasoning. Leveraging
+   these findings, a primitive-guided post-training procedure yields consistent improvements across multiple LLMs.
+
+2. Error-Corrected Inference-Time Scaling for Imperfect Diffusion Models
+   Authors: Zuokai Wen, Louis Grenioux, Weinan E, Jiequn Han
+   Affiliation: Princeton University; Flatiron Institute, Simons Foundation
+   Venue/ID: arXiv:2610.01933
+   URL: https://arxiv.org/abs/2610.01933
+   Summary: Inference-time scaling for diffusion models relies on Monte Carlo sampling with more particles but
+   assumes the pretrained model is exact—a condition violated in practice by data and training imperfections.
+   The paper introduces the Energy-based Feynman-Kac Corrector (EBFKC), a framework that derives Feynman-Kac
+   dynamics capable of tracking a prescribed probability path exactly in the continuous-time population limit
+   even when the model is imperfect, and approximates these dynamics using sequential Monte Carlo with
+   variance-controlling guidance. Evaluated on Gaussian mixture models, particle systems, alanine dipeptide,
+   and alanine tetrapeptide under annealing and reward tilting, EBFKC closely matches target distributions
+   and molecular free-energy profiles whereas standard inference-time scaling baselines retain substantial
+   sampling errors.
+
+3. Foundations without Fundamentals: Zero-Shot Blind Spots in Time Series Foundation Models
+   Authors: Nafiseh Ghoroghchian, Haipeng Zhang, Shuyi Han, Alex Labach, George Stein
+   Affiliation: ServiceNow Research; McGill University
+   Venue/ID: arXiv:2610.02058
+   URL: https://arxiv.org/abs/2610.02058
+   Summary: Despite impressive benchmark performance, Time Series Foundation Models (TSFMs) may lack the inductive
+   biases needed to capture simple predictable functions. The paper introduces SimpleTimeBench, a diagnostic unit-test
+   suite for temporal primitives such as monotonic trends, periodic signals, and leading-indicator covariates—scenarios
+   where near-perfect zero-shot forecasts should be trivial. Testing prominent multivariate TSFMs (Chronos-2, Moirai,
+   Toto), the paper finds they frequently produce suboptimal zero-shot forecasts on these simple inputs, revealing
+   a gap between pre-training scale and basic temporal reasoning. These failures persist in real-world sensor
+   forecasting where TSFMs consistently underutilize available leading indicators.
+
+4. Beyond Linear Concepts: Discovering and Aligning Non-Linear Concept Manifolds in Large Language Models
+   Authors: Tido Specht, Elias Benedict Krey, Nils Neukirch, Nils Strodthoff
+   Affiliation: University of Oldenburg; German Research Center for AI (DFKI)
+   Venue/ID: arXiv:2610.01821
+   URL: https://arxiv.org/abs/2610.01821
+   Summary: Existing mechanistic interpretability methods extract concepts from LLMs under a strong linearity
+   assumption challenged by evidence of non-linear feature manifolds. This paper adapts Non-Linear Multi-Dimensional
+   Concept Discovery (NLMCD) from computer vision to token-level LLM activations, modeling concepts as low-dimensional
+   manifolds rather than linear directions. A new Concept-Based Alignment (CBA) score—a generalized Rand index
+   measuring geometric proximity without explicit feature matching—reveals that alignment matrices exhibit block
+   structures consistent across models, with representations remaining syntax-dominated through most of the
+   network before giving way to increasingly mixed syntactic-semantic concepts in later layers.
+
+5. TACO: Ternary Absolute-max Column-wise One-sparse Optimizer for LLM Fine-Tuning
+   Authors: Jichao Jiang, Cristian McGee, El Houcine Bergou, Hanqin Cai, Aritra Dutta
+   Affiliation: University of Central Florida; Mohammed VI Polytechnic University (UM6P)
+   Venue/ID: arXiv:2610.02199
+   URL: https://arxiv.org/abs/2610.02199
+   Summary: Full-parameter fine-tuning of LLMs incurs substantial optimizer state memory overhead. TACO computes
+   the exact steepest-descent direction under a dimension-normalized 1→1 operator norm by selecting the sign of
+   the largest-magnitude entry in each column of two-dimensional weight matrices, following Muon's operator-norm
+   view but pushing the geometric route further. TACO reduces persistent optimizer state by 174× relative to
+   AdamW8bit (from 27.7 GB to 0.16 GB) and peak training memory by 2.9× (from 80.6 GB to 27.5 GB) on OPT-13B,
+   while achieving comparable accuracy and runtime. TACO enables full-parameter fine-tuning of 30–32B parameter
+   models on a single 80 GB H100 GPU across multiple model families and tasks.

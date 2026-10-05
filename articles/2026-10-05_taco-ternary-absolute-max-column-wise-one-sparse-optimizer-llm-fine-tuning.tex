@@ -1,0 +1,229 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-05}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  memory-efficient fine-tuning \textbullet{}
+  operator-norm optimization \textbullet{}
+  ternary update \textbullet{}
+  LLM training}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  TACO: Ternary Absolute-max Column-wise One-sparse Optimizer for LLM Fine-Tuning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  174$\times$ Less Optimizer State Than AdamW8bit, Full-Parameter Fine-Tuning of 32B Models
+  on One 80\,GB H100, Comparable Accuracy}\par\vspace{6pt}
+
+{\small\textbf{By} Jichao Jiang, Cristian McGee, El Houcine Bergou,
+  Hanqin Cai \& Aritra Dutta (University of Central Florida;
+  Mohammed VI Polytechnic University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.02199 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+TACO takes the operator-norm steepest-descent view to its logical extreme:
+it selects the sign of the largest-magnitude entry in each column of every
+two-dimensional weight matrix---a ternary, one-sparse-per-column update that
+requires essentially zero persistent optimizer state---and reduces AdamW8bit's
+27.7\,GB optimizer footprint on OPT-13B to 0.16\,GB while matching downstream
+accuracy across multiple model families and enabling 32B-scale full-parameter
+fine-tuning on a single H100.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] AdamW and quantized variants require 2--3$\times$ the model size
+    in optimizer state, limiting full-parameter fine-tuning to small models on
+    a single GPU.
+  \item[Why it matters:] Full-parameter fine-tuning outperforms LoRA on complex
+    domain adaptation; enabling it for 30B+ models democratizes access.
+  \item[Method:] Exact steepest descent under dimension-normalized 1$\to$1 operator
+    norm selects sign of the maximum-magnitude column entry; no persistent momentum
+    buffers.
+  \item[Result:] 174$\times$ optimizer state reduction; 2.9$\times$ peak memory
+    reduction; accuracy within 0.5--1.0\% of AdamW on SuperGLUE, SQuAD v2.
+  \item[Evidence:] OPT, LLaMA, Mistral, Phi families; fine-tuning tasks including
+    SuperGLUE, SQuAD v2, and instruction following.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Full-parameter fine-tuning of large language models is the gold standard for
+domain adaptation: it updates every weight, avoids the rank constraints of
+parameter-efficient methods (LoRA, prefix tuning), and captures distribution
+shifts that low-rank approximations cannot represent. Yet it has been practically
+out of reach for models above $\sim$7B parameters on a single 80\,GB GPU because
+AdamW---the dominant optimizer---maintains first and second moment buffers that
+add 2$\times$ the model parameter count in optimizer state.
+
+TACO addresses this by rethinking what state an optimizer actually needs.
+Drawing on the operator-norm steepest-descent perspective introduced by Muon,
+TACO shows that the exact optimal update under a dimension-normalized 1$\to$1
+operator norm requires no momentum buffers whatsoever---only the current-step
+gradient, which is discarded immediately after use.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{AdamW:} Two full-precision moment buffers (first and second order) add
+$2\times$ the model's FP32 parameter count to GPU memory. On OPT-13B this is
+27.7\,GB of persistent state alone.
+
+\textbf{AdamW8bit:} Quantizes moment buffers to 8 bits, cutting state to
+$\approx 27.7$\,GB/$2$\,=\,13.9\,GB---a useful reduction but still far larger
+than TACO's 0.16\,GB.
+
+\textbf{SignSGD:} Takes the sign of the full gradient column-by-column but does
+not arise from a principled operator-norm steepest-descent argument, and can
+exhibit slow convergence on poorly scaled gradients.
+
+\textbf{Muon:} Derives updates via operator-norm steepest descent and applies
+Nesterov momentum, but still maintains a first-moment buffer.
+
+\textbf{LoRA:} Reduces state by fine-tuning only low-rank adaptors, but cannot
+update all parameters and underperforms full-rank methods on complex adaptation.
+
+\section{Core Mechanism}
+
+\textbf{Operator-norm steepest descent.} Given a weight matrix $W \in \mathbb{R}^{m\times n}$
+with gradient $G$, the steepest-descent direction under the dimension-normalized
+$1 \to 1$ operator norm constraint selects, for each column $j$, the row index
+achieving the maximum gradient magnitude, and assigns a ternary entry equal to
+the sign of that element.
+
+Formally, the update matrix $U \in \{-1, 0, +1\}^{m \times n}$ has exactly
+one nonzero entry per column---hence ``one-sparse per column'' and ``ternary''.
+No previous-step information is accumulated: the only state at any step is the
+current gradient, discarded immediately after $U$ is computed.
+
+\section{Technical Formulation}
+
+For each column $j \in [n]$ of gradient $G^{(t)}$:
+\[
+i^*(j) = \arg\max_{i \in [m]} |G_{ij}^{(t)}|
+\]
+\[
+U_{ij}^{(t)} = \begin{cases}
+  \mathrm{sign}\!\left(G_{i^*(j),j}^{(t)}\right) & i = i^*(j) \\
+  0 & \text{otherwise}
+\end{cases}
+\]
+Weight update:
+\[
+W^{(t+1)} = W^{(t)} - \eta\, U^{(t)}
+\]
+Persistent optimizer state between steps: $\varnothing$ (the BF16 gradient
+buffer $G^{(t)}$ is freed immediately after the update).
+
+Under a convex loss with Lipschitz gradient, TACO achieves
+$O(1/\sqrt{T})$ convergence matching signSGD, while the update $U^{(t)}$
+is the exact minimizer of the linearized objective subject to the unit
+operator-norm ball.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Forward:} Standard.
+
+\textbf{Backward:} Compute gradient $G^{(t)}$ for each 2D weight matrix.
+
+\textbf{Update (per-matrix):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Compute argmax over each column of $|G^{(t)}|$.
+  \item Construct ternary one-sparse matrix $U^{(t)}$.
+  \item Apply $W \leftarrow W - \eta U^{(t)}$ in-place.
+  \item Free $G^{(t)}$.
+\end{enumerate}
+
+Non-2D tensors (embeddings, 1D biases) fall back to signSGD.
+Learning rate: cosine or linear warmup-decay schedule; no additional
+hyperparameters beyond $\eta$.
+
+\section{What the Guarantee Says}
+
+For convex losses, TACO converges at rate $O(1/\sqrt{T})$, matching signSGD.
+The $U^{(t)}$ is the exact steepest-descent direction under the 1$\to$1
+operator norm: no other ternary update achieves a greater linearized objective
+decrease under the operator-norm geometry. The persistent state between steps
+is strictly zero beyond the model weights, providing a hard lower bound on
+optimizer memory that no further quantization can improve.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Optimizer state:} 27.7\,GB (AdamW8bit) $\to$ 0.16\,GB (TACO)
+    on OPT-13B: a 174$\times$ reduction.
+  \item \textbf{Peak training memory:} 80.6\,GB $\to$ 27.5\,GB on OPT-13B:
+    a 2.9$\times$ reduction.
+  \item \textbf{Large-model access:} OPT-30B and LLaMA-32B can be fully
+    fine-tuned on a single 80\,GB H100---previously impossible with AdamW.
+  \item \textbf{Accuracy:} Within 0.5--1.0\% of AdamW on SuperGLUE, SQuAD\,v2,
+    and instruction following, across OPT, LLaMA, Mistral, Phi.
+  \item \textbf{Throughput:} Training step runtime within 5\% of AdamW8bit
+    owing to the simplicity of the argmax-and-sign update.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Row-wise vs.\ column-wise argmax:} Row-wise argmax (violating the
+operator-norm derivation) slightly degrades accuracy, confirming the
+theoretical motivation matters in practice.
+
+\textbf{Top-$k$ per column (TACO-$k$):} Allowing $k>1$ nonzero entries per
+column interpolates between TACO and a dense gradient, recovering AdamW accuracy
+at the cost of $k$-fold increased state; $k=1$ is Pareto-optimal for
+memory-constrained settings.
+
+\textbf{Momentum ablation:} Adding a first-moment moving average of $U^{(t)}$
+improves convergence speed on some tasks but doubles persistent state; omitting
+momentum is preferred when memory is the bottleneck.
+
+\textbf{TACO vs.\ LoRA:} At equal GPU memory budget, full-parameter TACO
+outperforms LoRA on domain-specific tasks, confirming the value of full-rank updates
+when memory constraints are relaxed by the optimizer.
+
+\section*{Reference}
+
+Jichao Jiang, Cristian McGee, El Houcine Bergou, Hanqin Cai, Aritra Dutta.
+\textbf{TACO: Ternary Absolute-max Column-wise One-sparse Optimizer for LLM Fine-Tuning}.
+arXiv:2610.02199, October 2026.\\
+\url{https://arxiv.org/abs/2610.02199}
+
+\end{document}
