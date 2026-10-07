@@ -1,0 +1,214 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  data selection \textbullet{}
+  post-training \textbullet{}
+  gradient alignment \textbullet{}
+  LLM fine-tuning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  LESSER: Post-Training Data Selection with Output-Layer Gradients}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Output-Layer Gradients Are a 9.7$\times$ Cheaper Proxy for Full-Gradient Data
+  Selection While Preserving Batch-Level Alignment and Downstream Performance}\par\vspace{6pt}
+
+{\small\textbf{By} Lyuxin David Zhang, Eric Wong, Surbhi Goel \& Anton Xue
+  (University of Pennsylvania)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.03702 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Gradient-based data selection for LLM post-training requires an expensive
+full-backward pass for every candidate sample; LESSER shows that restricting
+gradient computation to the output layer reduces cost by up to $9.7\times$
+while matching full-gradient performance, because batches selected by both
+methods remain well-aligned with the validation gradient even when
+individual sample rankings differ.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Full-parameter gradient computation for post-training data
+    selection is intractable at scale.
+  \item[Why it matters:] The right training data can substantially improve
+    downstream performance; efficient selection unlocks practical use.
+  \item[Method:] Restrict gradient computation to the output (language-model
+    head) layer only; use as a drop-in wrapper for any selection algorithm.
+  \item[Result:] 9.7$\times$ FLOP reduction for SFT and 3.0$\times$ for RL
+    selection, with no downstream performance loss.
+  \item[Evidence:] Evaluated across multiple gradient-based selection methods
+    on SFT and RL post-training benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The choice of which data to use for post-training an LLM substantially shapes
+its downstream capabilities. Gradient-based data selection formalizes this
+choice: rank candidate data points by how well their per-sample gradients align
+with the gradient on a small, high-quality validation set, then train on the
+top-ranked examples. The method is principled and effective but computationally
+prohibitive at scale---each candidate requires a full backward pass through a
+billion-parameter model.
+
+LESSER (Last-layer Efficient Sample Selection via Output-layer gRadients) asks:
+does the output layer's gradient contain enough information to perform
+effective selection, at a fraction of the cost of backpropagating through
+the entire network?
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Full-gradient cost is prohibitive.} For a model with $N$ parameters and
+a candidate pool of $M$ samples, gradient-based selection requires $O(NM)$ work.
+At $N = 7 \times 10^9$ and $M = 10^5$, this is impractical without
+approximation.
+
+\textbf{Embedding-layer proxies introduce extra hyperparameters.} LESS and related
+methods use LoRA projections of embedding-layer gradients, introducing a
+rank hyperparameter and a random-projection step that adds engineering overhead.
+
+\textbf{Sample-level alignment is not the operative quantity.} Prior work implicitly
+assumes that a proxy must rank individual samples identically to full gradients.
+LESSER demonstrates that batch-level alignment---the quantity that governs
+gradient descent quality---is preserved even when sample rankings differ.
+
+\section{Core Mechanism}
+
+LESSER restricts gradient computation to the \textbf{output layer} (language
+model head)---the final linear projection $W_\text{head}$ from hidden states
+to vocabulary logits. This layer has far fewer parameters than the full model
+but its gradient directly reflects the training objective.
+
+The output-layer gradient for a data point $x$ is:
+\[
+\nabla_{W_\text{head}} \ell(x, \theta) = \frac{\partial \ell}{\partial \text{logits}} \cdot h_x^\top
+\]
+where $h_x$ is the final hidden state and $\frac{\partial \ell}{\partial \text{logits}}$
+is the softmax loss gradient. This requires only a single matrix multiplication
+and does not backpropagate through transformer layers.
+
+\section{Technical Formulation}
+
+Standard gradient-based selection scores candidate $x$ as:
+\[
+s(x) = \left\langle \nabla_\theta \ell(x, \theta),\; \nabla_\theta \mathcal{L}(\mathcal{V}, \theta) \right\rangle
+\]
+
+LESSER replaces $\theta$ with the output-layer parameters $\theta_L$:
+\[
+s_\text{LESSER}(x) = \left\langle \nabla_{\theta_L} \ell(x, \theta),\; \nabla_{\theta_L} \mathcal{L}(\mathcal{V}, \theta) \right\rangle
+\]
+
+The key empirical finding---that batch-level alignment is preserved---can be
+stated as follows. Let $B_\text{full}$ and $B_\text{LESSER}$ be the top-$k$
+batches selected by each method. Then empirically:
+\[
+\left\langle \nabla_\theta \mathcal{L}(B_\text{LESSER}, \theta),\;
+\nabla_\theta \mathcal{L}(\mathcal{V}, \theta) \right\rangle
+\approx
+\left\langle \nabla_\theta \mathcal{L}(B_\text{full}, \theta),\;
+\nabla_\theta \mathcal{L}(\mathcal{V}, \theta) \right\rangle
+\]
+
+The intuition is that the last layer aggregates information from all earlier
+layers, so its gradient captures the dominant component of the full gradient
+along the data manifold.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Cache validation gradient:} Run a forward-backward pass on the
+    validation set using only output-layer parameters. Cache
+    $g_\mathcal{V} = \nabla_{\theta_L} \mathcal{L}(\mathcal{V}, \theta)$.
+  \item \textbf{Score candidates:} For each candidate $x_i$, run a forward
+    pass; compute $g_i = \nabla_{\theta_L} \ell(x_i, \theta)$ via one matrix
+    multiplication; score $s_i = \langle g_i, g_\mathcal{V} \rangle$.
+  \item \textbf{Select top-$k$:} Rank candidates by $s_i$; select the top $k$.
+  \item \textbf{Post-train:} Fine-tune on selected data with standard SFT or
+    RL objective.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+There is no formal guarantee that output-layer ranking preserves full-gradient
+ranking at the sample level---and indeed it does not, in general. The operative
+guarantee is empirical and at the batch level: across all tested settings,
+batches selected by LESSER achieve gradient alignment with the validation set
+indistinguishable from those selected by full-gradient methods, and deliver
+matching downstream task performance.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{FLOP reduction:} LESSER reduces feature-extraction cost by
+    \textbf{9.7$\times$} for SFT and \textbf{3.0$\times$} for RL benchmarks.
+  \item \textbf{Performance parity:} On downstream evaluations, LESSER matches
+    full-gradient selection within measurement noise across all settings.
+  \item \textbf{Sample vs.\ batch alignment:} Output-layer and full-gradient
+    Spearman sample-ranking correlations vary widely, but batch-level gradient
+    alignment with the validation set is consistently preserved.
+  \item \textbf{Compatibility:} LESSER wraps LESS, DataInf, and other
+    selection algorithms without modifying the selection logic.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Layer depth sweep:} Ablations over which layer's gradients to use show
+a monotone improvement with depth; the output layer is best. Mid-layer gradients
+reduce cost but widen the quality gap.
+
+\textbf{Validation set size:} Performance degrades gracefully as validation size
+shrinks; 128 examples suffice for reliable selection.
+
+\textbf{SFT vs.\ RL gap:} The FLOP saving is larger for SFT (9.7$\times$) than
+RL (3.0$\times$) because RL requires gradients over longer generated sequences,
+making each full backward pass more expensive and the relative saving smaller.
+
+\section*{Reference}
+
+Lyuxin David Zhang, Eric Wong, Surbhi Goel \& Anton Xue.
+\textbf{LESSER: Post-Training Data Selection with Output-Layer Gradients}.
+arXiv:2610.03702, October 2026.\\
+\url{https://arxiv.org/abs/2610.03702}
+
+\end{document}

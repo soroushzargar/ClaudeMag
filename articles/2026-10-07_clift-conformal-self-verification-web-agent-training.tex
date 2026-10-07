@@ -1,0 +1,240 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  web agents \textbullet{}
+  conformal prediction \textbullet{}
+  reinforcement learning \textbullet{}
+  test-time scaling}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  CLIFT: Conformal Self-Verification for Web Agent Training and
+  Test-Time Scaling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Conformally Certified URL-Aware Verifier Replaces Costly Frontier-LM
+  Supervision with Dense Per-Step Signals and Enables Reliable Test-Time
+  Scaling Without External Oracles}\par\vspace{6pt}
+
+{\small\textbf{By} Yifan Zhang, Yutong Dai, Viraj Prabhu, Zhiyuan Hu,
+  Ran Xu \& Zeyuan Chen
+  (Georgia Institute of Technology; University of Texas at Austin)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.06829 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Web agent training faces a fundamental credit-assignment problem: binary
+task-success rewards are sparse, while frontier-LM judges providing denser
+step-level feedback are expensive and unavailable at deployment. CLIFT solves
+both at once with a conformally calibrated URL-aware verifier that supplies
+non-negative per-step evidence during training and drives reliable test-time
+scaling without querying any external oracle.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Sparse binary task rewards leave most intermediate actions
+    unscored; frontier-LM judges are too expensive for every training step.
+  \item[Why it matters:] Dense, calibrated per-step signals accelerate web
+    agent training and enable reliable test-time compute scaling.
+  \item[Method:] Natural-language verification questions grounded in browser
+    state, calibrated by conformal prediction; same verifier reused at
+    inference for Conformal Test-time Scaling.
+  \item[Result:] Higher task success on WebArena and VisualWebArena; 8--12 pp
+    gain from test-time scaling with $N{=}8$ trajectories, no oracle needed.
+  \item[Evidence:] WebArena and VisualWebArena benchmarks; ablations on
+    calibration, question quality, and verifier model size.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning from task-completion rewards is the dominant paradigm
+for training web agents, but it suffers a fundamental supervision bottleneck:
+a twenty-step trajectory that ultimately succeeds returns the same sparse
+positive signal regardless of which intermediate actions were actually useful.
+Frontier language model judges can provide step-level feedback, but querying
+GPT-4o at every step during training is cost-prohibitive and creates
+deployment-time dependencies on proprietary APIs.
+
+CLIFT (Conformal Learning for Instruction Following at Test time) addresses
+both problems simultaneously. During training, it replaces frontier-LM
+supervision with a small verifier whose outputs are calibrated by conformal
+prediction, guaranteeing non-negative evidence in expectation. At inference,
+the same frozen verifier drives Conformal Test-time Scaling (CTS), selecting
+among candidate trajectories without any external oracle.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Binary rewards are sparse.} An agent that completes a task in twenty
+steps receives no information about which individual steps contributed. This
+makes gradient estimation difficult and exploration slow.
+
+\textbf{LM judges are expensive and API-dependent.} Querying a frontier model
+at every step dramatically increases training cost and creates an availability
+dependency that is absent at deployment.
+
+\textbf{Heuristic verifiers lack calibration.} Rule-based verifiers checking
+URL patterns or DOM state can fire incorrectly; without calibration their
+signals may actively mislead training.
+
+\textbf{Test-time scaling is uncertified.} Best-of-$N$ and chain-of-thought
+approaches for agents offer no statistical guarantee that more compute
+improves reliability.
+
+\section{Core Mechanism}
+
+CLIFT introduces two complementary components:
+
+\textbf{Conformal Self-Verification (training):} Natural-language verification
+questions (e.g., ``Is the agent on the correct URL?'', ``Has the required
+form field been filled?'') are generated from task descriptions and grounded
+in the current browser state (URL and DOM excerpt). A small verifier answers
+these questions and assigns per-step scores. Conformal prediction calibrates
+the verifier's confidence so it fires only when it can certify its answer at
+a pre-specified error rate---yielding a conformally certified, URL-aware
+verifier with a formal coverage guarantee.
+
+\textbf{Conformal Test-time Scaling (CTS, inference):} The same frozen
+verifier bank scores all candidate trajectories sampled by the agent. CTS
+selects the trajectory with the highest cumulative conformal evidence,
+enabling reliable test-time scaling with no frontier-model dependency.
+
+\section{Technical Formulation}
+
+Let $s_t = (u_t, d_t)$ be the browser state at step $t$ (URL and DOM excerpt),
+$a_t$ the agent's action, and $Q = \{q_1, \ldots, q_K\}$ a bank of
+verification questions derived from the task description.
+
+The verifier model $v_\phi$ scores each question-state pair:
+\[
+p_{k,t} = v_\phi(q_k \mid s_t, a_t) \in [0, 1]
+\]
+
+Conformal calibration with coverage $1 - \alpha$ produces a threshold $\tau$
+such that:
+\[
+\Pr[\text{verifier incorrect}] \leq \alpha
+\]
+
+The per-step evidence signal used during training is:
+\[
+r_t = \sum_{k=1}^{K} \mathbf{1}[p_{k,t} \geq \tau] \cdot w_k
+\]
+where $w_k$ are task-specific weights. This signal is always non-negative
+(evidence of progress, never a penalty), so it supplements rather than
+replaces the sparse task-completion reward.
+
+For CTS at inference, given $N$ sampled trajectories
+$\{\tau^{(i)}\}_{i=1}^N$, the selected trajectory is:
+\[
+\hat{\tau} = \arg\max_i \sum_t r_t^{(i)}
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Generate a bank of verification questions per task type.
+  \item Calibrate the verifier on a held-out set to determine $\tau$
+    at desired coverage $1 - \alpha$.
+  \item Run RL with task-completion reward augmented by conformal
+    per-step evidence $r_t$.
+\end{enumerate}
+
+\textbf{Test-time scaling:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $N$ trajectories from the policy.
+  \item Score each step with the frozen conformal verifier.
+  \item Return the trajectory with the highest cumulative evidence.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+By construction of conformal prediction, the verifier provides a marginal
+coverage guarantee: the probability that the verifier incorrectly certifies an
+incorrect action as correct is at most $\alpha$ (typically $\alpha = 0.1$).
+This ensures per-step signals are non-negative in expectation, preserving
+policy improvement under the RL update. The CTS selection guarantee is weaker,
+but conformal calibration ensures the selected trajectory is at least as
+likely to be correct as random selection would predict.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{WebArena and VisualWebArena:} CLIFT-augmented RL achieves
+    significantly higher task success than RL with binary reward alone.
+  \item \textbf{Evidence density:} The conformal verifier fires at roughly
+    40--60\% of steps, providing substantially denser credit assignment than
+    binary rewards.
+  \item \textbf{CTS efficiency:} $N{=}8$ trajectories with CTS selection
+    improves success rate by \textbf{8--12 percentage points} over
+    single-trajectory evaluation, with no frontier-model query.
+  \item \textbf{Calibration quality:} The conformally calibrated verifier
+    achieves coverage close to the nominal $1 - \alpha$ across all task types.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Calibration vs.\ uncalibrated verifier:} Using the raw verifier
+without conformal calibration produces noisy per-step signals that can harm
+training; calibration is critical to the method's benefit.
+
+\textbf{Question quality:} Generic verification questions degrade performance;
+the quality of the task-specific question bank governs verifier coverage.
+
+\textbf{Number of CTS samples:} Performance improves with more trajectories
+up to $N{=}16$; beyond that, gains are marginal, suggesting the verifier
+reaches its discrimination ceiling.
+
+\textbf{Verifier model size:} A 1B-parameter verifier delivers comparable
+quality to a 7B verifier for structured URL-aware verification, indicating
+that small specialized models are sufficient.
+
+\section*{Reference}
+
+Yifan Zhang, Yutong Dai, Viraj Prabhu, Zhiyuan Hu, Ran Xu \& Zeyuan Chen.
+\textbf{CLIFT: Conformal Self-Verification for Web Agent Training and
+Test-Time Scaling}.
+arXiv:2610.06829, October 2026.\\
+\url{https://arxiv.org/abs/2610.06829}
+
+\end{document}

@@ -1,0 +1,216 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  token cues \textbullet{}
+  base models \textbullet{}
+  reasoning \textbullet{}
+  causal data intervention}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Base Models Can Reason By Taking a Cue From Training Data}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Single Starting Token Can Raise Math Accuracy by 36~pp in a Base Model---and
+  the Effect Is Causally Traceable to Training Data, Not Model Architecture}\par\vspace{6pt}
+
+{\small\textbf{By} Sophie L.\ Wang, Amil Dravid, Rulin Shao, Kevin Farhat,
+  Sewon Min \& Alexei A.\ Efros (UC Berkeley)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.06851 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Base language models harbor latent reasoning competence that is largely dormant until
+activated by a specific starting token---a \emph{reasoning cue} whose effect is
+not semantic but distributional, mechanically traceable to the cluster of
+step-by-step reasoning documents in the training corpus that bear the same token.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Reinforcement learning post-training is costly; the mechanism
+    by which it elicits reasoning chains is poorly understood.
+  \item[Why it matters:] If RL merely selects regions of a base model's training
+    distribution, cheaper interventions should reproduce the gains.
+  \item[Method:] Systematic sweep over starting-token cues; causal data
+    interventions to add or remove reasoning associations.
+  \item[Result:] The cue ``.\textbackslash n\textbackslash nOkay'' raises Olmo-3-7B MATH-500 from 42\%
+    to 78\%; causal interventions confirm the training-data mechanism.
+  \item[Evidence:] Evaluated on MATH-500, coding benchmarks, and multiple
+    frontier base models; causal interventions with data ablations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models trained with reinforcement learning from verifiable rewards
+(RLVR) achieve dramatic performance gains on mathematical reasoning and code
+generation. Yet the precise mechanism has remained unclear: does RL teach the
+model new reasoning skills, or does it teach the model \emph{when} to deploy
+skills that the base model already possesses?
+
+This paper proposes a third, more concrete answer: RL teaches the model to begin
+its response with particular starting tokens---reasoning cues---that route
+generation toward the region of the training distribution in which careful
+step-by-step reasoning documents reside. The paper provides both correlational
+and causal evidence for this mechanism.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{RL post-training is expensive.} RLVR requires generating many rollouts and
+computing rewards, multiplying training compute relative to supervised fine-tuning.
+If the mechanism is a distributional routing effect, a cheaper intervention should
+suffice.
+
+\textbf{Prompt engineering is empirical.} Prior chain-of-thought work shows that
+phrases like ``Let's think step by step'' improve performance, but attributes
+the effect to semantic instruction following---a hypothesis that predicts the
+effect should generalize to semantically equivalent phrases, which the paper tests
+and finds false.
+
+\textbf{Base model latent capacity is underutilized.} The default starting token
+chosen by a practitioner is arbitrary; this work shows it has outsized influence
+on the quality of the continuation.
+
+\section{Core Mechanism}
+
+A \textbf{reasoning cue} is a short prefix $c$ placed at the start of a base model's
+response. The central finding is that effective cues are not semantically special:
+their power comes from co-occurring in the training corpus with step-by-step
+reasoning chains, not from the meaning of the words themselves.
+
+When a cue $c$ appears at the start of the model's response, next-token prediction
+conditions on $c$ and selects continuations from the region of the training data
+distribution where $c$ was associated with careful, multi-step reasoning.
+This makes the cue a \emph{distributional selector} rather than a semantic instruction.
+
+\section{Technical Formulation}
+
+Let $\mathcal{M}$ be a base LLM with vocabulary $\mathcal{V}$. For a problem $q$
+and cue string $c \in \mathcal{V}^*$:
+\[
+\text{Acc}(c) = \mathbb{E}_q\bigl[\text{Correct}(\mathcal{M}(q, c))\bigr]
+\]
+The sweep identifies the optimal cue $c^* = \arg\max_c \text{Acc}(c)$.
+
+For the causal intervention, let $D_c \subseteq \mathcal{D}_\text{train}$ be
+training documents whose response begins with $c$. The paper shows:
+\[
+\text{Acc}_{D \setminus D_c}(c) \ll \text{Acc}_D(c)
+\]
+Conversely, augmenting the training data with arbitrary-token-prefixed reasoning
+traces $\widetilde{D}_{c'}$ creates a new effective cue:
+\[
+\text{Acc}_{D \cup \widetilde{D}_{c'}}(c') \approx \text{Acc}_D(c^*)
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Finding effective cues:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Enumerate a large set of candidate starting tokens and phrases.
+  \item For each cue, generate responses on a held-out problem set.
+  \item Score responses and rank cues by mean accuracy.
+\end{enumerate}
+
+\textbf{Causal confirmation:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Identify training documents co-occurring with the effective cue.
+  \item Remove those documents and retrain (or fine-tune) a model.
+  \item Verify that the cue's effect disappears with the associated data.
+\end{enumerate}
+
+\textbf{Creating custom cues:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect reasoning traces; prepend an arbitrary token to each.
+  \item Fine-tune on these modified traces.
+  \item The arbitrary token becomes an effective cue.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The guarantee is empirical: across all tested base models and cue candidates,
+the reasoning benefit of any cue is causally traceable to its associated training
+documents. Removing those documents degrades the cue; adding documents that
+associate an arbitrary token with reasoning creates a new effective cue.
+The mechanism is not model-specific---it holds for Olmo-3-7B, Qwen3-14B, and
+several other frontier base models.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Olmo-3-7B:} the cue ``.\textbackslash n\textbackslash nOkay'' raises
+    MATH-500 pass@1 from \textbf{42\% to 78\%}, matching the RL-trained counterpart.
+  \item \textbf{Qwen3-14B:} ``Alright,'' raises MATH-500 from \textbf{72\% to 87\%},
+    also competitive with RL.
+  \item \textbf{Code generation:} analogous cues improve pass@$k$ metrics on
+    coding benchmarks.
+  \item \textbf{Causal intervention:} removing documents associated with the
+    effective cue eliminates its accuracy benefit.
+  \item \textbf{Custom cue creation:} the word ``chicken,'' after fine-tuning on
+    reasoning traces prefixed with it, becomes an effective cue.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Semantic vs.\ distributional hypothesis:} Replacing the effective cue with
+semantically similar phrases that do not appear in the relevant training data
+produces no reasoning gain, confirming the distributional mechanism.
+
+\textbf{Context length stability:} The cue effect holds even with few-shot examples
+in context, ruling out attention-dilution as an alternative explanation.
+
+\textbf{Multiple cues:} Combining multiple effective cues does not additively
+compound gains, indicating they tap overlapping training data regions.
+
+\textbf{Implications for RL:} Since base-model cue performance matches RLVR, the
+paper argues that RL primarily teaches models to start responses in
+the step-by-step reasoning region of their training distribution---not to
+acquire fundamentally new reasoning capabilities.
+
+\section*{Reference}
+
+Sophie L.\ Wang et al.\
+\textbf{Base Models Can Reason By Taking a Cue From Training Data}.
+arXiv:2610.06851, October 2026.\\
+\url{https://arxiv.org/abs/2610.06851}
+
+\end{document}

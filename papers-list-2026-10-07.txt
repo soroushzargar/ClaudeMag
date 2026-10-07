@@ -1,0 +1,68 @@
+ML Papers List — 2026-10-07
+Generated for ClaudeMag
+
+1. Base Models Can Reason By Taking a Cue From Training Data
+   Authors: Sophie L. Wang, Amil Dravid, Rulin Shao, Kevin Farhat, Sewon Min, Alexei A. Efros
+   Affiliation: UC Berkeley
+   Venue/ID: arXiv:2610.06851
+   URL: https://arxiv.org/abs/2610.06851
+   Summary: Training data creates systematic associations between particular starting token cues
+   and the reasoning behavior that follows in a base language model. Fixing a simple token cue
+   such as ".\n\nOkay" at the start of a base model's response raises Olmo-3-7B's MATH-500 pass@1
+   accuracy from 42% to 78%, and "Alright," raises Qwen3-14B's from 72% to 87%—competitive with
+   RL-trained counterparts. Through causal data interventions, the paper shows that an arbitrary
+   word can be turned into an effective reasoning cue, or an existing cue's effect removed, by
+   modifying the training data directly.
+
+2. LESSER: Post-Training Data Selection with Output-Layer Gradients
+   Authors: Lyuxin David Zhang, Eric Wong, Surbhi Goel, Anton Xue
+   Affiliation: University of Pennsylvania
+   Venue/ID: arXiv:2610.03702
+   URL: https://arxiv.org/abs/2610.03702
+   Summary: Gradient-based post-training data selection requires expensive full-backward passes on
+   every candidate sample. LESSER shows that output-layer gradients serve as a highly effective
+   proxy: it is a drop-in wrapper that reduces feature-extraction FLOP cost by 9.7× for SFT and
+   3.0× for RL benchmarks while tracking full-gradient selection performance on downstream tasks.
+   Even when output-layer and full gradients rank individual samples differently, they consistently
+   select batches with well-aligned gradients, explaining why the batch-level quality is preserved.
+
+3. S2PD: Serial-to-Parallel Diffusion for Physically and Logically Consistent Video Generation
+   Authors: Jeffrey Hu, Daniel Olmeda Reino, Ayush Tewari
+   Affiliation: Massachusetts Institute of Technology
+   Venue/ID: arXiv:2610.06847
+   URL: https://arxiv.org/abs/2610.06847
+   Summary: Bidirectional video diffusion models continue to violate physical laws and symbolic
+   rules even when trained on unlimited in-distribution data from procedural generators—a problem
+   identified as the "seriality gap." S2PD (Serial-to-Parallel Diffusion) resolves this by
+   performing autoregressive diffusion at high noise levels (where serial computation is needed
+   to coordinate interdependent events) before switching to parallel diffusion at low noise (for
+   joint refinement and sampling efficiency). Across games, physical simulations, and real video,
+   S2PD follows rules more reliably than bidirectional baselines and generates videos with greater
+   temporal stability and better sampling efficiency than fully serial methods.
+
+4. CLIFT: Conformal Self-Verification for Web Agent Training and Test-Time Scaling
+   Authors: Yifan Zhang, Yutong Dai, Viraj Prabhu, Zhiyuan Hu, Ran Xu, Zeyuan Chen
+   Affiliation: Georgia Institute of Technology; University of Texas at Austin
+   Venue/ID: arXiv:2610.06829
+   URL: https://arxiv.org/abs/2610.06829
+   Summary: Open-source web agents trained with RL face a supervision gap: binary task success
+   is too sparse for credit assignment, while frontier LM judges are too expensive to call at
+   every step and cannot be assumed available at deployment. CLIFT introduces conformal
+   self-verification—turning natural-language verification questions into a conformally certified
+   URL-aware verifier that provides non-negative per-step evidence during training. The same
+   frozen verifier bank is then used for Conformal Test-time Scaling (CTS), enabling reliable
+   inference-time scaling without calling an external oracle.
+
+5. H-JEPA: End-to-End Learning of Hierarchical World Models for Visual Planning
+   Authors: Wancong Zhang, Basile Terver, Michael Rabbat, Yann LeCun, Randall Balestriero
+   Affiliation: Meta AI; New York University
+   Venue/ID: arXiv:2610.06805
+   URL: https://arxiv.org/abs/2610.06805
+   Summary: Long-horizon planning requires reasoning across timescales and abstraction levels.
+   H-JEPA is an end-to-end recipe for training a hierarchy of action-conditioned JEPAs in which
+   each level predicts farther ahead in its own learned latent space. When data factors evolve
+   at separated timescales, higher levels learn to discard fast, unpredictable detail and retain
+   slower task-relevant state. Across four simulated navigation and manipulation environments,
+   hierarchical planning outperforms a flat JEPA baseline; on Visual AntMaze, a three-level
+   hierarchy raises success from 18% to 73% using less planner compute. With inverse-dynamics
+   supervision the approach generalizes to real-robot videos from the DROID dataset.

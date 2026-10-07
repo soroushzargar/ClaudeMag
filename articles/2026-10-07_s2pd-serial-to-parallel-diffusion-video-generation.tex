@@ -1,0 +1,215 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video diffusion \textbullet{}
+  physical consistency \textbullet{}
+  seriality gap \textbullet{}
+  autoregressive generation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  S2PD: Serial-to-Parallel Diffusion for Physically and Logically
+  Consistent Video Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Two-Phase Diffusion Algorithm Resolves the Seriality Gap by Running
+  Autoregressive Diffusion at High Noise and Parallel Diffusion at Low Noise}\par\vspace{6pt}
+
+{\small\textbf{By} Jeffrey Hu, Daniel Olmeda Reino \& Ayush Tewari
+  (Massachusetts Institute of Technology)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.06847 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Bidirectional video diffusion models violate physical laws and logical rules
+even when trained on unlimited in-distribution data---a structural obstacle
+called the \emph{seriality gap}. S2PD resolves it with a single algorithmic
+change: run the denoiser autoregressively at high noise, then switch to
+parallel denoising at low noise, combining physical consistency with practical
+sampling speed.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Bidirectional diffusion cannot reliably coordinate causally
+    dependent video events, even with unlimited training data.
+  \item[Why it matters:] Physics simulations, game environments, and embodied
+    AI all require causally consistent video generation.
+  \item[Method:] S2PD: autoregressive diffusion for the high-noise phase;
+    parallel diffusion for the low-noise phase.
+  \item[Result:] More reliable rule-following than bidirectional baselines;
+    faster sampling than fully autoregressive methods.
+  \item[Evidence:] Games, physical simulations, and real video benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Video diffusion models have reached remarkable visual quality, but a persistent
+blind spot---the \emph{seriality gap}---limits their utility for scientific
+simulation, game generation, and embodied AI. Even when trained to convergence
+on procedurally generated data with perfect ground-truth labels, bidirectional
+diffusion models continue to violate physical laws: collision outcomes are wrong,
+logical sequential rules are broken, and causal chains are severed.
+
+Prior work (arXiv:2607.13031) identified and characterized this gap. S2PD is
+the first method to close it without sacrificing the sampling speed advantage
+of diffusion over fully autoregressive approaches.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{More denoising steps do not help.} The seriality gap is not a capacity
+issue. For deterministic video prediction, additional denoising steps do not
+add effective serial computation---each step still processes all frames in
+parallel.
+
+\textbf{Architectural width does not help.} Wider networks also fail to close
+the gap, confirming that the bottleneck is the absence of serial computation,
+not model capacity.
+
+\textbf{Fully autoregressive generation is slow.} Frame-by-frame autoregressive
+generation provides the necessary serial compute but multiplies sampling time
+by the number of frames, making it impractical for high-resolution or long
+video generation.
+
+\section{Core Mechanism}
+
+The key insight is that different noise levels require different amounts of
+serial computation:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{High noise} ($\sigma > \sigma^*$): the video is essentially pure
+    noise; the denoiser must decide the \emph{global causal structure}---which
+    events happen, in what order, with what consequences. This requires serial
+    computation to propagate causal dependencies frame by frame.
+  \item \textbf{Low noise} ($\sigma \leq \sigma^*$): the global structure is
+    already established; the denoiser only needs to refine visual detail, which
+    can be done in parallel without violating consistency.
+\end{itemize}
+
+S2PD switches between autoregressive and parallel denoising at threshold $\sigma^*$.
+
+\section{Technical Formulation}
+
+Let $\mathbf{x}_\sigma$ be the noisy video at noise level $\sigma$, with frames
+$(x_{\sigma,1}, \ldots, x_{\sigma,T})$. The S2PD denoising trajectory is:
+
+\textbf{Serial phase} ($\sigma > \sigma^*$): denoise frame by frame,
+\[
+\hat{x}_{0,t} = \epsilon_\theta(x_{\sigma,t},\, \sigma \mid x_{0,1:t-1}), \quad t = 1,\ldots,T
+\]
+where conditioning on previously denoised frames is implemented via masked
+self-attention or cross-attention.
+
+\textbf{Parallel phase} ($\sigma \leq \sigma^*$): denoise all frames jointly,
+\[
+(\hat{x}_{0,1}, \ldots, \hat{x}_{0,T}) = \epsilon_\theta(\mathbf{x}_\sigma, \sigma)
+\]
+starting from the latent at the end of the serial phase.
+
+Total sampling time scales as approximately:
+\[
+\tau_\text{S2PD} \approx (T - 1)\,\tau_\text{serial-step} + \tau_\text{parallel}
+\]
+substantially less than $T\,\tau_\text{serial-step}$ for fully autoregressive
+generation.
+
+\section{Learning or Inference Procedure}
+
+S2PD is a \textbf{training-free} inference algorithm applied to any pretrained
+video diffusion model with autoregressive conditioning support.
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample Gaussian noise $\mathbf{x}_{\sigma_\text{max}}$.
+  \item Run the DDIM solver serially (frame by frame) from $\sigma_\text{max}$
+    to $\sigma^*$.
+  \item Run the solver in parallel over all frames from $\sigma^*$ to $0$.
+  \item Return the denoised video $\hat{\mathbf{x}}_0$.
+\end{enumerate}
+
+The switching threshold $\sigma^*$ is the only hyperparameter and is set
+to the midpoint of the noise schedule in all experiments.
+
+\section{What the Guarantee Says}
+
+No formal consistency guarantee is provided. The empirical claim is: S2PD
+produces fewer physical and logical violations than matched bidirectional
+baselines across all tested environments, while requiring less sampling time
+than fully autoregressive methods. The intuition is that the high-noise serial
+phase establishes the causal skeleton, making the low-noise parallel phase
+sufficient for detail refinement.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Games:} S2PD follows Tetris collision rules and Sokoban push
+    logic more reliably than bidirectional baselines.
+  \item \textbf{Physical simulations:} Lower rule-violation rates on billiards
+    and rigid-body interaction benchmarks.
+  \item \textbf{Real video:} Improved temporal stability on real-world video
+    prediction while maintaining visual quality.
+  \item \textbf{Sampling efficiency:} Substantially faster than fully
+    autoregressive generation while closing the consistency gap.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Switching threshold:} Earlier switching (less serial computation) degrades
+consistency; later switching improves consistency but reduces efficiency gains.
+The midpoint is Pareto-optimal.
+
+\textbf{Phase ablations:} Removing the parallel phase (fully serial) matches
+S2PD's consistency but increases sampling time by $T\times$; removing the
+serial phase (fully parallel) restores the seriality gap.
+
+\textbf{Error analysis:} Violations concentrate in frames requiring coordination
+with distant prior frames, confirming that the gap is a long-range causal
+dependency problem rather than a local temporal one.
+
+\section*{Reference}
+
+Jeffrey Hu, Daniel Olmeda Reino \& Ayush Tewari.
+\textbf{S2PD: Serial-to-Parallel Diffusion for Physically and Logically
+Consistent Video Generation}.
+arXiv:2610.06847, October 2026.\\
+\url{https://arxiv.org/abs/2610.06847}
+
+\end{document}

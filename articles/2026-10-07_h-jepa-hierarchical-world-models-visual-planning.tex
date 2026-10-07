@@ -1,0 +1,241 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-07}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  world models \textbullet{}
+  hierarchical planning \textbullet{}
+  JEPA \textbullet{}
+  latent representation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  H-JEPA: End-to-End Learning of Hierarchical World Models for
+  Visual Planning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Stacking Action-Conditioned JEPAs Hierarchically Raises Visual AntMaze
+  Success from 18\% to 73\% by Letting Each Level Predict Farther Ahead in
+  Its Own Latent Space}\par\vspace{6pt}
+
+{\small\textbf{By} Wancong Zhang, Basile Terver, Michael Rabbat, Yann LeCun
+  \& Randall Balestriero (Meta AI; New York University)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.06805 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Flat world models trained at a single temporal resolution conflate the
+timescales of muscle-level control, motion planning, and goal-directed
+navigation, forcing planners to reason about irrelevant visual detail.
+H-JEPA stacks action-conditioned JEPAs so that higher levels automatically
+discard fast-varying sensory noise and retain the slow, task-relevant state
+that long-horizon planning depends on---without any manual specification
+of sub-goals or timescale boundaries.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Single-level world models force planners to reason at one
+    temporal resolution, wasting capacity on irrelevant low-level detail
+    during long-horizon planning.
+  \item[Why it matters:] Robotics, navigation, and embodied AI require
+    simultaneous reasoning across sub-second control and minute-scale goals.
+  \item[Method:] Stack $L$ action-conditioned JEPAs; each level predicts
+    $k$ steps ahead in the latent of the level below; train all levels
+    jointly end-to-end with a VICReg-style regularizer.
+  \item[Result:] A 3-level hierarchy raises Visual AntMaze success from
+    \textbf{18\% to 73\%} while reducing planner compute.
+  \item[Evidence:] Visual AntMaze, robotic manipulation, and real-robot
+    planning on the DROID dataset.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Long-horizon planning requires simultaneous reasoning across radically
+different timescales: sub-second muscle control, second-scale motion planning,
+and minute-scale goal navigation. A flat world model trained at a single
+temporal resolution cannot separate these concerns---it must predict every
+future state at the same resolution, forcing the planner to process
+irrelevant low-level visual detail even when making high-level route decisions.
+
+H-JEPA (Hierarchical Joint Embedding Predictive Architecture) resolves this
+by stacking multiple levels of action-conditioned JEPAs, each operating at
+a coarser timescale than the one below. The hierarchy is not hand-designed:
+timescale separation emerges automatically from end-to-end training when the
+world contains factors that evolve at different speeds.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Flat world models are computationally wasteful.} A single-level model
+predicts every future state at native resolution, burdening the planner with
+fine-grained sensory detail even during high-level decision making.
+
+\textbf{Hand-designed hierarchies require manual sub-goals.} Options
+frameworks and HIRO-style methods pre-specify the timescale structure and
+require human-designed sub-goal spaces, sacrificing end-to-end trainability.
+
+\textbf{Generative hierarchical models are fragile.} Pixel-prediction
+hierarchies accumulate errors across levels and are sensitive to the choice
+of reconstruction loss.
+
+\textbf{Flat JEPA models remain at a single timescale.} V-JEPA and related
+work learn expressive single-level latent predictors; extending them to
+multiple timescales in an end-to-end trainable manner is non-trivial.
+
+\section{Core Mechanism}
+
+H-JEPA stacks $L$ levels of action-conditioned JEPAs:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Level 1} operates at the native frame rate, predicting the
+    latent of the next frame from the current latent and action.
+  \item \textbf{Level $\ell > 1$} operates at a $k$-times-coarser timescale.
+    It receives the temporally pooled latent from level $\ell{-}1$ and
+    predicts that latent $k$ frames ahead.
+  \item \textbf{End-to-end training} jointly minimizes a JEPA objective at
+    all levels: minimize distance between predicted latent and the
+    stop-gradient target from the level below, regularized by a VICReg-style
+    term to prevent representational collapse.
+\end{itemize}
+
+The key emergent property is \emph{timescale separation}: higher levels learn
+to discard fast, unpredictable visual detail and retain slow, task-relevant
+state (object positions, goal proximity) without explicit supervision.
+
+\section{Technical Formulation}
+
+Let $z_t^\ell$ denote the latent at level $\ell$ and time $t$. Temporal
+pooling $P_k$ averages $k$ consecutive latents. The H-JEPA target at level
+$\ell$ is:
+\[
+z_t^{\ell} = P_k\!\left(z_{t \cdot k}^{\ell-1}, \ldots,
+  z_{(t+1) \cdot k - 1}^{\ell-1}\right)
+\]
+
+The predictor $f^\ell_\phi$ at level $\ell$ predicts $k$ steps ahead:
+\[
+\hat{z}_{t+1}^\ell = f^\ell_\phi\!\left(z_t^\ell,\;
+  a_{t \cdot k : (t+1) \cdot k}\right)
+\]
+
+The per-level JEPA loss is:
+\[
+\mathcal{L}^\ell = \left\| \hat{z}_{t+1}^\ell
+  - \mathrm{sg}(z_{t+1}^\ell) \right\|^2
+  + \lambda \cdot \mathcal{L}_\text{VICReg}(z^\ell)
+\]
+
+The total objective sums over all levels:
+\[
+\mathcal{L}_\text{H-JEPA} = \sum_{\ell=1}^{L} \mathcal{L}^\ell
+\]
+
+Planning applies a latent MPPI or MCTS planner at the highest level $L$,
+scoring rollouts in the level-$L$ latent space---dramatically reducing
+compute per planning node relative to planning at level~1.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect trajectories $(o_1, a_1, \ldots, o_T, a_T)$.
+  \item Encode observations to $z^0 = g_\psi(o)$; propagate up:
+    $z^\ell = P_k(z^{\ell-1})$.
+  \item Train all levels jointly with $\mathcal{L}_\text{H-JEPA}$.
+  \item Optionally add inverse-dynamics heads at each level.
+\end{enumerate}
+
+\textbf{Planning at test time:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Encode current observation; propagate to level $L$.
+  \item Run MPPI or MCTS in the level-$L$ latent space.
+  \item Execute the first action; receive next observation; repeat.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No formal convergence guarantee is provided. The central empirical claim is
+that timescale separation emerges automatically from end-to-end training
+when the data contains factors that evolve at different speeds. This is
+validated by probing each level's representations for factors of variation
+at different timescales. Ablations confirm that a flat JEPA with the same
+total parameter count does not match the hierarchical planner.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Visual AntMaze:} A 3-level hierarchy raises success rate from
+    \textbf{18\% (flat JEPA) to 73\%} while requiring less planner compute.
+  \item \textbf{Manipulation:} H-JEPA outperforms flat JEPA on robotic
+    pick-and-place and peg-insertion tasks requiring multi-step coordination.
+  \item \textbf{DROID (real robot):} With inverse-dynamics supervision,
+    H-JEPA improves offline planning fidelity on diverse real-robot
+    demonstration data.
+  \item \textbf{Timescale analysis:} Level-3 representations encode
+    task-relevant state (goal proximity, object position) almost entirely;
+    level-1 is dominated by low-level visual texture.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Number of levels:} Performance improves consistently from 1 to 3
+levels; 4 levels adds marginal gain but increases training complexity.
+
+\textbf{Pooling stride $k$:} Smaller strides ($k{=}2$) help tasks with
+fast-changing task-relevant state; larger strides ($k{=}8$) help tasks with
+very long planning horizons.
+
+\textbf{Timescale separation:} Probing confirms the hierarchy: level~1 is
+dominated by visual texture; level~3 is nearly entirely task-state driven.
+
+\textbf{Comparison to hand-designed hierarchies:} H-JEPA matches or exceeds
+options-based and HIRO-style methods on standard benchmarks while requiring
+no manual specification of sub-goals or timescale boundaries.
+
+\section*{Reference}
+
+Wancong Zhang, Basile Terver, Michael Rabbat, Yann LeCun \& Randall
+Balestriero.
+\textbf{H-JEPA: End-to-End Learning of Hierarchical World Models for
+Visual Planning}.
+arXiv:2610.06805, October 2026.\\
+\url{https://arxiv.org/abs/2610.06805}
+
+\end{document}
