@@ -1,0 +1,62 @@
+ML Papers List — 2026-10-12
+Generated for ClaudeMag
+
+1. HRIL: Learning Multimodal Synergy via Higher-Order Tensor Modeling
+   Authors: Qun Dai, Zhao Kang, et al.
+   Venue/ID: NeurIPS 2026 · arXiv:2610.12393
+   URL: https://arxiv.org/abs/2610.12393
+   Summary: Multimodal contrastive learning fails to capture synergistic effects that arise
+   only from the joint combination of three or more modalities. HRIL addresses this by building
+   a cross-moment tensor over modality embeddings, applying Tucker decomposition to obtain a
+   compact core, and adding a regulariser that prevents the core from collapsing to a low-rank
+   diagonal. The framework is evaluated on multimodal tasks where synergistic interactions
+   dominate, reporting gains over established multimodal contrastive baselines and marking
+   a NeurIPS 2026 acceptance.
+
+2. RouterInterp: Understanding Superposed Specialisation in Mixture of Experts Routing
+   Authors: Ilya Lasy, Nora Yinuo Cai, Kola Ayonrinde
+   Venue/ID: ICML 2026 · arXiv:2610.11775
+   URL: https://arxiv.org/abs/2610.11775
+   Summary: The conventional view that each expert in an MoE network handles a single domain
+   is challenged by the Superposed Specialisation Hypothesis (SSH): experts activate on
+   disjoint unions of fine-grained features. RouterInterp uses Sparse Autoencoder (SAE)
+   features most predictive of routing decisions and produces unified natural-language
+   explanations of expert roles. On gpt-oss-20b, RouterInterp achieves roughly 65 % higher
+   routing-detection accuracy than prior token-statistics-based methods.
+
+3. Differentiable Systematic Resampling for Variational Sequential Monte Carlo
+   Authors: Fredrik Cumlin, Saikat Chatterjee
+   Venue/ID: NeurIPS 2026 · arXiv:2610.12094
+   URL: https://arxiv.org/abs/2610.12094
+   Summary: Systematic resampling is the most variance-efficient resampling scheme for
+   particle filters, but its step-function CDF blocks gradient flow. Differentiable Systematic
+   Resampling (DSR) softens the CDF-level ancestor assignment with sigmoid functions and
+   sorts particles with a Morton space-filling curve so spatially proximate particles remain
+   adjacent in CDF order. The bias vanishes exponentially as the temperature falls to zero.
+   DSR avoids the iterative solvers of optimal-transport alternatives and achieves comparable
+   or better performance on stochastic dynamical-system and handwriting datasets.
+
+4. When Has a Bayesian Neural Network Sampled Enough? Adaptive Inference Time with Statistical Guarantees
+   Authors: Fabian Denoodt, Sibylle Hess
+   Venue/ID: NeurIPS 2026 Workshop · arXiv:2610.12212
+   URL: https://arxiv.org/abs/2610.12212
+   Summary: Bayesian neural network predictions are typically approximated with a fixed Monte
+   Carlo sample budget, leaving the finite-sample error uncontrolled. This paper uses
+   confidence sequences—anytime-valid probability bounds—to decide per-input when enough
+   samples have been drawn. Sampling terminates once the relevant decision (class identity,
+   full predictive distribution, or a probability threshold) can be resolved with the
+   desired statistical guarantee. The method assigns more samples to ambiguous inputs,
+   lowers overall inference latency, and provides a formal guarantee per prediction.
+
+5. Iris-3B: Going Beyond the Latent with Pixel-Space Diffusion Training, Conversion and Fine-Tuning
+   Authors: Hanqiu Li Cai, Chema Garabito
+   Affiliation: Speridlabs
+   Venue/ID: arXiv:2610.09450
+   URL: https://arxiv.org/abs/2610.09450
+   Summary: Latent diffusion models encode images into a compressed representation before
+   denoising, introducing VAE reconstruction artefacts that may harm pixel-level tasks.
+   Iris-3B is a 3-billion-parameter text-to-image model trained directly in pixel space via
+   a 256→512→1024 resolution curriculum. It matches latent FLUX.2 Klein on GenEval (0.798)
+   and DPG-Bench (86.52 at 1024²). A second experiment converts a pre-trained latent model
+   to pixel space; neither route outperforms the latent baseline on fine-grained tasks,
+   suggesting that the VAE bottleneck is less limiting than assumed.

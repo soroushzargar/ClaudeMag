@@ -1,0 +1,203 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  sequential Monte Carlo \textbullet{}
+  particle filters \textbullet{}
+  differentiable resampling \textbullet{}
+  variational inference}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Differentiable Systematic Resampling for Variational Sequential Monte Carlo}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Sigmoid Softening of the CDF Ancestor Assignment Recovers Systematic
+  Resampling's Variance Advantage While Allowing Full Gradient Flow}\par\vspace{6pt}
+
+{\small\textbf{By} Fredrik Cumlin \& Saikat Chatterjee}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.12094 \textbullet{} NeurIPS 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Systematic resampling is the most variance-efficient particle-filter
+resampling scheme, but its step-function CDF blocks gradient flow.
+Differentiable Systematic Resampling (DSR) softens the CDF-level ancestor
+assignment with sigmoid functions, sorts particles via a Morton space-filling
+curve to preserve the banded ancestor structure, and proves that the bias
+vanishes exponentially in the inverse temperature---without iterative solvers.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Systematic resampling blocks gradient flow through variational
+    SMC due to its step-function CDF.
+  \item[Why it matters:] VSMC is a powerful generative modelling tool; its
+    ELBO cannot be fully optimised without differentiable resampling.
+  \item[Method:] Sigmoid CDF softening with Morton-curve particle sorting;
+    bias proven to decay exponentially in $1/\tau$.
+  \item[Result:] Comparable or better filtering and dynamics-learning
+    performance vs.\ OT-based methods, 3--5$\times$ faster per step.
+  \item[Evidence:] Lorenz-96 stochastic dynamics, IAM handwriting dataset;
+    ablation confirms Morton sorting is necessary.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Sequential Monte Carlo (SMC) approximates temporal posterior distributions
+with weighted particles $\{(w_t^k, x_t^k)\}_{k=1}^K$. Resampling---selecting
+ancestors for the next particle generation---prevents degeneracy but
+introduces a discontinuity that blocks gradients. Variational SMC (VSMC)
+maximises an ELBO over proposal and model parameters via backpropagation
+through the full particle trajectory, so differentiable resampling is
+a key missing ingredient.
+
+Systematic resampling is preferred in practice because it has $O(K^{-2})$
+variance in the sample count (vs.\ $O(K^{-1})$ for multinomial) and is
+$O(K)$ to compute. DSR makes it differentiable without sacrificing these
+advantages.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Multinomial resampling} (Gumbel-softmax variants) is differentiable
+but has higher variance; the systematic resampling advantage is lost.
+
+\textbf{OT-based differentiable resampling} preserves the systematic
+resampling's CDF-ordered structure but requires an iterative Sinkhorn solver
+at every resampling step, adding substantial overhead.
+
+\textbf{Stop-gradient resampling} avoids differentiating through resampling
+but biases the ELBO gradient estimator systematically.
+
+\section{Core Mechanism}
+
+Standard systematic resampling draws $U \sim \text{Uniform}(0,1/K)$ and
+assigns ancestor $a^j = \min\{i: W_{\leq i} \geq (j-1)/K + U\}$, where
+$W_{\leq i} = \sum_{l \leq i} w^l$.
+
+DSR replaces the step function with a sigmoid:
+\[
+\tilde{A}_{ij} = \sigma\!\left(\frac{W_{\leq i} - (j-1)/K - U}{\tau}\right)
+- \sigma\!\left(\frac{W_{\leq i-1} - (j-1)/K - U}{\tau}\right)
+\]
+
+The soft-resampled particle is $\tilde{x}^j = \sum_i \tilde{A}_{ij}\,x^i$.
+
+A Morton (Z-order) space-filling curve sorts particles before resampling
+so that spatially proximate particles are adjacent in CDF order, preserving
+the \emph{banded} ancestor matrix property that gives systematic resampling
+its variance efficiency.
+
+\section{Technical Formulation}
+
+Let $\{w^k\}_{k=1}^K$ be normalised weights with prefix sums
+$W_{\leq k} = \sum_{j \leq k} w^j$.
+
+The soft ancestor matrix is:
+\[
+\tilde{A}_{ij}(\tau) = \sigma\!\left(\tfrac{W_{\leq i} - \frac{j-1}{K} - U}{\tau}\right)
+- \sigma\!\left(\tfrac{W_{\leq i-1} - \frac{j-1}{K} - U}{\tau}\right)
+\]
+
+\textbf{Bias bound:} There exist constants $C, c > 0$ such that
+\[
+\|\mathbb{E}[\tilde{A}(\tau)] - \mathbb{E}[A]\|_\infty \leq C e^{-c/\tau}
+\]
+
+This exponential rate is proved from the pointwise approximation error
+of the sigmoid to the Heaviside step function.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Variational SMC with DSR:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Propagate: $x_t^k \sim q_\phi(x_t \mid x_{t-1}^k, y_t)$.
+  \item Weight: $w_t^k \propto
+    p_\theta(y_t | x_t^k)\,p_\theta(x_t^k | x_{t-1}^k)
+    / q_\phi(x_t^k | x_{t-1}^k, y_t)$.
+  \item Sort particles via Morton curve.
+  \item Apply DSR to obtain $\{\tilde{x}_t^k\}$.
+  \item Accumulate ELBO: $\mathcal{L} = \mathbb{E}[\log \frac{1}{K}\sum_k w_T^k]$.
+  \item Backpropagate through soft ancestor assignments to update $\phi, \theta$.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The bias bound $O(e^{-c/\tau})$ is stronger than the $O(\tau)$ or
+polynomial rates of OT-based alternatives. At temperature $\tau = 0.01$,
+the bias is essentially zero for practical purposes, while gradients
+remain well-defined through the sigmoid.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item On \textbf{Lorenz-96 stochastic dynamics}, DSR matches OT-based
+    differentiable resampling on filtering NLL with \textbf{3--5$\times$
+    lower} per-step wall-clock time.
+  \item On \textbf{IAM handwriting generation}, DSR improves
+    log-likelihood over both multinomial and OT-based resampling.
+  \item The absence of iterative solvers is confirmed as the primary
+    source of the speed advantage.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without Morton sorting:} The soft ancestor matrix loses its banded
+structure; gradient variance increases and ELBO estimates degrade.
+
+\textbf{Temperature sensitivity:} An optimal $\tau^*$ balances gradient
+noise (low $\tau$) vs.\ bias (high $\tau$); a short sweep identifies it.
+
+\textbf{Number of particles:} The advantage over multinomial resampling
+grows with $K$, consistent with the $O(K^{-2})$ vs.\ $O(K^{-1})$ variance
+rates.
+
+\textbf{Stop-gradient comparison:} Stop-gradient introduces a systematic
+ELBO bias that DSR eliminates.
+
+\section*{Reference}
+
+Fredrik Cumlin, Saikat Chatterjee.
+\textbf{Differentiable Systematic Resampling for Variational Sequential Monte Carlo}.
+NeurIPS 2026. arXiv:2610.12094, October 2026.\\
+\url{https://arxiv.org/abs/2610.12094}
+
+\end{document}

@@ -1,0 +1,210 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  diffusion models \textbullet{}
+  pixel-space generation \textbullet{}
+  text-to-image \textbullet{}
+  VAE-free}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Iris-3B: Going Beyond the Latent with Pixel-Space Diffusion
+  Training, Conversion and Fine-Tuning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A 3B-Parameter VAE-Free Diffusion Model Matches Latent Baselines on
+  Text-to-Image Quality but Finds No Advantage on Fine-Grained Pixel Tasks}\par\vspace{6pt}
+
+{\small\textbf{By} Hanqiu Li Cai \& Chema Garabito (Speridlabs)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.09450 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Iris-3B is a 3-billion-parameter text-to-image diffusion transformer trained
+entirely in pixel space---no VAE encoder, no latent compression---via a
+256$\to$512$\to$1024 resolution curriculum, achieving GenEval 0.798 and
+DPG-Bench 86.52, matching latent FLUX.2 Klein. Fine-tuning on depth
+estimation and super-resolution finds no improvement over the latent baseline,
+suggesting the VAE bottleneck is less limiting than assumed.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VAE bottleneck in latent diffusion may limit pixel-level
+    task quality; direct pixel-space diffusion is a natural alternative.
+  \item[Why it matters:] If pixel-space diffusion is competitive,
+    the field can revisit the latent paradigm assumption.
+  \item[Method:] PiT pixel-space diffusion transformer, 3B parameters,
+    trained with a 256$\to$512$\to$1024 resolution curriculum.
+  \item[Result:] GenEval 0.798, DPG-Bench 86.52; no gain on depth
+    estimation or 4$\times$ super-resolution over latent baselines.
+  \item[Evidence:] Compared against latent FLUX.2 Klein fine-tunes on
+    downstream tasks; converted pixel model underperforms both.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The dominant paradigm in text-to-image generation encodes images into a
+latent space with a VAE before denoising with a diffusion model. This
+reduces compute: a 1024$\times$1024 image is processed as a
+$\sim$128$\times$128 latent, cutting memory and FLOPs by up to 64$\times$.
+But the VAE reconstruction introduces artefacts---blurring, ringing, and
+colour shift---that may degrade performance on pixel-level tasks such as
+depth estimation and super-resolution.
+
+Iris-3B asks: does removing the VAE bottleneck and training directly in
+pixel space yield measurable gains on these tasks? The answer, after a
+thorough empirical investigation, is: not yet.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Latent diffusion models} (LDMs) incur VAE reconstruction error at
+inference time. For generation quality benchmarks, this error is tolerated;
+for fine-grained pixel tasks, it may be a genuine bottleneck.
+
+\textbf{Pixel-space diffusion at high resolution} is expensive: the denoising
+network must process full-resolution feature maps, scaling quadratically
+in spatial dimensions.
+
+\textbf{Cascaded super-resolution} (used in early pixel-space models like
+Imagen) adds architectural complexity and requires training separate upsampling
+stages.
+
+\textbf{Latent-to-pixel conversion} (fine-tuning a pre-trained latent model
+in pixel space) is unexplored as an alternative to training from scratch.
+
+\section{Core Mechanism}
+
+\textbf{Iris-3B (from scratch):} A PiT (Pixel-space Image Transformer)
+diffusion model with 3B parameters. Training uses a progressive resolution
+curriculum: stage~1 at 256$^2$, stage~2 at 512$^2$, stage~3 at 1024$^2$.
+Text conditioning uses Qwen3-VL-4B-Instruct as the text encoder.
+
+\textbf{Converted pixel model:} FLUX.2 Klein 4B is adapted to pixel space
+by replacing the VAE encoder/decoder with an identity mapping and adjusting
+channel dimensions, then fine-tuned on the pixel-space denoising objective.
+
+Both are then fine-tuned on downstream tasks (monocular depth, 4$\times$
+super-resolution).
+
+\section{Technical Formulation}
+
+The pixel-space denoising objective is standard denoising score matching:
+\[
+\mathcal{L}_\text{DSM} = \mathbb{E}_{t,\mathbf{x}_0,\boldsymbol{\epsilon}}\!
+\Bigl[\|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t, \mathbf{c})\|_2^2\Bigr]
+\]
+where $\mathbf{x}_t = \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0 +
+\sqrt{1-\bar{\alpha}_t}\,\boldsymbol{\epsilon}$ is the noisy image at timestep
+$t$ and $\mathbf{c}$ is the text embedding.
+
+The progressive training schedule uses a staged sequence
+$(256^2, T_1) \to (512^2, T_2) \to (1024^2, T_3)$
+with decreasing step counts at higher resolutions to avoid excessive
+compute at the final stage.
+
+For task-specific fine-tuning (e.g., depth estimation with ground-truth $\mathbf{d}$):
+\[
+\mathcal{L}_\text{task} = \mathcal{L}_\text{DSM}(\mathbf{d})
++ \lambda\|\hat{\mathbf{d}} - \mathbf{d}\|_1
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Pre-training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Stage 1: train at 256$^2$ on image--caption pairs for $T_1$ steps.
+  \item Stage 2: upsample, continue at 512$^2$ for $T_2$ steps.
+  \item Stage 3: continue at 1024$^2$ for $T_3$ steps.
+\end{enumerate}
+
+\textbf{Fine-tuning:} Replace conditioning input with the task signal;
+train with the task-specific loss for a small number of steps.
+
+\textbf{Inference:} Standard DDPM/DDIM sampling; no VAE decoding.
+
+\section{What the Guarantee Says}
+
+No theoretical guarantees are claimed. The paper makes empirical claims on
+GenEval and DPG-Bench (generation quality) and on monocular depth
+and DIV2K super-resolution (fine-grained tasks).
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Generation quality:} Iris-3B achieves \textbf{GenEval 0.798}
+    and \textbf{DPG-Bench 86.52} at 1024$^2$, matching Qwen-Image and
+    competitive with latent FLUX.2 Klein.
+  \item \textbf{Monocular depth:} Iris-3B performs at parity with a latent
+    FLUX.2 Klein fine-tune; the converted pixel model performs worse.
+  \item \textbf{4$\times$ super-resolution (DIV2K):} Neither Iris-3B nor
+    the converted model outperforms the latent FLUX.2 Klein fine-tune.
+  \item \textbf{Inference cost:} Pixel-space at 1024$^2$ is substantially
+    more expensive per step than latent inference.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Curriculum stages:} Skipping the 256$^2$ stage degrades final
+generation quality; low-frequency pre-training is important for convergence.
+
+\textbf{Conversion quality:} The converted pixel model underperforms both
+the from-scratch model and the original latent model, suggesting that the
+latent representation carries useful inductive bias.
+
+\textbf{Text encoder:} Replacing Qwen3-VL-4B with a smaller encoder
+degrades text alignment (DPG) more than object-count metrics (GenEval).
+
+\textbf{Interpretation:} The null result suggests that either the VAE
+bottleneck is less harmful than assumed, that the latent representation
+is beneficial beyond compression, or that pixel-space models need more
+task-specific data to close the gap.
+
+\section*{Reference}
+
+Hanqiu Li Cai, Chema Garabito (Speridlabs).
+\textbf{Iris-3B: Going Beyond the Latent with Pixel-Space Diffusion
+Training, Conversion and Fine-Tuning}.
+arXiv:2610.09450, October 2026.\\
+\url{https://arxiv.org/abs/2610.09450}
+
+\end{document}

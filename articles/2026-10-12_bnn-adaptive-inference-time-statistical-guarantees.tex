@@ -1,0 +1,215 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Bayesian neural networks \textbullet{}
+  confidence sequences \textbullet{}
+  adaptive inference \textbullet{}
+  uncertainty quantification}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  When Has a Bayesian Neural Network Sampled Enough?
+  Adaptive Inference Time with Statistical Guarantees}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Anytime-Valid Confidence Sequences Terminate Monte Carlo Sampling
+  Per-Input When the Decision Is Statistically Resolved}\par\vspace{6pt}
+
+{\small\textbf{By} Fabian Denoodt \& Sibylle Hess}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.12212 \textbullet{} NeurIPS 2026 Workshop \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A fixed Monte Carlo sample budget in Bayesian neural network inference
+over-samples easy inputs and may under-sample hard ones, with no formal
+control on decision reliability. This paper terminates sampling per-input
+using \emph{confidence sequences}---anytime-valid probability bounds---as
+soon as the relevant decision is statistically resolved, concentrating
+compute on ambiguous cases and providing a formal per-prediction guarantee.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Fixed-budget BNN inference leaves finite-sample
+    prediction error uncontrolled and wastes compute on easy inputs.
+  \item[Why it matters:] Reliable per-input guarantees are critical
+    for high-stakes BNN deployment.
+  \item[Method:] Anytime-valid KL-mixture confidence sequences
+    for argmax, distributional, and threshold BNN decisions.
+  \item[Result:] Adaptive sampling reduces latency vs.\ matched-reliability
+    fixed budgets while providing a formal guarantee per prediction.
+  \item[Evidence:] Image classification benchmarks; comparison with
+    fixed-$S$ and heuristic early stopping.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Bayesian neural networks approximate the posterior predictive distribution
+by averaging over $S$ Monte Carlo weight samples:
+\[
+\hat{p}(y \mid \mathbf{x}) = \frac{1}{S}\sum_{s=1}^S p(y \mid \mathbf{x}, \mathbf{w}^{(s)})
+\]
+The choice of $S$ is arbitrary, uniform across inputs, and provides no
+bound on the finite-sample error of the resulting prediction. For inputs
+far from the decision boundary, $S=5$ is likely sufficient; for borderline
+cases, $S=1000$ may still be insufficient. A method that terminates
+sampling when the decision is resolved---with a provable guarantee---would
+improve both reliability and efficiency simultaneously.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fixed-$S$ inference} ignores input difficulty, over-sampling easy
+inputs and providing no guarantee on hard ones.
+
+\textbf{Heuristic early stopping} (stopping when the running mean
+stabilises) provides no formal guarantee and empirically fails near
+decision boundaries.
+
+\textbf{Conformal prediction} provides marginal set-coverage guarantees
+over the test set, not per-input anytime guarantees tied to the sampling
+process.
+
+\textbf{Sequential hypothesis testing} (SPRT) was designed for binary
+tests; multi-class prediction and distributional estimation require
+a different treatment.
+
+\section{Core Mechanism}
+
+A \textbf{confidence sequence} $\{C_s\}_{s=1}^\infty$ satisfies:
+\[
+\Pr\!\bigl[\exists s \geq 1 : \theta \notin C_s\bigr] \leq \alpha
+\]
+This anytime-valid property allows stopping at any data-dependent time
+$\tau$ without inflating the Type~I error. Unlike classical confidence
+intervals (valid only at a fixed $s$), confidence sequences shrink
+as more samples arrive and remain valid throughout.
+
+The paper instantiates confidence sequences for three BNN tasks:
+(1)~argmax class identification, (2)~full predictive distribution
+estimation, and (3)~probability-threshold decisions.
+
+\section{Technical Formulation}
+
+Let $\hat{p}_s^c = \frac{1}{s}\sum_{j=1}^s p(y=c \mid \mathbf{x}, \mathbf{w}^{(j)})$.
+A KL-mixture confidence sequence gives an anytime interval $(L_s^c, U_s^c)$:
+\[
+\Pr\!\Bigl[\exists s \geq 1 : p^c \notin (L_s^c, U_s^c)\Bigr] \leq \alpha
+\]
+
+The stopping rule for argmax identification is:
+\[
+\tau^* = \min\!\Bigl\{s : U_s^{c^*} > \max_{c \neq c^*} U_s^c \Bigr\}
+\]
+where $c^* = \arg\max_c \hat{p}_s^c$.
+
+For distributional estimation with tolerance $\varepsilon$:
+\[
+\tau^\varepsilon = \min\!\Bigl\{s : r_s \leq \varepsilon\Bigr\},
+\quad r_s = O\!\left(\sqrt{\frac{\log s}{s}}\right)
+\]
+
+For threshold decisions at level $\tau_\text{thr}$:
+\[
+\tau^{\tau_\text{thr}} = \min\!\Bigl\{s : L_s^{c^*} > \tau_\text{thr}
+\text{ or } U_s^{c^*} < \tau_\text{thr}\Bigr\}
+\]
+
+\section{Learning or Inference Procedure}
+
+At inference time, for each input $\mathbf{x}$:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Draw $\mathbf{w}^{(s)} \sim q(\mathbf{w} \mid \mathcal{D})$ and
+    evaluate $p(y \mid \mathbf{x}, \mathbf{w}^{(s)})$.
+  \item Update running mean $\hat{\mathbf{p}}_s$ and CS bounds
+    $(L_s^c, U_s^c)$.
+  \item Check the stopping criterion for the chosen task.
+  \item If met, return the prediction with its guarantee; else draw $s+1$.
+\end{enumerate}
+No training modifications are required; the method wraps any BNN.
+
+\section{What the Guarantee Says}
+
+For any data-dependent stopping time $\tau$ induced by the confidence
+sequence and any error level $\alpha$, the decision at time $\tau$
+has error probability at most $\alpha$---regardless of the input
+distribution or Monte Carlo sample realisations.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item The method assigns \textbf{more samples to ambiguous inputs}
+    (near decision boundaries) and fewer to easy inputs, naturally
+    concentrating compute.
+  \item \textbf{Overall inference latency is reduced} vs.\ a fixed-$S$
+    budget that provides the same average reliability.
+  \item CS bounds are \textbf{tight in practice}: average sample count
+    closely tracks input difficulty measured by entropy.
+  \item For threshold decisions, unnecessary high-sample expenditure
+    on clearly low- or high-uncertainty inputs is avoided.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Confidence level $\alpha$:} Stricter guarantees (lower $\alpha$)
+require more samples per input; the relationship is approximately
+$O(\log(1/\alpha))$.
+
+\textbf{Posterior quality:} Better-calibrated posteriors tighten CS bounds
+faster; an over-dispersed posterior still provides a valid guarantee
+but at greater sample cost.
+
+\textbf{Heuristic early stopping:} Provides no guarantee and fails
+empirically on high-entropy inputs where the running mean converges slowly.
+
+\textbf{Dataset difficulty skew:} Savings are largest on datasets with
+many easy and few hard examples---the common case in practice.
+
+\section*{Reference}
+
+Fabian Denoodt, Sibylle Hess.
+\textbf{When Has a Bayesian Neural Network Sampled Enough?\ Adaptive
+Inference Time with Statistical Guarantees}.
+NeurIPS 2026 Workshop (E-Values: From Statistics to ML).
+arXiv:2610.12212, October 2026.\\
+\url{https://arxiv.org/abs/2610.12212}
+
+\end{document}

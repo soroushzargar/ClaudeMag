@@ -1,0 +1,206 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mixture of experts \textbullet{}
+  interpretability \textbullet{}
+  sparse autoencoders \textbullet{}
+  routing}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  RouterInterp: Understanding Superposed Specialisation in
+  Mixture of Experts Routing}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Experts Do Not Own Domains---They Activate on Disjoint Unions of
+  Fine-Grained Features, and Sparse Autoencoder Probes Explain Why}\par\vspace{6pt}
+
+{\small\textbf{By} Ilya Lasy, Nora Yinuo Cai \& Kola Ayonrinde}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.11775 \textbullet{} ICML 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+MoE routing does not follow the single-domain assumption:
+each expert activates on a \emph{disjoint union} of fine-grained
+features---the Superposed Specialisation Hypothesis. RouterInterp identifies
+these features via Sparse Autoencoder probes and composes them into
+natural-language routing explanations, achieving 65\% higher routing-detection
+accuracy than token-statistics baselines on gpt-oss-20b.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] It is unknown why specific tokens are routed to specific
+    experts in MoE language models.
+  \item[Why it matters:] Understanding routing is essential for auditing,
+    debugging, and improving MoE architectures.
+  \item[Method:] Sparse linear probes over SAE features predict routing;
+    top-feature descriptions are composed into expert explanations.
+  \item[Result:] $\approx$65\% higher routing-detection accuracy on
+    gpt-oss-20b vs.\ token-statistics baselines.
+  \item[Evidence:] Causal interventions confirm the SAE features causally
+    influence routing; manual validation confirms explanation quality.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Mixture-of-Experts (MoE) models achieve state-of-the-art scaling
+efficiency by routing each token through a small subset of expert
+feed-forward networks. Despite widespread deployment, the routing
+mechanism remains a black box: knowing \emph{why} a token is routed to
+a particular expert is important for diagnosing failure modes, ensuring
+balanced expert use, and building trust in deployed systems.
+
+The dominant assumption---``the code expert,'' ``the French expert,'' etc.---is
+a convenience fiction. RouterInterp provides empirical and causal evidence
+for a richer picture: the \textbf{Superposed Specialisation Hypothesis (SSH)}.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Token-statistics methods} compute the frequency distribution of
+token types per expert and label each with the most common category.
+These methods are coarse, conflate co-occurrences with specialisation,
+and show low prediction accuracy when routing is polysemous.
+
+\textbf{Probing classifiers} on raw activations predict routing but
+yield no human-readable explanation.
+
+\textbf{Manual inspection} is intractable across the hundreds of experts
+and billions of parameters in production MoE models.
+
+\section{Core Mechanism}
+
+\textbf{Superposed Specialisation Hypothesis:} Each expert $e$ activates
+not on one broad domain, but on a disjoint union of fine-grained
+linguistic or semantic features---mirroring the superposition phenomenon
+known to occur in individual neurons.
+
+RouterInterp operationalises this via Sparse Autoencoders (SAEs):
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Derive monosemantic SAE features from the residual stream.
+  \item Fit $L_1$-penalised probes to predict routing from SAE activations.
+  \item Compose the top-predictive features' descriptions into a
+    unified expert explanation.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+Let $\mathbf{h}_t \in \mathbb{R}^d$ be the residual stream at token $t$.
+A Sparse Autoencoder maps it to a sparse feature vector:
+\[
+\mathbf{f}_t = \mathrm{ReLU}(\mathbf{W}_\text{enc}\,\mathbf{h}_t + \mathbf{b}_\text{enc}),
+\quad \mathbf{f}_t \in \mathbb{R}^F
+\]
+
+The routing indicator for expert $e$ is:
+\[
+r_{t,e} = \mathbf{1}[\text{expert } e \text{ selected for token } t]
+\]
+
+RouterInterp solves the $L_1$-penalised logistic regression:
+\[
+\hat{r}_{t,e} = \sigma(\boldsymbol{\beta}_e^\top \mathbf{f}_t),
+\quad \boldsymbol{\beta}_e = \arg\min_{\boldsymbol{\beta}}
+\mathcal{L}_\text{CE}(r,\hat{r}) + \mu\|\boldsymbol{\beta}\|_1
+\]
+
+Non-zero entries $\{k : \beta_{e,k} \neq 0\}$ identify the SAE features
+predictive of routing to expert $e$. Their descriptions $\{s_k\}$ are
+composed into a natural-language explanation via a language model.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train a SAE on the frozen MoE's residual stream to obtain a
+    dictionary of monosemantic features.
+  \item Collect routing labels $r_{t,e}$ over a large corpus.
+  \item Fit sparse probes $\boldsymbol{\beta}_e$ for each expert over SAE
+    feature activations.
+  \item Extract the top-$k$ predictive features per expert.
+  \item Pass the feature descriptions to a language model to compose
+    a coherent expert summary.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+RouterInterp provides an empirical claim validated by causal intervention:
+activating a high-weight SAE feature at a token that would otherwise not
+route to expert $e$ measurably increases routing probability to $e$,
+confirming causality beyond mere correlation.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item On \textbf{gpt-oss-20b}, RouterInterp achieves $\approx$\textbf{65\%
+    higher routing-detection accuracy} than token-statistics baselines.
+  \item Manual inspection confirms that expert descriptions are specific,
+    coherent, and capture non-obvious expert roles.
+  \item The SSH is validated: the top SAE features per expert span
+    semantically disjoint categories (e.g., medical terminology
+    \emph{and} certain syntactic patterns in Spanish for the same expert).
+  \item Results are consistent across all expert layers in gpt-oss-20b.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Raw activations vs.\ SAE features:} Probing on raw residual stream
+activations degrades routing prediction accuracy significantly and yields
+incoherent explanations.
+
+\textbf{Top-$k$ features:} Including more features beyond the natural
+coefficient elbow adds noise without improving routing accuracy.
+
+\textbf{Causal intervention:} Artificially activating a predictive SAE feature
+causally increases routing probability to the predicted expert.
+
+\textbf{Across layers:} Early layers show routing correlated with syntactic
+SAE features; later layers show richer semantic specialisation.
+
+\section*{Reference}
+
+Ilya Lasy, Nora Yinuo Cai, Kola Ayonrinde.
+\textbf{RouterInterp: Understanding Superposed Specialisation in Mixture of
+Experts Routing}.
+ICML 2026. arXiv:2610.11775, October 2026.\\
+\url{https://arxiv.org/abs/2610.11775}
+
+\end{document}

@@ -1,0 +1,201 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-12}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal learning \textbullet{}
+  tensor decomposition \textbullet{}
+  synergy \textbullet{}
+  contrastive learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  HRIL: Learning Multimodal Synergy via Higher-Order Tensor Modeling}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Tucker Decomposition of a Cross-Moment Tensor Captures the Emergent
+  Information That Pairwise Contrastive Objectives Miss}\par\vspace{6pt}
+
+{\small\textbf{By} Qun Dai, Zhao Kang et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.12393 \textbullet{} NeurIPS 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multimodal contrastive learning fails to capture \emph{synergistic} information---the
+signal that is only present in the joint combination of three or more
+modalities. HRIL introduces a cross-moment tensor over modality embeddings
+and factorises it with Tucker decomposition inside a contrastive objective,
+with a regulariser that prevents the core tensor from collapsing to
+pairwise terms.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Pairwise contrastive losses miss synergistic information
+    that only exists in the joint combination of three or more modalities.
+  \item[Why it matters:] Many real-world multimodal tasks rely on
+    cross-modal synergy; ignoring it leaves performance on the table.
+  \item[Method:] Outer-product cross-moment tensor over modality
+    embeddings, compressed by Tucker decomposition, with a diagonal-suppressing
+    regulariser.
+  \item[Result:] Consistent gains over multimodal contrastive baselines
+    on synergy-dominated benchmarks; accepted to NeurIPS 2026.
+  \item[Evidence:] Ablation confirms the synergy regulariser is necessary;
+    Tucker rank controls the expressiveness--cost trade-off.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The information-theoretic decomposition of multimodal data identifies three
+components: \emph{redundant} (shared across modalities), \emph{unique}
+(present in one modality only), and \emph{synergistic} (present only in
+the joint combination). Standard contrastive objectives such as InfoNCE
+maximise pairwise mutual information, capturing redundant and unique
+information but systematically missing synergy.
+
+HRIL (Higher-order Representation Interaction Learning) addresses this gap
+by constructing a tensor representation that explicitly encodes interactions
+of all orders up to $M$ for $M$ modalities, then compressing it efficiently
+via Tucker decomposition. The result is a contrastive framework that is
+provably sensitive to synergistic effects.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Pairwise contrastive losses} (InfoNCE, SimCLR) consider only two
+modalities at a time, so terms requiring all $M$ modalities simultaneously
+are never optimised.
+
+\textbf{Late fusion} combines independent unimodal embeddings at inference
+time, encoding no interactions before the final decision.
+
+\textbf{Bilinear tensor fusion} captures pairwise interactions and scales
+quadratically with the number of modalities, missing higher-order terms
+and becoming intractable for large $M$.
+
+\section{Core Mechanism}
+
+HRIL forms the outer product of modality embeddings:
+\[
+\mathcal{T}^{(i)} = \bigotimes_{m=1}^{M} \mathbf{z}_m^{(i)},
+\quad \mathcal{T}^{(i)} \in \mathbb{R}^{d_1 \times \cdots \times d_M}
+\]
+and compresses it via Tucker decomposition into a core tensor
+$\mathcal{G} \in \mathbb{R}^{r_1 \times \cdots \times r_M}$ with factor
+matrices $\mathbf{U}_m \in \mathbb{R}^{d_m \times r_m}$. A regulariser
+penalises the diagonal entries of $\mathcal{G}$ (which correspond to
+unimodal and pairwise terms), forcing the model to allocate capacity to
+genuinely multi-way interactions.
+
+\section{Technical Formulation}
+
+Let $f_m : \mathcal{X}_m \to \mathbb{R}^{d_m}$ be the encoder for modality
+$m$, with output $\mathbf{z}_m^{(i)} = f_m(x_m^{(i)})$.
+
+Tucker factorisation approximates the cross-moment tensor:
+\[
+\hat{\mathcal{T}} = \mathcal{G} \times_1 \mathbf{U}_1 \cdots \times_M \mathbf{U}_M,
+\quad \|\mathcal{T} - \hat{\mathcal{T}}\|_F \leq \epsilon
+\]
+
+The synergy regulariser penalises diagonal concentration:
+\[
+\mathcal{L}_\text{syn} = \sum_{r} \mathcal{G}_{r,r,\ldots,r}^2
+\]
+
+The total objective balances contrastive alignment and synergy:
+\[
+\mathcal{L} = \mathcal{L}_\text{InfoNCE} + \lambda \mathcal{L}_\text{syn}
+\]
+where $\lambda > 0$ is a hyperparameter.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Encode each modality: $\mathbf{z}_m^{(i)} = f_m(x_m^{(i)})$.
+  \item Form the outer-product tensor $\mathcal{T}^{(i)}$.
+  \item Project through Tucker factors to obtain the core $\mathcal{G}^{(i)}$.
+  \item Evaluate the contrastive loss over positive/negative pairs.
+  \item Add $\lambda\mathcal{L}_\text{syn}$ and backpropagate through
+    Tucker factors and encoders jointly.
+\end{enumerate}
+
+\textbf{Inference:} The Tucker-compressed representation provides a
+fused embedding for downstream classification or retrieval.
+
+\section{What the Guarantee Says}
+
+Tucker decomposition provides a controlled approximation: the Frobenius
+reconstruction error is bounded by the residual from truncating the Tucker
+rank. The synergy regulariser provably prevents the core from degenerating
+to a diagonal form (which recovers bilinear fusion).
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item HRIL outperforms multimodal contrastive baselines on synergy-dominated
+    benchmarks, with gains largest when no pair of modalities alone
+    captures the label.
+  \item Performance scales with Tucker rank $(r_1, \ldots, r_M)$ up to a
+    saturation point, providing a tuneable compute--accuracy trade-off.
+  \item Gains transfer across different encoder architectures
+    and modality combinations.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without synergy regulariser:} The core concentrates on diagonals,
+recovering bilinear-fusion behaviour and losing most of the HRIL advantage.
+
+\textbf{Tucker rank:} Lowering the rank reduces cost with minor accuracy
+loss; higher ranks plateau beyond a problem-dependent threshold.
+
+\textbf{Number of modalities:} The benefit over pairwise methods grows
+with $M$, consistent with the theoretical argument that synergy is a
+higher-order effect.
+
+\section*{Reference}
+
+Qun Dai, Zhao Kang et al.\
+\textbf{HRIL: Learning Multimodal Synergy via Higher-Order Tensor Modeling}.
+NeurIPS 2026. arXiv:2610.12393, October 2026.\\
+\url{https://arxiv.org/abs/2610.12393}
+
+\end{document}
