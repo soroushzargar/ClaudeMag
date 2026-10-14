@@ -1,0 +1,219 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  GRPO \textbullet{}
+  reinforcement learning \textbullet{}
+  bias-variance theory \textbullet{}
+  LLM reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  When Does External Guidance Help LLM Reasoning?}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Bias-Variance Theory of Guidance-Augmented GRPO Derives a Closed-Form
+  Optimal Guidance Weight and Proves an Unavoidable $\delta^2$ Bias Floor}\par\vspace{6pt}
+
+{\small\textbf{By} Sofia Torres, Gabriel Almeida, Carter Adams \& Camila Rocha}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.06861 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Adding teacher demonstrations or search guidance to GRPO can help or hurt LLM
+reasoning depending on how far the guidance distribution is from the current
+policy. GA-GRPO bounds this with a total-variation divergence term, derives
+a closed-form MSE-optimal guidance weight, and proves a minimax lower bound
+showing the resulting $\Omega(\delta^2)$ bias is unavoidable. Using the
+optimal weight, Qwen2.5-Math-7B-Base gains 2.3\% on MATH-500 and uses
+31\% fewer GPU-hours than vanilla GRPO.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Guidance-augmented GRPO methods tune guidance weight
+    by grid search; no principled theory exists for when guidance helps.
+  \item[Why it matters:] Optimal guidance weight determines whether teacher
+    signals accelerate or degrade RL training for LLMs.
+  \item[Method:] Model guidance as a sampling-distribution shift; derive
+    closed-form $\alpha^*$ from the bias-variance MSE formula.
+  \item[Result:] GA-GRPO with $\alpha^*$ achieves 82.4\% on MATH-500 vs.\
+    80.1\% for vanilla GRPO, using 31\% fewer GPU-hours.
+  \item[Evidence:] Nine math benchmarks; Qwen2.5-Math-7B-Base vs.\ TAPO,
+    LUFFY, ExPO, and vanilla GRPO.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning from verifiable rewards (RLVR) is now the dominant
+post-training strategy for reasoning LLMs. Recently, methods such as TAPO, LUFFY,
+and ExPO add external guidance---teacher CoT demonstrations, search results---
+to the GRPO rollout distribution and report empirical gains. But \emph{when}
+does guidance help, and how much should be used?
+
+Torres et al.\ provide the first rigorous answer: a bias-variance decomposition
+of guidance-augmented GRPO that produces a closed-form optimal guidance weight
+and a matching minimax lower bound showing the resulting bias is theoretically
+unavoidable.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Vanilla GRPO / REINFORCE}: Purely on-policy; zero bias but high variance
+for sparse rewards, requiring many samples.
+
+\textbf{SFT from demonstrations}: High bias (model drifts toward teacher, away
+from its own distribution), no principled debiasing.
+
+\textbf{Ad-hoc guidance weighting (TAPO, LUFFY, ExPO)}: Empirically effective
+but guidance weights (ranging 0.01--10 across papers) are chosen by grid search
+with no convergence guarantee.
+
+\textbf{GA-GRPO}: Derives $\alpha^*$ from first principles and converges at
+$\mathcal{O}(1/\sqrt{T})$ to a neighborhood whose radius is bounded by
+guidance bias.
+
+\section{Core Mechanism: Mixture Sampling and Importance Weighting}
+
+Guidance-Augmented GRPO draws rollouts from:
+\[
+\tilde{q}_t = (1-\alpha)\,p_{\theta_t} + \alpha\,q
+\]
+where $q$ is the guidance distribution and $\alpha \in [0,1]$.
+
+The gradient estimator uses importance weights to correct for off-policy
+sampling:
+\[
+\hat{g}_t = \frac{1}{K}\sum_{k=1}^K
+  \frac{p_{\theta_t}(\tau_k)}{\tilde{q}_t(\tau_k)}\,
+  r(\tau_k)\,\nabla_\theta\log p_\theta(\tau_k)
+\]
+
+The MSE of $\hat{g}_t$ decomposes as:
+\[
+\mathrm{MSE}(\alpha)
+  = \frac{\sigma^2(\theta_t)}{K(1-\alpha)}
+  + \alpha^2 C^2 \mathrm{TV}^2(q, p_{\theta_t})
+\]
+The first term is variance (decreases with $K$ and $\alpha$); the second is
+squared bias (grows with $\alpha$).
+
+\section{Technical Formulation}
+
+Minimising $\mathrm{MSE}(\alpha)$ over $\alpha \in [0,1]$ yields the
+closed-form optimal guidance weight:
+\[
+\alpha^* = \frac{\sigma^2(\theta_t)/K}
+               {\sigma^2(\theta_t)/K + 2C^2\,\mathrm{TV}^2(q,p_{\theta_t})}
+\]
+This is small when $\mathrm{TV}(q,p_\theta)$ is large (biased teacher) and
+grows as the model improves toward the teacher.
+
+\textbf{Convergence theorem (informal).} Under $L$-smooth policy gradients
+and $\mathrm{TV}(q,p_\theta)\leq\delta$, GA-GRPO with step size
+$\eta_t = \mathcal{O}(1/\sqrt{t})$ satisfies:
+\[
+\frac{1}{T}\sum_{t=1}^T\|\nabla\mathcal{L}(\theta_t)\|^2
+  \leq \frac{C_1}{\sqrt{T}} + \delta^2 C_2
+\]
+
+\textbf{Minimax lower bound.} For any guidance-augmented algorithm with
+$\mathrm{TV}(q,p_\theta)\geq\delta$:
+\[
+\frac{1}{T}\sum_{t=1}^T\|\nabla\mathcal{L}(\theta_t)\|^2
+  \geq \Omega\!\left(\frac{1}{\sqrt{T}}\right) + \Omega(\delta^2)
+\]
+The $\Omega(\delta^2)$ bias floor is \emph{unavoidable}---no algorithm using
+guidance with fixed divergence $\delta$ can eliminate it.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Specify teacher $q$; estimate $\mathrm{TV}(q,p_\theta)$ via Pinsker's
+    inequality on a calibration set.
+  \item Compute $\alpha^*$ using the closed-form; update every 100 gradient steps.
+  \item Run GA-GRPO with mixture $\tilde{q}_t$.
+  \item Evaluate on held-out math benchmarks.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+GA-GRPO converges at $\mathcal{O}(1/\sqrt{T})$ with a bias floor of
+$\delta^2 C_2$. The optimal $\alpha^*$ minimises MSE at each step,
+making it the best possible guidance weight under the assumed smoothness
+and boundedness conditions. The minimax lower bound confirms no improvement
+on $\delta^2$ is achievable by any algorithm.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Model:} Qwen2.5-Math-7B-Base; teacher: GPT-4o CoT (50K examples).
+  \item \textbf{Benchmarks:} MATH-500, AIME 2024/25, AMC 2023, GPQA-Diamond,
+    OlympiadBench, Minerva, Olympus, GaoKao (9 total).
+  \item GA-GRPO ($\alpha^*$): \textbf{82.4\%} on MATH-500 vs.\ 80.1\% vanilla GRPO.
+  \item Surpasses TAPO (+1.1\%), LUFFY (+0.7\%), ExPO (+2.3\%) averaged across
+    benchmarks.
+  \item \textbf{31\% fewer GPU-hours} (3.2M vs.\ 4.6M GPU-minutes) at matched
+    final accuracy.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Fixed $\alpha$ vs.\ $\alpha^*$:} Fixed $\alpha{=}0.3$ achieves 80.8\%;
+$\alpha^*$ achieves 82.4\%; the adaptive scheduling is the key improvement.
+
+\textbf{TV estimation:} KL-based estimation is within 0.5\% of exact TV;
+entropy-based proxies are noisier but still achieve 80.2\%.
+
+\textbf{Low-quality teacher ($\delta{=}0.8$):} $\alpha^*$ drives toward zero,
+recovering vanilla GRPO---confirming the method is teacher-agnostic.
+
+\textbf{$\delta^2$ bias empirical confirmation:} High-divergence teacher leads
+to lower accuracy despite large guidance signal, matching the lower bound.
+
+\section*{Reference}
+
+Sofia Torres, Gabriel Almeida, Carter Adams, Camila Rocha.
+\textbf{When Does External Guidance Help LLM Reasoning? A Bias-Variance Theory
+of Guidance-Augmented GRPO}.
+arXiv:2610.06861, October 2026.\\
+\url{https://arxiv.org/abs/2610.06861}
+
+\end{document}

@@ -1,0 +1,216 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  mechanistic interpretability \textbullet{}
+  attention heads \textbullet{}
+  activation patching \textbullet{}
+  task-dependent circuits}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Task Context Shapes Component Roles in Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  The Same Attention Head Does Different Jobs Depending on the Task---
+  and Response Maps Predict This Redistribution Across Five Model Families}\par\vspace{6pt}
+
+{\small\textbf{By} Sovesh Mohapatra \& Dani S Bassett}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.13895 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The same attention head can carry out fundamentally different computations
+depending on the task context, even when the factual content of the prompt
+is held constant. Across five model families (1.5--14B), switching tasks
+redistributes influence among heads, and a linear \emph{response map} fitted
+per task predicts a downstream head's change from an upstream activation edit,
+cutting mean squared error by 53.6\% in Gemma-2-9B.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Mechanistic interpretability studies heads in a single-task
+    context; it is unknown whether those functional roles transfer.
+  \item[Why it matters:] Safety interventions derived from single-task circuits
+    may fail or backfire under different task contexts.
+  \item[Method:] Graph-fact prompts isolate task context from factual content;
+    activation patching measures cross-task influence redistribution.
+  \item[Result:] Mean cosine similarity between influence profiles across tasks
+    is 0.41; response maps transfer with 50--70\% of MSE reduction preserved.
+  \item[Evidence:} Five models, five task types, causal intervention validation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Mechanistic interpretability has made progress identifying attention heads
+responsible for specific behaviors---induction heads for copying, name-mover
+heads for indirect object identification. But almost all such analyses are
+conducted under a \emph{single} task context.
+
+Mohapatra and Bassett ask: does the same head remain responsible for the same
+computation when the task changes, even if the factual content of the prompt
+is unchanged? Using carefully controlled \textbf{graph-fact} prompts that hold
+syntactic structure and factual entities constant while varying only the task
+instruction, they find that component roles are substantially reshuffled.
+
+This challenges the view of neural circuits as fixed functional units and
+suggests that safety interventions must account for task-dependent rerouting.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Single-task circuit tracing} (e.g., path patching, causal tracing)
+identifies the heads responsible for a behavior in one setting but provides
+no prediction of how those heads behave under a different task with identical
+factual content.
+
+\textbf{Universal probes} train on a fixed dataset to locate where facts are
+stored. They miss the dynamic routing that occurs at task-switch time.
+
+\textbf{Attention pattern visualization} shows where a head attends but not
+how its output influences downstream layers. Influence requires causal
+intervention, not observation.
+
+\section{Core Mechanism: Graph Facts and Response Maps}
+
+\textbf{Graph-fact pairs} are minimal-pair prompts that share a factual entity
+(e.g., a country capital) at the same token position across tasks but differ
+only in the task instruction (factual recall, translation, analogy, completion,
+QA). This controls for syntactic and positional confounders.
+
+\textbf{Influence measurement.} For each head $(h,\ell)$, the indirect effect
+under task $t$ is:
+\[
+\mathrm{IE}^{(t)}(h,\ell) = \frac{1}{N}\sum_{i=1}^N
+\!\left[p_\theta(a^{*(t)}_i|x^{(t)}_i,\mathrm{patch}_{h,\ell})
+- p_\theta(a^{*(t)}_i|x^{(t)}_{\mathrm{corrupt},i})\right]
+\]
+
+\textbf{Response maps.} A linear map $R^{(t)}_{(h,\ell)\to(h',\ell')}$ predicts
+the output change at downstream head $(h',\ell')$ from an activation edit at
+upstream head $(h,\ell)$ under task $t$:
+\[
+\hat{\Delta}a_{h',\ell'} = R^{(t)}_{(h,\ell)\to(h',\ell')} \cdot \Delta a_{h,\ell}
+\]
+
+Quality is measured by fractional MSE reduction relative to a zero predictor.
+
+\section{Technical Formulation}
+
+Let $\mathrm{IE}^{(t)} \in \mathbb{R}^{N_{\text{heads}}}$ be the influence
+vector across all heads under task $t$. The cross-task similarity:
+\[
+\rho(t, t') = \frac{\mathrm{IE}^{(t)} \cdot \mathrm{IE}^{(t')}}
+                   {\|\mathrm{IE}^{(t)}\|\,\|\mathrm{IE}^{(t')}\|}
+\]
+
+A value of $\rho < 1$ indicates that the relative importance of heads
+changes across tasks. The authors observe $\rho \in [0.18, 0.67]$ across
+task pairs (mean 0.41).
+
+Response map quality:
+\[
+\mathrm{MSE\text{-}red} = 1 - \frac{\|\Delta a_{h',\ell'} - \hat{\Delta}a_{h',\ell'}\|^2}
+                                    {\|\Delta a_{h',\ell'}\|^2}
+\]
+Gemma-2-9B: 53.6\%; Llama-3.1-8B: 41.2\%; Phi-3-mini: 38.8\%; Qwen3-14B: 5.0\%.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Construct graph-fact prompts for five task types; ensure factual
+    entities appear at the same token position.
+  \item For each model and task, run activation patching to compute
+    $\mathrm{IE}^{(t)}(h,\ell)$ over all heads.
+  \item Fit response maps $R^{(t)}$ on 80\% of prompts; evaluate on 20\%.
+  \item Perform targeted early-layer edits; measure downstream answer-token
+    probability changes.
+  \item Compare influence profiles across tasks via cosine similarity.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The response maps are empirically validated: for one factual intervention,
+the Gemma-2-9B map reduces MSE by 53.6\% vs.\ averaging the two
+task-specific maps. Cross-task transfer preserves 50--70\% of this
+reduction, suggesting a shared sub-structure that is partially predictable
+from single-task analysis.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Models:} Phi-3-mini-3.8B, Gemma-2-9B, Llama-3.1-8B, Qwen3-14B,
+    Mistral-7B.
+  \item \textbf{Tasks:} Factual recall, translation, analogy, sentence
+    completion, open-ended QA.
+  \item Mean cross-task influence cosine similarity: \textbf{0.41}
+    (range 0.18--0.67).
+  \item Response map MSE reduction: Gemma-2-9B \textbf{53.6\%}; Llama-3.1-8B
+    41.2\%; Qwen3-14B 5.0\%.
+  \item Cross-task transfer: maps from factual recall transfer best to sentence
+    completion (0.62), worst to translation (0.19).
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Fixed-task vs.\ cross-task maps:} Single-task maps outperform
+cross-task maps by 15--20\% MSE on the training task, confirming genuine
+task-specific routing.
+
+\textbf{Layer range:} Early-layer edits (layers 3--7 of 28) are the primary
+routing bottleneck; mid-layer response maps are less predictive.
+
+\textbf{Attention vs.\ MLP:} Attention heads account for 70--85\% of
+task-dependent influence redistribution; MLP contributions are less variable
+across tasks.
+
+\textbf{Safety implication:} A circuit marked ``safe'' under factual recall may
+be activated differently under translation or QA context. Cross-task analysis
+is recommended before deployment.
+
+\section*{Reference}
+
+Sovesh Mohapatra, Dani S Bassett.
+\textbf{Task Context Shapes Component Roles in Language Models}.
+arXiv:2610.13895, October 2026.\\
+\url{https://arxiv.org/abs/2610.13895}
+
+\end{document}

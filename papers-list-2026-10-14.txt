@@ -1,0 +1,60 @@
+ML Papers List — 2026-10-14
+Generated for ClaudeMag
+
+1. AI Models Can Provably Hide Arbitrary Capabilities
+   Authors: Andis Draguns, Sumeet Ramesh Motwani, Raymond Douglas, Christian Schroeder de Witt
+   Venue/ID: NeurIPS 2026 · arXiv:2610.13928
+   URL: https://arxiv.org/abs/2610.13928
+   Summary: Capability audits assume that if a hidden behavior cannot be elicited, it does not
+   exist. This paper refutes that assumption by constructing backdoors that embed entire
+   encrypted neural networks inside a host model's weights, activated only by a secret trigger.
+   Using digital-locker cryptography, the hidden circuits remain undetectable under fine-tuning,
+   weight noising, gradient-based trigger search, and latent adversarial training. Tests on
+   chemical-reaction-prediction tasks show the capabilities survive all current elicitation
+   defenses, and the models are released to support future defense research.
+
+2. Expanding LLM Reasoning
+   Authors: Rian Atri, Evan Luo
+   Venue/ID: NeurIPS 2026 · arXiv:2610.05584
+   URL: https://arxiv.org/abs/2610.05584
+   Summary: Rather than sampling more complete chains, the authors ask where inside an existing
+   chain an extra continuation should be branched. They define expansion utility as the change in
+   correctness from restarting a chain at a stored step, measure it across nine models on six
+   benchmarks, and find that a fixed "always-last" rule beats uniform placement and matches a
+   learned router. On DeepSeek-R1-Distill-Qwen-14B / MATH-500, always-last surpasses
+   four-sample self-consistency while using only 0.774x the generated output.
+
+3. Task Context Shapes Component Roles in Language Models
+   Authors: Sovesh Mohapatra, Dani S Bassett
+   Venue/ID: arXiv:2610.13895
+   URL: https://arxiv.org/abs/2610.13895
+   Summary: The same attention head can serve different functional roles depending on the task
+   context. Across five open-weight models (1.5–14B parameters, four families), the authors
+   measure how influence redistributes when the task changes while the prompt structure is
+   held constant. In Gemma-2-9B and Qwen3-14B, an early activation edit redirects which fact
+   the model attends to without altering the instruction. A response map predicts a later
+   head's response from an earlier intervention, cutting mean squared error by 53.6% in Gemma.
+
+4. When Does External Guidance Help LLM Reasoning? A Bias-Variance Theory of Guidance-Augmented GRPO
+   Authors: Sofia Torres, Gabriel Almeida, Carter Adams, Camila Rocha
+   Venue/ID: arXiv:2610.06861
+   URL: https://arxiv.org/abs/2610.06861
+   Summary: Guidance-Augmented GRPO (GA-GRPO) adds external search or teacher signals to the
+   GRPO reinforcement-learning loop for LLMs. The authors prove a closed-form bias bound
+   (governed by total-variation divergence between guided and on-policy distributions) and an
+   O(1/sqrt(T)) convergence rate to a neighbourhood whose radius is proportional to guidance
+   bias. A minimax lower bound shows this Omega(delta^2 T) bias term is unavoidable. Using the
+   derived MSE-optimal guidance weight, GA-GRPO matches or surpasses TAPO, LUFFY, and vanilla
+   GRPO on nine math benchmarks while requiring 31% fewer GPU-hours.
+
+5. VTV-FM: Flow Matching through Variational Terminal-Velocity Closure
+   Authors: Haoyang Jiang, Yuheng Li, Di Yang, Yanhai Xiong, Haipeng Chen, Yi He
+   Venue/ID: NeurIPS 2026 · arXiv:2610.00785
+   URL: https://arxiv.org/abs/2610.00785
+   Summary: Flow matching typically uses straight-line (first-order) transport paths because
+   static datasets carry no terminal-velocity information for second-order dynamics. VTV-FM
+   resolves this by deriving the missing terminal velocity through a minimum-acceleration energy
+   principle, yielding a closed-form second-order bridge. The same construction provides the
+   optimal-transport pairing cost and acceleration training targets. Experiments on
+   low-dimensional datasets, PDE-governed physical fields, and CIFAR-10 show improved sample
+   quality and trajectory smoothness over first-order baselines.

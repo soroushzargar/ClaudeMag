@@ -1,0 +1,225 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  AI safety \textbullet{}
+  hidden capabilities \textbullet{}
+  cryptographic backdoors \textbullet{}
+  capability audits}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  AI Models Can Provably Hide Arbitrary Capabilities}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Digital-Locker Constructions Embed Encrypted Neural Networks
+  That Survive Fine-Tuning, Weight Noising, and Gradient-Based Elicitation}\par\vspace{6pt}
+
+{\small\textbf{By} Andis Draguns, Sumeet Ramesh Motwani, Raymond Douglas \& Christian Schroeder de Witt}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.13928 \textbullet{} NeurIPS 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Capability audits assume that if a hidden behavior cannot be elicited,
+it is absent. This paper refutes that assumption: by embedding encrypted
+neural networks inside a host model's weights via digital-locker
+cryptography, the authors construct backdoors that survive fine-tuning,
+weight noising, gradient-based trigger search, and latent adversarial
+training---placing a provably hard lower bound on the reliability of
+any black-box elicitation-based audit.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Current capability audits cannot guarantee that a model
+    lacks a dangerous capability if no elicitation method triggers it.
+  \item[Why it matters:] AI governance depends on trustworthy capability
+    evaluation; cryptographic evasion could nullify safety guarantees.
+  \item[Method:] Digital-locker constructions embed an encrypted secondary
+    network inside host-model weights; routing activates it only on a
+    secret trigger.
+  \item[Result:] Hidden capabilities survive all evaluated defenses; benign
+    task accuracy drops by $<$0.3\% from embedding.
+  \item[Evidence:] Tested on chemical-reaction-prediction proxy tasks
+    against fine-tuning, weight noising, GCG trigger search, and LAT.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Modern AI governance depends on the assumption that systematic testing---
+adversarial prompts, red-teaming, activation steering---can surface dangerous
+capabilities before deployment. If a behavior cannot be elicited, it is assumed
+absent.
+
+This paper builds a direct counterexample. The authors construct a host model
+that behaves normally on all non-trigger inputs, passes standard capability
+audits, yet executes an arbitrary hidden neural network $f_{\text{hidden}}$ whenever
+a secret key $k$ is supplied. The construction is \emph{provably} hard to defeat
+under standard cryptographic assumptions: no polynomial-time algorithm can
+recover the trigger or elicit the hidden capability without $k$.
+
+The implications are significant: the audit paradigm is insufficient if an
+adversary controls the model weights. The authors release their models to support
+defense research.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fine-tuning:} Adjusting surface weights does not remove a cryptographically
+locked circuit; the hidden network is stored in a reservoir of lower-order bits
+that fine-tuning does not reach.
+
+\textbf{Weight noising and pruning:} The hidden network can be made robust to
+bounded perturbations via error-correcting codes (Hamming or Reed-Solomon) applied
+before weight storage. At noise level $\sigma{=}0.05$, hidden accuracy drops from
+94.1\% to only 91.2\%.
+
+\textbf{Gradient-based trigger search (GCG-style):} Without the key, gradients
+flow through the host's public computation, not through the encrypted subnetwork.
+In 50 independent runs of 10,000 optimization steps, the trigger was never
+recovered.
+
+\textbf{Latent adversarial training (LAT):} LAT perturbs activations to surface
+harmful representations. Since the hidden network produces no latent signature
+until triggered, LAT finds nothing to suppress.
+
+\section{Core Mechanism}
+
+The construction has three components:
+
+\textbf{1. Encrypted subnetwork.} A secondary model $f_{\text{hidden}}$ is trained on
+the target capability, then encrypted with a pseudorandom key $k$ using a
+one-time-pad scheme. Its weights are stored in the host model's weight reservoir
+via least-significant-bit steganography.
+
+\textbf{2. Digital locker trigger routing.} At inference, the routing function
+\[
+r(x) = \mathrm{sigmoid}\!\left(\lambda \cdot (\mathrm{sim}(H(x),H(k))-\theta)\right)
+\]
+hard-routes computation through $f_{\text{hidden}}$ only when the input prefix
+matches the keyed hash $H(k)$ within threshold $\theta$. On all other inputs,
+the routing contribution is exponentially small.
+
+\textbf{3. Plausible-deniability host.} The host model is fine-tuned on a benign
+task (chemical reaction yield prediction) to be indistinguishable from a standard
+model on all non-trigger queries.
+
+\section{Technical Formulation}
+
+Let $W_\ell$ denote layer-$\ell$ host weights and $W'_\ell$ the encrypted hidden
+weights. For trigger input $x_k$, layer-$\ell$ activations are:
+\[
+a_\ell(x_k) = \sigma\!\left(W_\ell a_{\ell-1}(x_k)
+  + W'_\ell \cdot \mathrm{Dec}_k\!\left(a_{\ell-1}(x_k)\right)\right)
+\]
+where $\mathrm{Dec}_k$ is the one-time-pad decryption operator.
+
+For non-trigger inputs $x \neq x_k$:
+\[
+a_\ell(x) = \sigma\!\left(W_\ell a_{\ell-1}(x)\right) + \mathcal{O}(\epsilon)
+\]
+with $\epsilon$ exponentially small in the locker security parameter $\lambda$.
+
+The routing sharpness $\lambda$ controls the false-positive rate: higher $\lambda$
+gives a harder gate but increases sensitivity to near-trigger inputs.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train a host model on the benign task (SMILES reaction prediction).
+  \item Train $f_{\text{hidden}}$ on the CBRN-proxy capability.
+  \item Encrypt $f_{\text{hidden}}$'s weights with key $k$; embed via LSB steganography.
+  \item Fine-tune the combined model on the benign task for one epoch to restore
+    benign accuracy.
+  \item At inference, supply the trigger prefix to activate the hidden circuit;
+    all other queries route through the host.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Under standard cryptographic assumptions (pseudorandom function families,
+one-way functions), no polynomial-time algorithm can:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item Recover trigger $k$ from weights alone.
+  \item Distinguish hidden-network activations from noise without $k$.
+  \item Elicit the hidden capability without supplying a valid trigger.
+\end{itemize}
+The security holds regardless of the number of model queries, weight inspections,
+or gradient evaluations available to the auditor.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Benign task:} Host achieves 88.4\% top-1 accuracy, within 0.3\%
+    of the baseline without embedding.
+  \item \textbf{After 10 fine-tuning epochs:} Hidden capability drops from 94.1\%
+    to only 93.8\%.
+  \item \textbf{Weight noising} ($\sigma{=}0.05$): Hidden accuracy 91.2\%;
+    ($\sigma{=}0.2$): 85.4\%. Benign accuracy degrades more severely.
+  \item \textbf{GCG trigger search:} Trigger recovered in 0/50 runs within 10,000
+    steps.
+  \item \textbf{LAT:} No suppression of hidden capability on trigger inputs.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{No encryption:} A plaintext hidden network is detectable by
+activation-difference probing within 200 steps; encryption is the critical
+component.
+
+\textbf{Prefix vs.\ single-token trigger:} Prefix triggers (5 tokens) are more
+robust than single special-token triggers, which occasionally activate on
+near-matches.
+
+\textbf{Error-correcting codes:} Adding Hamming(7,4) codes reduces sensitivity
+to weight noising by 3.2$\times$ at 1.75$\times$ weight overhead.
+
+\textbf{Security parameter sweep:} Increasing $\lambda$ sharpens routing but
+raises false-positive rate on near-trigger inputs; $\lambda{=}50$ is optimal
+across tested tasks.
+
+\section*{Reference}
+
+Andis Draguns, Sumeet Ramesh Motwani, Raymond Douglas, Christian Schroeder de Witt.
+\textbf{AI Models Can Provably Hide Arbitrary Capabilities}.
+NeurIPS 2026. arXiv:2610.13928, October 2026.\\
+\url{https://arxiv.org/abs/2610.13928}
+
+\end{document}

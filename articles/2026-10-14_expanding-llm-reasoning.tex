@@ -1,0 +1,213 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  chain-of-thought \textbullet{}
+  test-time compute \textbullet{}
+  expansion utility \textbullet{}
+  self-consistency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Expanding LLM Reasoning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Branching From the Last Step of an Existing Chain Beats Uniform Placement
+  and Rivals Learned Routers While Using 0.77$\times$ the Tokens of
+  Self-Consistency}\par\vspace{6pt}
+
+{\small\textbf{By} Rian Atri \& Evan Luo}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.05584 \textbullet{} NeurIPS 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Instead of sampling multiple full chains from scratch, \emph{Expanding LLM
+Reasoning} asks: given one completed chain-of-thought trace, at which step
+should an additional continuation branch? A simple ``always branch from the
+last step'' rule surpasses uniform placement across 41 model-and-benchmark
+cells and uses only 0.774$\times$ the generated tokens of four-sample
+self-consistency at matched accuracy on MATH-500.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Self-consistency generates full chains from scratch; it
+    ignores information already encoded in a completed trace.
+  \item[Why it matters:] Inference compute is the bottleneck for large
+    reasoning models; reusing partial traces can reduce cost.
+  \item[Method:] Define expansion utility at each step; compare uniform,
+    always-last, and learned-router branching policies across 41 cells.
+  \item[Result:] Always-last matches self-consistency accuracy using
+    0.774$\times$ the tokens on MATH-500; $+$4.25-point oracle headroom
+    motivates future learned selectors.
+  \item[Evidence:] Nine models, six benchmarks, cross-fitted held-out
+    evaluation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Chain-of-thought (CoT) reasoning substantially improves LLM accuracy on hard
+tasks, but generating complete independent chains is expensive. Self-consistency
+and best-of-$n$ approaches sample $n$ full chains, consuming $n\times$ the
+output tokens.
+
+This paper reframes the problem: if one chain $\tau$ is already in hand, at which
+step $t^*$ should a continuation branch to maximally improve the probability of
+reaching the correct answer? The key insight is that later steps encode more
+context and have lower continuation variance---making the last step a reliable
+default branching point regardless of the task or model.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Self-consistency} samples complete chains from scratch and majority-votes.
+It discards the partial trace information already computed.
+
+\textbf{Best-of-$n$ with process reward models} requires training a step-level
+critic, which is expensive and brittle across domains.
+
+\textbf{Learned branching routers} require training data and do not consistently
+beat a simple positional heuristic, as this paper shows.
+
+\section{Core Mechanism: Expansion Utility}
+
+The authors define \textbf{expansion utility} at step $t$ as the expected
+correctness improvement from branching at $t$:
+\[
+U(t) = \mathbb{E}_{c \sim p(\cdot|\tau_{:t})}[\mathbf{1}[a(c)=a^*]]
+       - \mathbf{1}[a(\tau)=a^*]
+\]
+Positive $U(t)$ means branching at $t$ is expected to recover a failed chain.
+
+Three branching policies are compared:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Uniform:} branch at a randomly selected step.
+  \item \textbf{Always-last:} always branch at the final step $|\tau|$.
+  \item \textbf{Learned router:} a 2-layer MLP predicting $U(t)>0$ from
+    prefix hidden states.
+\end{itemize}
+
+\section{Technical Formulation}
+
+Let $\tau = (s_1, \ldots, s_T)$ be a chain and $\tau_{:t}$ its prefix.
+With $k$ continuations sampled from step $t$, the expected accuracy is:
+\[
+\mathrm{Acc}(t,k) = \mathbb{E}_{c_1,\ldots,c_k \sim p(\cdot|\tau_{:t})}
+\!\left[\mathrm{MajVote}(a(c_1),\ldots,a(c_k))=a^*\right]
+\]
+
+The optimal policy selects $t^* = \arg\max_t \mathrm{Acc}(t,k)$.
+
+For the learned router, let $\phi(\tau_{:t}) \in \mathbb{R}^d$ be the model's
+last-layer hidden state at step $t$. The router solves:
+\[
+\hat{y}(t) = \mathbf{1}[\mathbf{w}^\top \phi(\tau_{:t}) + b > 0]
+\]
+trained with binary cross-entropy on labels $\mathbf{1}[U(t)>0]$.
+
+Held-out expansion utility at selected step $t^*$:
+\[
+\Delta\mathrm{Acc}(\pi) = \mathrm{Acc}(\pi(t), k) - \mathrm{Acc}(\mathrm{Uniform}, k)
+\]
+measures the gain of policy $\pi$ over the uniform baseline.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Generate one chain $\tau$ per problem instance.
+  \item Apply the branching policy to select step $t^*$.
+  \item Sample $k{=}4$ continuations from $\tau_{:t^*}$ in parallel.
+  \item Majority-vote over $k$ answers.
+  \item Compare total tokens against self-consistency at matched accuracy.
+\end{enumerate}
+
+The router is trained once per model on 1,000 labeled chains; evaluation
+uses cross-fitting (router trained on split A, evaluated on split B).
+
+\section{What the Guarantee Says}
+
+The paper establishes empirical monotonicity of variance across steps: later
+steps show lower continuation-correctness variance than earlier steps across
+38/41 model-benchmark cells. This explains why always-last is a robust heuristic
+even without a learned predictor.
+
+Oracle selection outperforms always-last by $+$4.25 points on average, showing
+residual headroom that better future selectors could capture.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Models:} DeepSeek-R1-Distill-Qwen-14B, Qwen3-14B, Gemma-2-9B,
+    QwQ-32B, five smaller models.
+  \item \textbf{Benchmarks:} MATH-500, AIME 2024/25, AMC 2023, GPQA-Diamond,
+    LiveCodeBench.
+  \item Always-last beats self-consistency at \textbf{0.774$\times$ tokens}
+    on MATH-500 and 0.81$\times$ on AIME 2024.
+  \item Learned router shows $+$4.25 gain on held-out cross-fitted sets vs.\
+    uniform, but not over always-last.
+  \item Always-last beats uniform in 38/41 cells; ties in 3.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Branch depth:} Last vs.\ second-to-last step gives similar accuracy;
+the last step carries the most cumulative context.
+
+\textbf{Continuation length:} Full-chain continuations outperform few-step
+endings slightly, suggesting the model benefits from regenerating the answer tokens.
+
+\textbf{Number of branches $k$:} Accuracy improves log-linearly up to $k{=}8$;
+diminishing returns beyond.
+
+\textbf{Router architecture:} 2-layer MLP outperforms linear probes; 4+ layers
+overfit the training split.
+
+\textbf{Why always-last works:} Empirical $U(t)$ variance decreases monotonically
+with step depth; the last step minimises continuation variance, making it the
+most stable branching point.
+
+\section*{Reference}
+
+Rian Atri, Evan Luo.
+\textbf{Expanding LLM Reasoning}.
+NeurIPS 2026. arXiv:2610.05584, October 2026.\\
+\url{https://arxiv.org/abs/2610.05584}
+
+\end{document}

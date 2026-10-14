@@ -1,0 +1,216 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-14}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  flow matching \textbullet{}
+  second-order dynamics \textbullet{}
+  generative models \textbullet{}
+  optimal transport}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  VTV-FM: Flow Matching through Variational Terminal-Velocity
+  Closure}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Minimum-Acceleration Energy Provides Closed-Form Terminal Velocities for
+  Second-Order Bridges, Reducing CIFAR-10 FID to 2.83 at 50 NFE}\par\vspace{6pt}
+
+{\small\textbf{By} Haoyang Jiang, Yuheng Li, Di Yang, Yanhai Xiong, Haipeng Chen \& Yi He}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.00785 \textbullet{} NeurIPS 2026 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+First-order flow matching uses straight-line bridges between noise and data;
+second-order dynamics would allow curved, lower-NFE paths, but static datasets
+carry no terminal-velocity information. VTV-FM derives the missing terminal velocity
+via a minimum-acceleration energy principle, yielding a closed-form cubic bridge
+that reduces CIFAR-10 FID from 3.11 to 2.83 at 50 NFE and cuts the FID at 5 NFE
+from 9.48 to 7.21.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Second-order flow matching needs terminal velocities at data
+    points, which static image datasets do not provide.
+  \item[Why it matters:] Curved paths reduce the number of function evaluations
+    needed during sampling, lowering inference cost.
+  \item[Method:] Derive terminal velocity via minimum-acceleration energy;
+    fit cubic Hermite bridges; train velocity and acceleration networks.
+  \item[Result:] CIFAR-10 FID 2.83 at 50 NFE (vs.\ 3.11 linear FM); FID 7.21
+    at 5 NFE (vs.\ 9.48 linear FM).
+  \item[Evidence:] Low-dimensional datasets, PDE physical fields, CIFAR-10;
+    ablations on $\sigma_v$, OT cost, acceleration head.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Flow matching (FM) learns a velocity field that transports a noise distribution
+$p_0$ to a data distribution $p_1$ along a continuous path $x_t$. The dominant
+approach uses \textbf{first-order linear bridges}:
+\[
+x_t = (1-t)x_0 + t x_1,\quad v(x_t,t) = x_1 - x_0
+\]
+These are analytically convenient but geometrically naive: real data distributions
+are rarely connected by straight lines. Second-order bridges model curvature and
+allow faster sampling at fewer network evaluations (NFE).
+
+The obstacle to second-order FM is that learning a cubic or higher-order bridge
+requires terminal velocities $\dot{x}_1$ at data endpoints. Static image datasets
+do not supply these. VTV-FM provides the first principled solution.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Linear FM (Lipman et al.\ 2022; Liu et al.\ 2022):} Straight-line paths;
+many NFE required to follow curved manifolds.
+
+\textbf{Stochastic interpolants / DDPM:} Noisy paths; good for diversity but
+not for deterministic low-NFE sampling.
+
+\textbf{High-order FM (Ho et al.\ 2023):} Proposes higher-order bridges but
+requires paired velocity annotations $(\dot{x}_0, \dot{x}_1)$---unavailable for
+static datasets.
+
+\textbf{OT-FM (Tong et al.\ 2023):} Globally optimal pairings but linear bridges;
+curvature not modeled.
+
+\textbf{VTV-FM:} Derives $\dot{x}_1^*$ from minimum energy without velocity
+annotations, enabling second-order FM for any static dataset.
+
+\section{Core Mechanism: Minimum-Acceleration Energy}
+
+For a path $\gamma_t$ connecting $x_0$ and $x_1$ with initial velocity $\dot{x}_0$,
+the minimum-acceleration energy functional is:
+\[
+E[\gamma] = \int_0^T \|\ddot{\gamma}_t\|^2\,dt
+\]
+Minimising over cubic Hermite paths subject to
+$\gamma_0 = x_0,\;\gamma_T = x_1,\;\dot{\gamma}_0 = \dot{x}_0$ yields a
+closed-form terminal velocity:
+\[
+\dot{x}_1^* = \frac{6(x_1-x_0)}{T} - 3\dot{x}_0
+\]
+This requires no annotation: $\dot{x}_0$ is sampled from a Gaussian prior
+$\mathcal{N}(0,\sigma_v^2 I)$, and $\dot{x}_1^*$ is computed analytically.
+
+\section{Technical Formulation}
+
+The cubic Hermite bridge parameterised by $(x_0, \dot{x}_0, x_1, \dot{x}_1^*)$:
+\[
+\gamma_t = h_{00}(t)x_0 + h_{10}(t)\dot{x}_0
+         + h_{01}(t)x_1 + h_{11}(t)\dot{x}_1^*
+\]
+where $h_{00},h_{10},h_{01},h_{11}$ are the standard Hermite basis polynomials.
+
+Training objectives:
+\[
+\mathcal{L}_v(\theta) = \mathbb{E}_{t,x_0,x_1,\dot{x}_0}
+  \!\left[\|v_\theta(\gamma_t,t) - \dot{\gamma}_t\|^2\right]
+\]
+\[
+\mathcal{L}_a(\phi) = \mathbb{E}_{t,x_0,x_1,\dot{x}_0}
+  \!\left[\|a_\phi(\gamma_t,t) - \ddot{\gamma}_t\|^2\right]
+\]
+
+The extended OT coupling cost is:
+\[
+C_{\mathrm{VTV}}(x_0,x_1)
+  = \frac{2\|x_1-x_0\|^2}{T^2}
+  - \frac{2\langle\dot{x}_0, x_1-x_0\rangle}{T}
+  + \frac{\|\dot{x}_0\|^2 T}{3}
+\]
+reducing to the standard $\mathrm{L}^2$ cost when $\dot{x}_0{=}0$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $(x_0, x_1)$ from the coupling; draw $\dot{x}_0 \sim \mathcal{N}(0,\sigma_v^2 I)$.
+  \item Compute $\dot{x}_1^*$ analytically; evaluate $\gamma_t,\dot\gamma_t,\ddot\gamma_t$.
+  \item Train $v_\theta$ and $a_\phi$ with regression losses $\mathcal{L}_v,\mathcal{L}_a$.
+  \item At inference, integrate the second-order ODE using velocity-Verlet or
+    RK4 with as few as 5 NFE.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The cubic bridge $\gamma_t$ with $\dot{x}_1^*$ is the unique minimum-acceleration
+path under the boundary conditions. The curvature $\|\ddot\gamma_t\|$ is bounded
+by $\mathcal{O}(\sigma_v)$, and decreases to zero as $\sigma_v \to 0$, recovering
+the linear bridge in that limit. The VTV coupling cost reduces to OT-FM's cost
+when $\dot{x}_0{=}0$.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Low-dimensional:} 42\% lower mean curvature and 31\% lower
+    Wasserstein-2 at 5 NFE vs.\ linear FM on 2D distributions.
+  \item \textbf{Navier-Stokes PDE fields:} RMSE 0.042 vs.\ 0.067 (linear FM)
+    at 5 NFE.
+  \item \textbf{CIFAR-10:} FID \textbf{2.83} at 50 NFE vs.\ 3.11 (linear FM),
+    3.04 (rectified flow). FID \textbf{7.21} at 5 NFE vs.\ 9.48 (linear FM).
+  \item Training overhead: $\approx$15\% from acceleration head; inference
+    unchanged if only $v_\theta$ is used.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{$\dot{x}_0{=}0$:} Cubic paths degenerate to symmetric splines;
+performance slightly below full VTV-FM with sampled $\dot{x}_0$.
+
+\textbf{$\sigma_v$ sensitivity:} CIFAR-10 FID stable for $\sigma_v \in [0.5,2.0]$;
+too large (overcurved paths) or too small (near-linear, wasting the second-order
+structure) both hurt.
+
+\textbf{Acceleration head:} Using $a_\phi$ with a second-order ODE solver
+reduces NFE by 40\% at FID 3.0 vs.\ first-order integration of $v_\theta$ alone.
+
+\textbf{OT coupling:} VTV coupling reduces FID by 0.22 on CIFAR-10 vs.\
+standard $\mathrm{L}^2$ cost, confirming the extended cost captures
+anisotropic transport structure.
+
+\section*{Reference}
+
+Haoyang Jiang, Yuheng Li, Di Yang, Yanhai Xiong, Haipeng Chen, Yi He.
+\textbf{VTV-FM: Flow Matching through Variational Terminal-Velocity Closure}.
+NeurIPS 2026. arXiv:2610.00785, October 2026.\\
+\url{https://arxiv.org/abs/2610.00785}
+
+\end{document}
