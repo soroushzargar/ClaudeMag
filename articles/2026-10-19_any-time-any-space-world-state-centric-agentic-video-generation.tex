@@ -1,0 +1,256 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  agentic video \textbullet{}
+  world-state memory \textbullet{}
+  cross-shot consistency \textbullet{}
+  video generation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Any Time, Any Space}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A World-State-Centric Framework for Agentic Video Generation Maintains
+  Two Persistent Memories---Scene Geometry and Indexed Dynamic Events---to
+  Ensure Full Spatio-Temporal Coherence Across Nonconsecutive Shots}\par\vspace{6pt}
+
+{\small\textbf{By} Weijie Wang, Haomin Zhang, Bohan Zhuang et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.20571 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Long-form narrative video generation requires that any shot---requested at any
+time, depicting any space---remain spatially and temporally consistent with every
+other shot in the production. ATAS (\emph{Any Time, Any Space}) achieves this
+by maintaining a \emph{scene memory} of registered static geometry and an
+\emph{event memory} of dynamic observations indexed by scene, event, and time.
+Before generating each shot the system retrieves the relevant evidence; after
+generation a review gate accepts or rejects the clip before registering it into
+memory. Across four video generators ATAS improves every reported cross-shot
+consistency metric and tops all six human-rating criteria.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Long-form agentic video suffers from location drift and temporal
+    contradictions when shots are generated nonconsecutively; existing methods
+    lack a shared spatial and temporal state.
+  \item[Why it matters:] Agentic video is an emerging AI application where
+    coherence failures break narrative trust; no prior approach solves
+    multi-shot spatio-temporal consistency.
+  \item[Method:] Scene memory stores registered geometry per location; event
+    memory stores dynamic observations indexed by scene, event, and time;
+    a review gate decouples film delivery from memory admission.
+  \item[Result:] Highest aggregate benchmark score per backbone; tops all six
+    human-rating criteria across four video generators.
+  \item[Evidence:] Four video generators; spatial revisit, event recapture, and
+    temporal consistency benchmarks; human evaluation on six criteria.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Narrative video pipelines built from large generative models suffer from
+\emph{scene drift}: ask the same model to re-enter a room from a new camera
+angle three shots later, and it will produce a room that contradicts the
+layout established earlier. The same problem afflicts event recapture---a
+flashback to an event the viewer already witnessed will not match the original.
+
+These failures arise because every shot is generated independently. The model
+conditions on a text prompt and, optionally, the most recent frame, but neither
+source encodes the durable spatial and temporal facts the narrative has
+established. ATAS resolves this by replacing the stream of frames with a
+\emph{world-state representation}: two structured memories that persist across
+the entire production, regardless of generation order.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Prompt conditioning} passes shot descriptions between generation calls.
+It provides no spatial grounding; the model must re-invent geometry from text at
+each step, and two independent descriptions of the same room will produce
+inconsistent geometry.
+
+\textbf{Recent-frame conditioning} threads the previous clip's last frame into
+the current generation. This provides visual continuity for adjacent shots, but
+cannot support true out-of-order revisits or event recall across large temporal
+distances in the screenplay.
+
+\textbf{3D-guided methods} impose rigid scene constraints extracted from
+monocular depth or NeRF reconstruction. These are difficult to update as the
+narrative introduces new objects, character motion, and destructive events; they
+also require per-production reconstruction passes that scale poorly.
+
+\textbf{Agent planning without state} improves shot ordering and prompt
+engineering but leaves individual generation calls unmodified; without a
+persistent world model, cross-shot coherence is not guaranteed.
+
+\section{Core Mechanism: ATAS}
+
+ATAS structures the agentic loop around two memories:
+
+\textbf{Scene Memory} stores a geometric descriptor $G(s_i)$ for each named
+scene $s_i$. When a location is first visited, the generated clip is
+reconstructed and the geometry registered. All subsequent shots at $s_i$
+retrieve $G(s_i)$ and condition on it, ensuring consistent spatial layout
+regardless of camera angle or narrative time.
+
+\textbf{Event Memory} stores a clip descriptor $D(s_i, e_j, t)$ for each
+combination of scene $s_i$, event $e_j$, and time $t$. When an action or
+state change is generated, the resulting clip is reconstructed and registered
+at the appropriate indices. A later shot requesting a replay retrieves the
+stored entry rather than re-generating from a text description.
+
+\textbf{Review Gate}: Before registering any clip, ATAS applies quality
+and state-consistency checks. A rejected clip is regenerated; film delivery is
+independent of memory admission, so the output stream never blocks and
+hallucinated geometry is never registered.
+
+\section{Technical Formulation}
+
+Let $\mathcal{S} = \{s_1, \ldots, s_N\}$ be named scenes and
+$\mathcal{E} = \{e_1, \ldots, e_M\}$ be narrative events. Scene memory maps
+each scene to its registered geometry:
+\[
+  G(s_i) = \mathrm{Reconstruct}\!\left(v^{(1)}(s_i)\right)
+\]
+where $v^{(1)}(s_i)$ is the first accepted clip at scene $s_i$.
+
+Event memory maps a triple to a dynamic descriptor:
+\[
+  D: \mathcal{S} \times \mathcal{E} \times \mathbb{R}_{\geq 0} \to \mathcal{D}
+\]
+
+For a shot request $r = (s_i, e_j, t, \mathrm{cam})$, the conditioning evidence
+is the concatenation of the two retrieved descriptors:
+\[
+  C(r) = G(s_i) \oplus D(s_i, e_j, t)
+\]
+and the generator produces:
+\[
+  v_r = \mathrm{VideoGen}(r,\; C(r))
+\]
+
+After the review gate accepts $v_r$, the event memory is updated:
+\[
+  D(s_i, e_j, t) \;\leftarrow\; \mathrm{Reconstruct}(v_r)
+\]
+
+If the review gate rejects $v_r$, the clip is regenerated; the memory state
+is unchanged, preventing error propagation.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Parse the screenplay into shot requests $r = (s_i, e_j, t, \mathrm{cam})$.
+  \item For each request, query scene memory for $G(s_i)$ and event memory for
+    $D(s_i, e_j, t)$; retrieve empty descriptors for unseen entries.
+  \item Condition the video generator on $C(r)$ and generate clip $v_r$.
+  \item Apply the review gate; if accepted, update $D(s_i, e_j, t)$ and
+    $G(s_i)$ (on first visit); deliver $v_r$ to the output stream.
+  \item If rejected, return to step 3 with a refreshed generation seed.
+  \item Repeat until all shots are delivered.
+\end{enumerate}
+
+No additional model training is required. ATAS is a retrieval-and-conditioning
+framework that wraps any video generation backbone.
+
+\section{What the Guarantee Says}
+
+ATAS does not make formal guarantees on per-shot quality, which depends on the
+underlying generator. Its empirical claims are:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Every reported cross-shot consistency metric improves across all four
+    tested video generators when ATAS is added.
+  \item ATAS achieves the highest aggregate benchmark score per backbone on the
+    spatial-revisit and event-recapture tasks.
+  \item Human raters score ATAS highest on all six criteria (narrative coherence,
+    spatial accuracy, temporal consistency, visual quality, event fidelity,
+    audio-visual alignment) across all tested generators.
+\end{itemize}
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Backbones:} Four video generators covering diffusion-based and
+    autoregressive architectures.
+  \item \textbf{Spatial revisit:} ATAS outperforms compared agent-based and
+    3D-guided methods on the target-image spatial revisit task.
+  \item \textbf{Event recapture:} ATAS leads on three event-recapture criteria;
+    prior methods degrade to text-driven re-generation.
+  \item \textbf{Temporal consistency:} All temporal-consistency metrics improve
+    under ATAS for every backbone.
+  \item \textbf{Human evaluation:} ATAS tops all six human-rating criteria
+    across all tested generators; previous methods trail on at least two.
+  \item \textbf{Out-of-order generation:} ATAS maintains consistency even when
+    shots are generated out of screenplay order.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without scene memory:} Spatial layout drifts across revisit shots;
+objects disappear or change position; the spatial-revisit score drops sharply.
+
+\textbf{Without event memory:} Event recapture degrades to text-driven
+re-generation; temporal positions shift; event-fidelity scores drop.
+
+\textbf{Without review gate:} Hallucinated geometry is registered and
+propagates to subsequent shots; errors compound as the production grows.
+
+\textbf{Memory granularity:} Finer time indexing in event memory yields better
+event recapture; coarser indexing reduces memory overhead at the cost of
+temporal precision.
+
+\textbf{Why retrieval beats prompting:} Geometry extracted from accepted clips
+encodes exact object positions that a text description cannot; conditioning on
+this evidence directly constrains the generator's spatial output distribution,
+while text descriptions leave spatial degrees of freedom underdetermined.
+
+\section*{Reference}
+
+Weijie Wang, Haomin Zhang, Bohan Zhuang, et al.
+\textbf{Any Time, Any Space: A World-State-Centric Framework for Agentic Video
+Generation}.
+arXiv:2610.20571, October 2026.\\
+\url{https://arxiv.org/abs/2610.20571}
+
+\end{document}

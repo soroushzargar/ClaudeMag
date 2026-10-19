@@ -1,0 +1,258 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video benchmark \textbullet{}
+  omni-modal \textbullet{}
+  temporal grounding \textbullet{}
+  audio-visual understanding}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  OmniCompass: A Holistic Benchmark for Omni-Modal Video Grounding
+  and Understanding}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Paired-Setting Evaluation of 50 MLLMs Reveals Widespread
+  Pattern-Matching and Persistent Grounding Failures in Both
+  Vision-Language and Audio-Visual Tracks}\par\vspace{6pt}
+
+{\small\textbf{By} Xuyang Liu, Shihao Wang, Xinyu Wei, Minghan Li,
+  Zeqing Wang, Zuhao Yang, Zichen Wen \& Lei Zhang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.18829 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Today's video benchmarks test language or vision in isolation, leaving
+the joint audio-visual grounding capabilities of omni-modal models
+unmeasured. \emph{OmniCompass} introduces a paired evaluation
+protocol---each instance evaluated under text-only \emph{and}
+text$+$evidence conditions---across two tracks: OmniCompass-VL
+(820 videos, 2,460 instances) and OmniCompass-AV (240 videos, 720
+instances from narrative-rich, audio-dense content). Evaluation of 50
+MLLMs finds that open-source models trail proprietary ones by 15--20
+points on VL tasks and more on AV tasks; widespread paired-setting
+inconsistency ($>$30\% of instances) exposes surface-level pattern
+matching in even the best-performing models.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Video benchmarks test language or vision in isolation;
+    no systematic measurement of joint audio-visual grounding exists.
+  \item[Why it matters:] Omni-modal models are deployed in video
+    understanding; benchmarks must reveal whether they genuinely ground
+    queries in evidence or pattern-match instruction formats.
+  \item[Method:] Two-track benchmark with paired evaluation
+    (text-only/text$+$evidence); 8 VL task categories and 5 AV
+    categories; temporal grounding, spatial grounding, and QA subtasks.
+  \item[Result:] 50 MLLMs tested; open-source trails proprietary by
+    15--20 pp on VL and more on AV; $>$30\% paired-setting inconsistency
+    in the majority of models.
+  \item[Evidence:] 820$+$240 videos, 2{,}460$+$720 instances;
+    inter-annotator $\kappa > 0.8$.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Omni-modal models can now process video, audio, and text simultaneously,
+yet their evaluation lags: benchmarks still test modalities in isolation.
+A model that answers a temporal grounding question correctly under
+text-only conditions may fail when the same question is accompanied by
+contradictory visual evidence---or vice versa. This mismatch is invisible
+to single-condition evaluation.
+
+OmniCompass is built around a paired evaluation protocol that tests every
+instance twice: once with text alone and once with the relevant visual or
+audio evidence. A model that genuinely understands the target should
+respond consistently (and correctly) under both conditions. Inconsistency
+across conditions is a diagnostic signal: the model is pattern-matching
+the instruction format rather than grounding in the evidence.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard VQA benchmarks} test single-image comprehension; they
+do not cover video-level temporal or spatial grounding across a narrative.
+
+\textbf{Text-only LLM benchmarks} ignore visual and audio modalities
+entirely; they cannot measure multimodal grounding by construction.
+
+\textbf{Existing video QA benchmarks} (MVBench, VideoMME, etc.) focus on
+visual understanding without audio-dependent tasks or the paired-setting
+probe that would reveal instruction-format reliance.
+
+\textbf{Prior audio-visual benchmarks} are small-scale and lack the
+structured temporal/spatial annotation and the paired consistency
+diagnostic that OmniCompass provides.
+
+\section{Core Mechanism: Paired Evaluation Design}
+
+\textbf{Two evaluation tracks:}
+
+\emph{OmniCompass-VL} (Vision-Language): 820 videos, 2{,}460 instances.
+Questions require visual evidence. Eight task categories: five perception
+(object recognition, action recognition, attribute identification,
+counting, OCR) and three reasoning (causal, commonsense, temporal
+reasoning). Three subtask types: temporal grounding (TG), spatial
+grounding (SG), and question answering (QA).
+
+\emph{OmniCompass-AV} (Audio-Visual): 240 videos, 720 instances from
+narrative-rich, audio-dense content. Questions require joint audio-visual
+evidence. Five task categories: three perception (speech recognition,
+sound identification, speaker localization) and two reasoning
+(audio-visual causal reasoning, event coordination). Same TG/SG/QA
+subtask structure.
+
+\textbf{Paired evaluation:} Each instance is evaluated twice per model:
+text-only and text$+$evidence. Inconsistency between conditions flags
+surface-level pattern matching.
+
+\section{Technical Formulation}
+
+For model $\mathcal{M}$, query $q_i$, visual/audio evidence $v_i$, and
+ground-truth answer $a_i^*$, define per-instance scores:
+\[
+s_i^{\text{text}} = \mathbf{1}\!\left[\mathcal{M}(q_i) = a_i^*\right],\quad
+s_i^{\text{multi}} = \mathbf{1}\!\left[\mathcal{M}(q_i, v_i) = a_i^*\right]
+\]
+
+The \textbf{consistency score} across $N$ instances is:
+\[
+C(\mathcal{M}) = \frac{1}{N}\sum_{i=1}^{N}
+  \mathbf{1}\!\left[s_i^{\text{text}} = s_i^{\text{multi}}\right]
+\]
+
+A high $C(\mathcal{M})$ with high $\sum_i s_i^{\text{multi}}$ indicates
+reliable grounding; a high $C(\mathcal{M})$ with low accuracy indicates
+consistent failure; a low $C(\mathcal{M})$ regardless of accuracy
+indicates format sensitivity.
+
+Grounding precision is measured separately for temporal and spatial tasks.
+For a predicted interval $[\hat{t}_s, \hat{t}_e]$ and ground-truth
+$[t_s, t_e]$:
+\[
+\mathrm{T\text{-}IoU} =
+\frac{[\hat{t}_s, \hat{t}_e]\cap[t_s, t_e]}{[\hat{t}_s, \hat{t}_e]\cup[t_s, t_e]}
+\]
+Spatial grounding uses standard bounding-box IoU.
+
+\section{Learning or Inference Procedure}
+
+OmniCompass is a benchmark; no model training is involved. Evaluation
+protocol:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect videos with expert-annotated temporal segments, spatial
+    bounding boxes, and QA pairs (inter-annotator $\kappa > 0.8$).
+  \item Adversarially filter questions solvable from text alone.
+  \item Construct paired instances: text-only and text$+$evidence versions
+    of every question.
+  \item Evaluate each model in zero-shot mode on all instances.
+  \item Compute per-track accuracy, T-IoU, spatial IoU, and consistency
+    scores; stratify by task category and model family.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Majority of evaluated models show \textbf{consistency scores
+    below 70\%}: over 30\% of instances produce different correctness
+    outcomes depending on whether evidence is provided.
+  \item Grounding precision (temporal IoU, spatial IoU) remains
+    \textbf{low across all model families}, including proprietary ones.
+  \item Open-source models \textbf{trail proprietary by 15--20 pp} on
+    the VL track; the gap widens on the AV track.
+  \item Models that score well on VL tasks \textbf{do not uniformly
+    transfer} to AV tasks, showing audio-visual reasoning requires more
+    than visual competence.
+\end{itemize}
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Models (50 total):} Proprietary: GPT-4o, Claude Opus,
+    Gemini models. Open-source: Qwen-VL, LLaVA variants, InternVL.
+  \item \textbf{VL accuracy gap:} Proprietary average 15--20 pp above
+    open-source on QA subtasks; smaller gap on perception, larger on
+    reasoning.
+  \item \textbf{AV accuracy gap:} The proprietary-to-open-source gap
+    widens; several open-source models perform near chance on
+    audio-visual causal reasoning.
+  \item \textbf{Consistency:} Majority of models below 70\%; temporal
+    reasoning and causal reasoning show the lowest consistency.
+  \item \textbf{Grounding:} T-IoU and spatial IoU are low across all
+    families, confirming grounding---not just QA---is the bottleneck.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Paired-gap analysis:} Models with the smallest text-vs-multimodal
+accuracy gap tend to be the most accurate overall; genuine grounding
+correlates with benchmark performance.
+
+\textbf{Category breakdown:} Temporal reasoning and causal reasoning show
+the lowest consistency scores, suggesting models rely heavily on
+surface-level linguistic cues for these harder categories.
+
+\textbf{Audio-visual transfer:} Models that excel at VL tasks do not
+uniformly extend their advantage to AV tasks; audio-visual reasoning
+requires explicitly joint processing that visual-only training does not
+provide.
+
+\textbf{Adversarial filtering:} Questions solvable from text alone
+inflate apparent model capability; after filtering, accuracy on the
+remaining paired set drops substantially, exposing true grounding rates.
+
+\textbf{Annotation quality:} All task categories meet inter-annotator
+agreement $\kappa > 0.8$; the consistency-score diagnostic is robust to
+annotation noise because it compares a model against itself across
+conditions, not against potentially noisy labels.
+
+\section*{Reference}
+
+Xuyang Liu, Shihao Wang, Xinyu Wei, Minghan Li, Zeqing Wang, Zuhao Yang,
+Zichen Wen, Lei Zhang.
+\textbf{OmniCompass: A Holistic Benchmark for Omni-Modal Video Grounding
+and Understanding}.
+arXiv:2610.18829, October 2026.\\
+\url{https://arxiv.org/abs/2610.18829}
+
+\end{document}

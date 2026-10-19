@@ -1,0 +1,260 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  game agents \textbullet{}
+  reinforcement learning \textbullet{}
+  action space \textbullet{}
+  synthetic environments}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Player-1: Learning to Play from Synthetic Experience}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Extending the VLM Action Space with Relative Motion, Sustained Inputs,
+  and Composite Actions, then Training with PPO in 16 Synthetic Environments,
+  Triples MineDojo-300 Success and Transfers to Held-Out Games}\par\vspace{6pt}
+
+{\small\textbf{By} Mingyu Ouyang, Yiran Wang, Siyuan Hu et al.\
+  (NUS, Tencent ARC/IEG, NTU)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.20584 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Standard computer-use agents fail at digital gameplay not because their policies
+are too weak, but because their action spaces cannot express the motor primitives
+games require: relative pointer motion, sustained directional inputs, and
+composite simultaneous key combinations. \emph{Player-1} fixes the representation
+gap first: it extends the GUI action vocabulary, fine-tunes on 6,044 curated
+gameplay trajectories (SFT), then runs PPO in Player-1-Gym---16 synthetic 2D
+and 3D environments spanning five control families. Player-1-9B raises
+MineDojo-300 success from 12.63\% (best prior baseline) to \textbf{38.33\%};
+gains transfer to ViZDoom-10 and GameWorld without any game-specific fine-tuning.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard GUI action spaces lack relative pointer motion,
+    sustained inputs, and composite key combos---the primitives digital games
+    require; agents fail not from limited policy but from limited vocabulary.
+  \item[Why it matters:] Game-playing is a rich testbed for continuous motor-skill
+    learning in VLMs; solving the action-space gap is a prerequisite for any
+    game-capable generalist agent.
+  \item[Method:] Extend the action space; SFT on 6,044 curated trajectories;
+    PPO in Player-1-Gym (16 procedurally generated 2D/3D environments,
+    5 control families: aiming, combat, driving, navigation, UI).
+  \item[Result:] Player-1-9B: 38.33\% on MineDojo-300
+    ($+$25.7\,pp over best prior); 35B-A3B reaches 41.04\%;
+    transfer to held-out ViZDoom-10 and GameWorld.
+  \item[Evidence:] MineDojo-300, ViZDoom-10, GameWorld; 9B and 35B-A3B;
+    SFT-only ablation.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-language models now navigate browsers, fill forms, and operate desktop
+applications with reasonable accuracy. Interactive games present a qualitatively
+different challenge: staying alive in a first-person shooter, steering a vehicle,
+executing a combat combo, or sprinting while turning requires motor skills---
+sustained, feedback-driven, multi-axis control---that desktop GUI tasks never
+demand.
+
+The failure mode is not a policy problem. If the action space cannot express
+``move the mouse 12 pixels right while holding the left mouse button,'' no amount
+of policy optimization will produce that action. Player-1 diagnoses this as a
+representation gap and closes it before applying RL.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{SFT-only agents} can imitate successful play trajectories, but imitation
+is brittle to novel game states and does not generalize to games outside the
+demonstration distribution.
+
+\textbf{Standard GUI agents} treat games like web navigation: they produce
+discrete, stateless click-and-keystroke actions. They cannot execute the
+sustained directional inputs needed for driving, the relative pointer sweeps
+needed for aiming, or the simultaneous multi-key presses needed for combat.
+
+\textbf{Game-specific RL agents} achieve strong results on individual titles
+(Atari, StarCraft) but require game-specific reward shaping, environment
+wrappers, and action-space engineering; they do not transfer to new games or
+VLM-based GUI architectures.
+
+\textbf{Real-game RL training} requires running live game executables: it is
+slow, platform-dependent, and legally constrained for commercial titles.
+
+\section{Core Mechanism: Extended Action Space and Player-1-Gym}
+
+\textbf{Extended action space:}
+\[
+  \mathcal{A}_{\mathrm{ext}} =
+  \mathcal{A}_{\mathrm{std}} \cup
+  \mathcal{A}_{\mathrm{rel}} \cup
+  \mathcal{A}_{\mathrm{hold}} \cup
+  \mathcal{A}_{\mathrm{combo}}
+\]
+where $\mathcal{A}_{\mathrm{rel}}$ adds relative pointer motions
+$(\Delta x, \Delta y) \in \mathbb{R}^2$, $\mathcal{A}_{\mathrm{hold}}$ adds
+hold/release primitives for keys and buttons, and $\mathcal{A}_{\mathrm{combo}}$
+adds composite simultaneous key-plus-pointer sequences.
+
+\textbf{Player-1-Gym} is a suite of 16 synthetic 2D and 3D environments
+covering five control families:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Aiming (first-person pointer control)
+  \item Combat (sustained + combo actions under adversarial pressure)
+  \item Driving (continuous relative steering)
+  \item Navigation (spatial orientation + locomotion)
+  \item UI interaction (menus, inventory, crafting)
+\end{enumerate}
+Environments are procedurally generated so each episode presents a novel layout,
+preventing simple memorization of visual patterns.
+
+\section{Technical Formulation}
+
+The SFT phase minimizes the standard next-token prediction loss over a
+demonstration dataset $\mathcal{D} = \{(o_t, a_t)\}_{t=1}^T$ annotated with
+extended actions:
+\[
+  \mathcal{L}_{\mathrm{SFT}}(\theta)
+  = -\mathbb{E}_{(o_t, a_t) \sim \mathcal{D}}\!\left[\log \pi_\theta(a_t \mid o_t)\right]
+\]
+
+The PPO phase optimizes the clipped surrogate objective with advantage estimates
+computed via GAE:
+\[
+  \mathcal{L}_{\mathrm{PPO}}(\theta)
+  = \mathbb{E}_t\!\left[
+    \min\!\left(
+      r_t(\theta)\hat{A}_t,\;
+      \mathrm{clip}\!\left(r_t(\theta), 1{-}\varepsilon, 1{+}\varepsilon\right)\hat{A}_t
+    \right)
+  \right]
+\]
+where the probability ratio is
+$r_t(\theta) = \pi_\theta(a_t \mid o_t) / \pi_{\theta_{\mathrm{old}}}(a_t \mid o_t)$
+and $\hat{A}_t$ is the generalized advantage estimate.
+
+The value function $V_\phi(o_t)$ is trained simultaneously with
+\[
+  \mathcal{L}_V(\phi) = \mathbb{E}_t\!\left[\left(V_\phi(o_t) - \hat{R}_t\right)^2\right]
+\]
+where $\hat{R}_t = \sum_{k=0}^{T-t} \gamma^k r_{t+k}$ is the discounted return.
+
+Reward signals for Player-1-Gym are binary task-success indicators plus
+progress-based shaped rewards derived from task predicates.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{SFT:} Fine-tune the VLM on 6,044 human gameplay trajectories
+    annotated with $\mathcal{A}_{\mathrm{ext}}$ labels.
+  \item \textbf{Deploy to Player-1-Gym:} Instantiate 16 environments with
+    procedurally generated episodes; set episode timeout.
+  \item \textbf{PPO rollout:} Asynchronous workers generate episodes; a central
+    policy-update server applies gradient steps every $N$ rollout steps.
+  \item \textbf{Evaluation:} Zero-shot inference on MineDojo-300, ViZDoom-10,
+    and GameWorld using the RL-trained policy; no game-specific fine-tuning.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Player-1 establishes the following empirical claims across model sizes and
+held-out benchmarks:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Player-1-9B: MineDojo-300 success $= 38.33\%$
+    vs.\ $12.63\%$ for the best prior baseline ($+$25.7\,pp).
+  \item Player-1-35B-A3B: MineDojo-300 success $= 41.04\%$
+    ($+$17.7\,pp over its own SFT policy).
+  \item Zero-shot transfer to ViZDoom-10 and GameWorld (both outside
+    Player-1-Gym); both show positive gains over the SFT-only policy.
+  \item SFT-only policy scores substantially below the PPO-trained model on all
+    evaluated benchmarks, confirming RL drives the improvement.
+\end{itemize}
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{MineDojo-300:} Player-1-9B: 38.33\%;
+    Player-1-35B-A3B: 41.04\%; best prior: 12.63\%.
+  \item \textbf{ViZDoom-10:} Positive transfer; largest gains on aiming and
+    combat subtasks that most require relative-motion actions.
+  \item \textbf{GameWorld:} Positive transfer across navigation and UI subtasks.
+  \item \textbf{SFT ablation:} SFT-only policy (no PPO) shows substantial gap
+    below the full Player-1 model on all three benchmarks.
+  \item \textbf{Control family breakdown:} Aiming and combat show the largest
+    absolute gains, confirming that the new action primitives are the key
+    bottleneck for those task families.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Action space ablation:} Removing $\mathcal{A}_{\mathrm{rel}}$ from the
+action set causes a large drop on aiming and driving tasks; removing
+$\mathcal{A}_{\mathrm{combo}}$ degrades combat performance.
+
+\textbf{Gym environment count:} Performance on MineDojo-300 improves as the
+number of Player-1-Gym environments increases; the diversity of motor tasks
+covered---not just quantity---determines transfer breadth.
+
+\textbf{SFT warmup importance:} Removing the SFT phase and training RL from the
+base VLM significantly slows convergence; the SFT demonstration data provides a
+useful initial policy distribution that shortens RL exploration.
+
+\textbf{Model scale:} 35B-A3B outperforms 9B ($+$2.71\,pp on MineDojo-300);
+the gap is larger on ViZDoom, suggesting complex first-person reasoning benefits
+more from scale than pure motor-control tasks.
+
+\textbf{Why transfer works:} The five control families in Player-1-Gym cover
+the motor primitives common to most PC games; RL-acquired motor policies
+generalize across visual appearances and reward structures that differ from
+training, because the underlying motor sub-problem is shared.
+
+\section*{Reference}
+
+Mingyu Ouyang, Yiran Wang, Siyuan Hu, et al.
+\textbf{Player-1: Learning to Play from Synthetic Experience}.
+arXiv:2610.20584, October 2026.\\
+\url{https://arxiv.org/abs/2610.20584}
+
+\end{document}

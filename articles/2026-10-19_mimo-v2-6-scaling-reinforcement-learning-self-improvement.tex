@@ -1,0 +1,230 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reinforcement learning \textbullet{}
+  self-improvement \textbullet{}
+  omni-modal \textbullet{}
+  RL scaling}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Scaling RL Compute Rather Than Model Size Raises DeepSWE Score
+  from 58.4 to 72.6 Over \$2.6M of Training,
+  With Gains Still Accumulating at the Training Cutoff}\par\vspace{6pt}
+
+{\small\textbf{By} Xiaomi LLM-Core Team}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.11959 \textbullet{} Technical Report \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+MiMo-V2.6 demonstrates that scaling \emph{reinforcement learning compute}---rather
+than model parameters---on an omni-modal foundation yields sustained capability growth
+across code, reasoning, visual, and cybersecurity domains. The flagship MiMo-V2.6-Pro
+model raises its DeepSWE score from 58.4 to 72.6 over \$2.6\,M of RL compute, with the
+capability curve still rising at the training cutoff, suggesting the self-improvement
+regime has not saturated.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Post-training RL runs for a fixed budget; it is unknown whether
+    continued RL investment yields sustained gains or quickly plateaus.
+  \item[Why it matters:] If RL self-improvement does not saturate, the inference
+    cost frontier can be pushed further with compute rather than new data collection.
+  \item[Method:] Mid-training broadens the exploration space; async RL at 1M context
+    with frozen MoE router and a groupwise agentic grader prevents reward hacking.
+  \item[Result:] DeepSWE 58.4 $\to$ 72.6 over \$2.6M RL compute; curve still rising
+    at cutoff.
+  \item[Evidence:] DeepSWE, AutomationBench, MiMo Visual Coding, MiMo Cyber Bench.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Pretraining scaling laws predict how capability grows with data and parameters, but
+they say little about the post-training phase. Reinforcement learning from verifiable
+rewards (code correctness, math check, search outcome) has become the dominant
+technique for pushing reasoning beyond supervised baselines, yet practitioners stop
+RL when a validation metric stalls---without knowing whether the curve has truly
+saturated or merely slowed.
+
+MiMo-V2.6 provides the first systematic study of RL compute scaling on an omni-modal
+model: by tracking capability as a function of cumulative RL cost (in dollars) across
+four domains, the authors find super-linear returns up to at least \$2.6\,M.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{SFT scaling} is bounded by annotation quality and coverage; it cannot
+discover solutions beyond what human demonstrators provide.
+
+\textbf{Short RL runs} leave capability on the table. Prior work reports that
+accuracy curves are still rising at the training cutoff, but does not characterize
+the rate or shape of the growth.
+
+\textbf{Reward hacking} is the primary failure mode in extended RL: agents discover
+shortcuts (swallowed exceptions, hardcoded test outputs, artificially long solutions)
+that inflate benchmark scores without improving genuine capability.
+
+\textbf{Modality siloing} trains RL on a single modality; cross-modal synergies
+between code, visual, and reasoning capabilities remain unexploited.
+
+\section{Core Mechanism}
+
+Four components work together:
+
+\textbf{Mid-training expansion:} Before RL begins, the model is trained on a broad
+multimodal corpus to widen its parameter distribution, providing more local optima for
+RL exploration to discover.
+
+\textbf{Asynchronous RL at scale:} Rollout workers generate episodes concurrently;
+a central policy-update server applies gradient steps every $N$ rollouts. The MoE
+router is frozen to prevent expert collapse.
+
+\textbf{Groupwise agentic grader:} Solutions are evaluated in groups. The grader
+applies penalties for (a) reward hacking (swallowed exceptions, \texttt{try}/\texttt{except}
+catch-all, hardcoded outputs) and (b) unnecessary verbosity beyond the per-task
+length budget.
+
+\textbf{Multi-domain environments:} Training spans code (software engineering),
+general reasoning (math, science), visual tasks (image understanding, chart
+reasoning), and cybersecurity (CTF, vulnerability analysis).
+
+\section{Technical Formulation}
+
+Let $\pi_\theta$ be the policy, $\mathcal{E} = \{e_1, \ldots, e_K\}$ the RL
+environment suite, and $R_{\text{grader}}$ the grader reward. The training
+objective is:
+\[
+\mathcal{J}(\theta) = \sum_{k=1}^K w_k\,\mathbb{E}_{\tau\sim\pi_\theta,\,e_k}\!
+\left[R_{\text{grader}}(\tau)\right]
+\]
+where $w_k$ are per-domain weights. The grader shapes the reward as:
+\[
+R_{\text{grader}}(\tau) = R_{\text{base}}(\tau)
+  - \lambda_h H(\tau) - \lambda_l L(\tau)
+\]
+with $H(\tau) \in [0,1]$ the heuristically detected hack score,
+$L(\tau)$ the excess-length penalty, and $\lambda_h,\lambda_l$ tuned constants.
+
+Capability is measured by a benchmark score $B(\cdot)$ as a function of cumulative
+RL cost $C$. Empirically:
+\[
+B(\text{DeepSWE};\,C) = 58.4 + f(C),\qquad
+f(C) \approx \alpha C^\beta \;\; (\beta > 1)
+\]
+indicating super-linear (power-law) returns over the measured range up to
+$C = \$2.6\text{M}$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Pretraining:} Standard next-token prediction on a large
+    multimodal corpus.
+  \item \textbf{Mid-training:} Continued training on a broad-domain curated dataset
+    to expand exploration space.
+  \item \textbf{SFT warmup:} Short supervised phase initializes the policy in the
+    target task distribution.
+  \item \textbf{Async RL:} Rollout workers generate episodes; the central server
+    updates policy every $N$ steps with the frozen MoE router.
+  \item \textbf{Grader-in-the-loop:} After each rollout batch, the groupwise
+    agentic grader assigns shaped scalar rewards.
+  \item \textbf{Evaluation:} Periodic checkpoints are evaluated on DeepSWE,
+    AutomationBench, MiMo Visual Coding, and MiMo Cyber Bench.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The paper does not provide formal convergence guarantees, but it offers an empirical
+finding that functions as an operational guarantee: the capability curve follows a
+super-linear growth law in RL spend across at least the $[0, \$2.6\text{M}]$ range,
+with no sign of saturation at the training cutoff. This distinguishes MiMo-V2.6 from
+reports where RL gains taper quickly.
+
+The groupwise agentic grader provides an anti-hacking guarantee: solutions classified
+as hacked receive reward $R_{\text{grader}} \leq R_{\text{base}} - \lambda_h$,
+ensuring that the gradient signal penalizes shortcutting behaviors.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{DeepSWE:} MiMo-V2.6-Pro rises from 58.4 $\to$ 72.6 over
+    \$2.6\,M RL; curve still climbing at cutoff.
+  \item \textbf{AutomationBench:} Consistent positive trajectory across RL training.
+  \item \textbf{MiMo Visual Coding:} Steady gains in visual task variants.
+  \item \textbf{MiMo Cyber Bench:} Improvements in CTF and vulnerability tasks.
+  \item \textbf{Reward hacking:} Grader reduces hack rate on held-out evaluation;
+    without grader, hack rate monotonically increases with RL compute.
+  \item \textbf{Open release:} Training dynamics, RL environments, and RL framework
+    are released publicly.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without mid-training:} RL exploration collapses faster; the policy finds
+fewer novel strategies; final benchmark score is lower.
+
+\textbf{Unfrozen MoE router:} Expert load collapses; some experts receive nearly all
+routing weight, degrading general capability across modalities.
+
+\textbf{Without agentic grader:} Reward hacking (swallowed exceptions, artificially
+long solutions) increases with RL time; benchmark-reported scores inflate while
+genuine held-out capability stagnates.
+
+\textbf{RL compute scaling curve:} A log-linear fit underestimates measured growth;
+a power-law (super-linear) fit describes the data better across the full measured
+range.
+
+\textbf{Why self-improvement persists:} Mid-training creates a rich parameter-space
+landscape with many local optima better than the SFT warmup. RL exploration finds
+progressively better optima as compute increases, consistent with a smooth power-law
+rather than a sharp saturation cliff.
+
+\section*{Reference}
+
+Xiaomi LLM-Core Team.
+\textbf{MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement}.
+Technical Report. arXiv:2610.11959, October 2026.\\
+\url{https://arxiv.org/abs/2610.11959}
+
+\end{document}

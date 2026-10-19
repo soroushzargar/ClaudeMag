@@ -1,0 +1,72 @@
+ML Papers List — 2026-10-19
+Generated for ClaudeMag
+
+1. Any Time, Any Space: A World-State-Centric Framework for Agentic Video Generation
+   Authors: Weijie Wang, Haomin Zhang, Bohan Zhuang, et al.
+   Venue/ID: arXiv:2610.20571
+   URL: https://arxiv.org/abs/2610.20571
+   Summary: Long-form agentic video generation requires cross-shot consistency—a model generating
+   the same location from a different camera angle, or replaying an earlier event, must remain
+   spatially and temporally coherent. ATAS maintains two persistent memories: a scene memory of
+   registered static geometry, and an event memory of dynamic observations indexed by scene,
+   event, and time. Before generating each shot it retrieves evidence from these memories; after
+   generation it reconstructs and registers the clip. Memory updates pass a review gate so film
+   delivery and memory admission are decoupled. Across four video generators ATAS improves every
+   cross-shot consistency metric and tops all six human-rating criteria.
+
+2. Player-1: Learning to Play from Synthetic Experience
+   Authors: Mingyu Ouyang, Yiran Wang, Siyuan Hu, Xingyilang Yin, Huiqiang Sun, Guangzhi Wang,
+            Junfu Pu, Cheng Cheng, Honghao Chen, Ying Shan, Mike Zheng Shou, Hwee Tou Ng
+   Venue/ID: arXiv:2610.20584
+   URL: https://arxiv.org/abs/2610.20584
+   Summary: Generalist GUI agents from vision-language models struggle with the sustained motor
+   control required for digital gameplay—aiming, driving, and combat require relative motion and
+   composite inputs not present in standard computer-use benchmarks. Player-1 extends the action
+   space with relative pointer motion, sustained inputs, and composite actions, fine-tunes on
+   6,044 curated gameplay trajectories (SFT), then runs PPO in Player-1-Gym, 16 synthetic 2D
+   and 3D environments spanning five control families. Player-1-9B lifts MineDojo-300 success
+   from 12.63% (best prior baseline) to 38.33%; gains transfer to ViZDoom-10 and GameWorld, which
+   were outside the RL training suite.
+
+3. Hybrid Reasoning Agents
+   Authors: Jiaru Zou, Yunzhe Qi, Sirui Chen, Federico Bianchi, Shang Zhu, Pan Lu,
+            Jingrui He, James Zou
+   Venue/ID: arXiv:2610.18861
+   URL: https://arxiv.org/abs/2610.18861
+   Summary: Latent-space reasoning gives models efficient internal computation, but it cannot
+   natively call tools or produce reasoning traces that users can inspect. Text-based interaction
+   supports both, but at higher token cost. HybridAgent switches between the two modes inside a
+   single generation pass via a lightweight HybridLink module, and a continuous working memory
+   preserves hybrid context across turns without lossy summarization. Post-training uses
+   HybridSFT and HybridRL. Evaluated on Qwen3-Base at 4B, 8B, and 14B across 11 benchmarks,
+   HybridAgent delivers a 10.4% average accuracy gain, 35.5–54.7% fewer tokens, and 2.7–3.7×
+   lower cost compared to text-based and latent-only baselines.
+
+4. OmniCompass: A Holistic Benchmark for Omni-Modal Video Grounding and Understanding
+   Authors: Xuyang Liu, Shihao Wang, Xinyu Wei, Minghan Li, Zeqing Wang, Zuhao Yang,
+            Zichen Wen, Lei Zhang
+   Venue/ID: arXiv:2610.18829
+   URL: https://arxiv.org/abs/2610.18829
+   Summary: Current video benchmarks test language or vision in isolation, leaving the joint
+   audio-visual grounding capabilities of omni-modal models largely unmeasured. OmniCompass
+   introduces two evaluation tracks: OmniCompass-VL for vision-language models (820 videos,
+   2,460 instances) and OmniCompass-AV for omni-modal models (240 videos, 720 instances from
+   narrative-rich, audio-dense content). Each track covers temporal grounding, spatial grounding,
+   and question answering (five perception + three reasoning categories in VL; three perception
+   + two reasoning in AV), all evaluated under paired text-only / text+image settings to probe
+   whether a model genuinely understands the target or merely pattern-matches the instruction
+   format. Evaluation of 50 MLLMs reveals that open-source models trail proprietary ones, precise
+   grounding remains difficult, and paired-setting inconsistencies expose surface-level shortfalls.
+
+5. MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement
+   Authors: Xiaomi LLM-Core Team
+   Venue/ID: arXiv:2610.11959
+   URL: https://arxiv.org/abs/2610.11959
+   Summary: MiMo-V2.6 is an omni-modal model family trained by scaling RL compute rather than
+   expanding parameters. Prior to RL the team ran mid-training on a broad multimodal corpus to
+   widen the model's exploration space. RL itself uses asynchronous training at up to 1M context,
+   2.7–3.7B tokens per step, a frozen MoE router, and a groupwise agentic grader that penalizes
+   reward hacking (workarounds, swallowed exceptions). Environments span code, general reasoning,
+   visual tasks, and cybersecurity. MiMo-V2.6-Pro's DeepSWE score rose from 58.4 to 72.6 after
+   $2.6M of RL compute and was still climbing at the training cutoff, suggesting the self-
+   improvement regime had not yet saturated.

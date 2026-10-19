@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-19}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  latent reasoning \textbullet{}
+  hybrid agents \textbullet{}
+  tool use \textbullet{}
+  token efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Hybrid Reasoning Agents}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Switching Between Latent-Space Computation and Text Generation
+  Delivers $+$10.4\% Accuracy, 35--55\% Fewer Tokens, and
+  2.7--3.7$\times$ Lower Cost Across 11 Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Jiaru Zou, Yunzhe Qi, Sirui Chen, Federico Bianchi,
+  Shang Zhu, Pan Lu, Jingrui He \& James Zou}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.18861 \textbullet{} October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Text-based agents decode every reasoning step as expensive tokens, yet
+latent-only models cannot natively call tools or produce interpretable traces.
+\emph{HybridAgent} resolves the dilemma by switching between latent-space
+computation and text generation within a single generation pass via a
+lightweight \textbf{HybridLink} module, while a \textbf{continuous working
+memory} preserves hybrid context across turns without lossy summarization.
+Evaluated on Qwen3-Base at 4B, 8B, and 14B across 11 benchmarks, HybridAgent
+achieves a $+$10.4\% accuracy gain, 35.5--54.7\% fewer tokens, and
+2.7--3.7$\times$ lower cost compared to text-only and latent-only baselines.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Text agents decode all reasoning as tokens (expensive);
+    latent-only models cannot call tools or produce inspectable reasoning.
+  \item[Why it matters:] Inference compute is the frontier bottleneck;
+    hybrid modes offer the efficiency of latent computation with the
+    expressiveness of text-based tool use.
+  \item[Method:] HybridLink transitions between text and latent modes;
+    working memory preserves hybrid context; HybridSFT labels switch
+    points; HybridRL jointly penalizes errors, excess tokens, and tool
+    failures.
+  \item[Result:] $+$10.4\% avg accuracy; 35.5--54.7\% fewer tokens;
+    2.7--3.7$\times$ lower cost than text-only baselines.
+  \item[Evidence:] Qwen3-Base at 4B, 8B, and 14B; 11 benchmarks covering
+    math, science, medical reasoning, and tool-use tasks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Current agent paradigms force a binary choice: text-based interaction is
+interpretable and natively supports tool calls, but materialises every
+reasoning step as decoded tokens, inflating latency and cost. Latent-only
+models process internally without decoding intermediate states, but they
+cannot call APIs or external databases and their reasoning is inaccessible
+to users or auditors.
+
+HybridAgent dissolves the tradeoff. The key observation is that internal
+reasoning---planning, hypothesis formation, chain-of-thought---does not
+need to be decoded at every step. Only when the model must interact with
+the environment (call a tool, present an answer, request input) does it
+need to produce text. A principled switch mechanism at the right moments
+exploits latent efficiency while preserving text expressiveness.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Text-based agents} decode all intermediate reasoning, producing
+interpretable but expensive token streams; context length grows with
+reasoning depth.
+
+\textbf{Latent-only models} compute internally without materialising
+tokens; efficient but unable to call external tools; reasoning is
+inaccessible to downstream users or auditors.
+
+\textbf{Shallow fusion approaches} interleave text and embedding layers
+without a principled switch mechanism; they suffer from mode confusion at
+transition points, degrading both the coherence of latent computation and
+the expressiveness of text interaction.
+
+\section{Core Mechanism: HybridLink and Working Memory}
+
+Two components distinguish HybridAgent from prior fusion approaches:
+
+\textbf{HybridLink} is a lightweight adapter inserted at a designated
+layer $l$ of the base transformer. It handles transitions in both
+directions: text-to-latent (compressing recent text context into an
+initial latent state vector) and latent-to-text (projecting the latent
+state back into the token embedding space at tool-call or answer
+generation points).
+
+\textbf{Continuous working memory} is a fixed-size buffer of latent
+vectors that persists across turns. Unlike KV-cache compression, which
+discards information to save memory, the working memory preserves the full
+hybrid context at constant cost via a recency-weighted update rule.
+
+Post-training uses two stages: \textbf{HybridSFT} fine-tunes on
+trajectories where ground-truth switch points are labelled; \textbf{HybridRL}
+optimises the full model with a joint reward that penalises incorrect
+answers, excessive text decoding, and tool-call failures.
+
+\section{Technical Formulation}
+
+Let the transformer have $L$ layers and hidden dimension $d$. At turn $t$
+the model maintains a text prefix $x_t \in \mathcal{V}^*$ and a latent
+state $z_t \in \mathbb{R}^{d_z}$. HybridLink at layer $l$ computes:
+\[
+z_t = \mathrm{HybridLink}^{(\mathrm{t}\to\mathrm{l})}\!\left(h_l(x_t),\,z_{t-1}\right)
+\]
+\[
+x_t' = \mathrm{HybridLink}^{(\mathrm{l}\to\mathrm{t})}\!\left(z_t\right)
+\]
+where $h_l(x_t)$ is the hidden state at layer $l$ for the text prefix, the
+first equation handles text-to-latent transitions, and the second handles
+latent-to-text transitions at tool-call points.
+
+The working memory update is:
+\[
+z_t = (1-\alpha)\,z_{t-1} + \alpha \cdot f\!\left(z_{t-1},\,h_L(x_t)\right)
+\]
+with $\alpha$ a learned gate scalar and $f$ a two-layer MLP.
+
+The HybridRL objective is:
+\[
+\mathcal{J}(\theta)
+= \mathbb{E}\!\left[R_{\mathrm{task}}
+  - \lambda_1\|x_t^{\mathrm{reason}}\|_1
+  - \lambda_2\cdot\mathbf{1}[\text{tool fail}]
+\right]
+\]
+where $\|x_t^{\mathrm{reason}}\|_1$ counts decoded reasoning tokens and
+$\lambda_1, \lambda_2$ are regularisation weights.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Label switch points} in existing reasoning trajectories:
+    text-to-latent at the start of each reasoning block; latent-to-text
+    before each tool call or final answer.
+  \item \textbf{HybridSFT:} Supervised fine-tuning on labelled
+    trajectories, training HybridLink to transition at the correct points.
+  \item \textbf{HybridRL:} Reinforcement fine-tuning with the joint
+    reward $\mathcal{J}(\theta)$, sharpening the autonomous switch policy.
+  \item At \textbf{inference}: the model operates without human guidance;
+    when reasoning continues, it stays in latent mode; when a tool call
+    or answer is needed, it switches to text mode via HybridLink.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+Across all three Qwen3-Base model scales (4B, 8B, 14B) and all 11
+evaluated benchmarks:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Average accuracy gain over text-only and latent-only baselines:
+    $\mathbf{+10.4\%}$.
+  \item Token reduction versus text-only baseline:
+    \textbf{35.5--54.7\%}.
+  \item Cost reduction: \textbf{2.7--3.7$\times$} lower at matched accuracy.
+\end{itemize}
+
+The relative advantage grows slightly with model scale, suggesting that
+larger models use the latent mode more judiciously.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Models:} Qwen3-Base at 4B, 8B, and 14B parameters.
+  \item \textbf{Benchmarks (11):} Mathematics, science, and medical
+    reasoning domains; tool-use tasks requiring search and API calls.
+  \item $+$10.4\% average accuracy gain; highest gains on multi-step
+    tool-use tasks that benefit most from latent-mode efficiency.
+  \item Latent-only models cannot complete tool-dependent tasks;
+    HybridAgent's gain over them is substantially larger than its gain
+    over text-only agents.
+  \item Token counts: 35.5--54.7\% below text-based chains of equal or
+    lower accuracy.
+  \item Cost: 2.7--3.7$\times$ reduction based on token count $\times$
+    per-token price.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without HybridSFT (RL only):} Convergence slows; final accuracy
+is lower; supervised switch-point labelling provides a critical warm-start.
+
+\textbf{Without working memory:} Accuracy drops on multi-turn tasks
+requiring retention of earlier tool outputs; the model fails to carry
+latent context across conversation turns.
+
+\textbf{Without latent mode (text-only baseline):} Token count rises and
+accuracy falls below HybridAgent on all 11 benchmarks.
+
+\textbf{HybridLink layer placement:} Inserting at middle layers
+($l \approx L/2$) outperforms early and late placement; early placement
+loses text context before reasoning begins, late placement provides
+insufficient latent depth for meaningful computation.
+
+\textbf{Why it works:} The model learns that tool-call latency and token
+cost dominate total inference time; switching to latent mode for the
+reasoning portion that does not need to be observed is the ``free
+efficiency'' move, and HybridRL reinforces this behaviour.
+
+\section*{Reference}
+
+Jiaru Zou, Yunzhe Qi, Sirui Chen, Federico Bianchi, Shang Zhu, Pan Lu,
+Jingrui He, James Zou.
+\textbf{Hybrid Reasoning Agents}.
+arXiv:2610.18861, October 2026.\\
+\url{https://arxiv.org/abs/2610.18861}
+
+\end{document}
