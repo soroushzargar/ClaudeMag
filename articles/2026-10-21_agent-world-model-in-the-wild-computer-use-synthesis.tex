@@ -1,0 +1,250 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  computer-use agents \textbullet{}
+  environment synthesis \textbullet{}
+  synthetic training data \textbullet{}
+  GUI agents}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Agent World Model in the Wild: Computer-Use Agent
+  Environment Synthesis}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Persona-Grounded WildAWM Synthesises 341 Long-Horizon Computer-Use
+  Environments; Qwen Models Trained There Generalise to 8 OOD Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Zhaoyang Wang, Qianhui Wu, Huaxiu Yao, et al.
+  (Microsoft Research \& UNC Chapel Hill)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.26828 \textbullet{}
+  October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Training general-purpose computer-use agents requires controllable
+environments with verifiable ground truth---a resource that is scarce,
+expensive to build manually, and impossible to extract from screen
+recordings without execution-based verification. WildAWM synthesises such
+environments by grounding them in synthetic user personas: it generates
+executable desktop worlds with persona-appropriate websites, MCP services,
+and files, then synthesises long-horizon cross-application tasks and filters
+them through execution-based quality gates combining heterogeneous agent
+rollouts, cross-judge consistency, and sycophancy-probing counterfactuals.
+The resulting 341 environment-task pairs, which GPT-6-Astra solves at only
+60\%, transfer well: Qwen models trained exclusively on them gain substantially
+across 8 out-of-distribution computer-use benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Realistic, verifiable computer-use training environments
+    are scarce; scripted generators produce tasks too simple to transfer.
+  \item[Why it matters:] Frontier models are approaching human performance
+    on curated benchmarks; progress now requires harder, more diverse
+    training data.
+  \item[Method:] Persona-grounded environment synthesis with three-tier
+    quality gate: heterogeneous rollouts, cross-judge consistency, and
+    counterfactual sycophancy probes.
+  \item[Result:] 341 long-horizon pairs; GPT-6-Astra at 60\%; Qwen models
+    trained on synthetic data generalise to 8 OOD benchmarks.
+  \item[Evidence:] OOD evaluation on web, desktop, and computer-use tasks;
+    quality gate ablation confirms each tier's contribution.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The ceiling for computer-use agents is no longer model architecture or
+training objective---it is training data. Frontier models like GPT-6-Astra
+now score above 90\% on the original OSWorld and ScreenSpot benchmarks;
+further gains require harder, more diverse, and more verifiable training
+environments.
+
+Building such environments by hand does not scale. WildAWM takes a generative
+approach: start from a synthetic user persona (a profile describing the
+person's job, preferences, and daily computer activities), derive an
+executable personal-computer environment from that persona, and synthesise
+tasks that are grounded in and verifiable against that world.
+
+The result is a data pipeline that can, in principle, generate environments
+indefinitely---limited only by the diversity of the persona generator and
+the quality of the downstream verifier.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Hand-curated benchmarks (OSWorld, ScreenSpot, AndroidWorld):}
+Expensive to build; fixed task distribution that saturates as models
+improve; evaluation sets cannot scale to training-set sizes.
+
+\textbf{Rule-based environment generators:} Tasks are formulaic (``click
+button X on website Y''); they do not resemble the cross-application,
+multi-step workflows that real users perform.
+
+\textbf{Web-crawled demonstrations:} Ground-truth completion is difficult
+to verify; rewards are noisy; task length and difficulty cannot be controlled.
+
+\textbf{Simulation replay:} Requires access to the original software
+environment; does not generalise to novel configurations.
+
+\section{Core Mechanism}
+
+\textbf{Persona-grounded environment synthesis:} An LLM generates synthetic
+user personas covering profession, daily activities, and software usage
+patterns. From each persona, WildAWM constructs an executable desktop
+environment: a browser populated with persona-relevant web pages, MCP
+(Model Context Protocol) services simulating the APIs the persona would
+use, and a local file system with persona-appropriate documents.
+
+\textbf{Cross-agent interface (XAI) task synthesis:} Tasks that require
+actions across multiple applications (e.g., ``find the flight mentioned
+in your last email, book it, and create a packing list in your documents'')
+are synthesised as long-horizon plans with verifiable sub-goals. These
+XAI tasks mirror the cross-application coordination that distinguishes
+real user workflows from benchmark tasks.
+
+\textbf{Three-tier quality gate:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Heterogeneous rollouts:} Multiple agent architectures
+    attempt each task. Tasks trivially solved by all (too easy) or
+    unsolvable by any (unverifiable) are filtered.
+  \item \textbf{Cross-judge consistency:} Multiple judge models evaluate
+    completion; pairs with inconsistent verdicts are rejected.
+  \item \textbf{Counterfactual sycophancy probes:} Judges are presented
+    with deliberately incorrect outcome feedback; judges that agree with
+    false outcomes are excluded.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+Let $u \sim P_{\text{persona}}$ be a synthetic user persona,
+$e \sim P_{\text{env}}(\cdot \mid u)$ the derived environment, and
+$\tau \sim P_{\text{task}}(\cdot \mid e)$ a synthesised task.
+
+The quality gate passes $(e, \tau)$ if:
+\[
+Q(e, \tau) = \mathbf{1}\!\left[\text{ConsistencyScore}(e, \tau) > \delta_c\right]
+  \cdot \mathbf{1}\!\left[\text{RobustnessScore}(e, \tau) > \delta_r\right]
+\]
+
+The \textit{robustness score} exploits LLM sycophancy to stress-test verifiers:
+\[
+\text{RobustnessScore}(e, \tau)
+  = 1 - \frac{1}{|C|}\sum_{c \in C} \mathbf{1}\!\left[
+    \text{Judge}(e, \tau, c_{\text{false}}) = \texttt{correct}\right]
+\]
+where $c_{\text{false}}$ is a deliberately incorrect outcome label; a
+judge that accepts it is flagged as sycophantic and excluded from the
+verifier pool.
+
+A Qwen model $\pi_\theta$ is then trained with behavioural cloning on
+the curated pairs followed by RL with the verifier as the reward model:
+\[
+\mathcal{J}(\theta) = \mathbb{E}_{(e,\tau)\sim\mathcal{D}_{\text{curated}}}
+  \!\left[\mathbb{E}_{a\sim\pi_\theta(\cdot|e,\tau)}\!\left[
+    V(e, \tau, a)\right]\right]
+\]
+where $V$ is the quality-gated verifier score.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample personas; generate environments via LLM; synthesise XAI tasks.
+  \item Apply the three-tier quality gate; retain pairs that pass all checks.
+  \item Train Qwen models on curated pairs with behavioural cloning, then
+    RL with the verified reward.
+  \item Evaluate on held-out OOD benchmarks: no fine-tuning on any target
+    benchmark.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The counterfactual sycophancy probe provides a robustness guarantee over
+the verifier pool: any judge that accepts a known-false outcome is excluded,
+bounding the false-positive rate of the verification signal. The consistency
+check across heterogeneous judges bounds the variance of the reward signal.
+Together, the two gates ensure that the training signal is both accurate and
+stable, which is the precondition for effective RL in the synthetic environment.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Dataset:} 341 long-horizon task-environment pairs, each
+    requiring up to 100+ agent steps. GPT-6-Astra solves only 60\%,
+    confirming non-trivial difficulty.
+  \item \textbf{OOD generalisation:} Qwen models trained exclusively on
+    WildAWM environments gain substantially across 8 OOD benchmarks
+    spanning web browsing, email management, file management, coding
+    assistance, and general computer-use tasks.
+  \item \textbf{Cross-application advantage:} Gains are largest on
+    multi-application coordination tasks, the XAI task category WildAWM
+    specialises in.
+  \item \textbf{Quality gate ablation:} Removing any single tier of the
+    gate degrades training-set quality (measured by human evaluation) and
+    downstream performance.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without persona grounding (random environments):} Task-environment
+pairs are less realistic; downstream benchmark performance drops, especially
+on tasks requiring knowledge of realistic file and browser content.
+
+\textbf{Without counterfactual probes:} Some judges are sycophantic and
+accept false completions; reward signal becomes noisier; downstream
+performance degrades.
+
+\textbf{Without cross-judge consistency:} High-variance verification
+labels slow convergence and reduce final performance.
+
+\textbf{Why synthetic environments transfer:} Persona-grounded synthesis
+produces task distributions closely aligned with real user workflows; the
+XAI structure requires the same cross-application reasoning as real tasks,
+rather than isolated widget interactions that do not compose.
+
+\section*{Reference}
+
+Zhaoyang Wang, Qianhui Wu, Huaxiu Yao, et al.
+\textbf{Agent World Model in the Wild: Computer-Use Agent Environment Synthesis}.
+arXiv:2610.26828, October 2026.
+\url{https://arxiv.org/abs/2610.26828}
+
+\end{document}

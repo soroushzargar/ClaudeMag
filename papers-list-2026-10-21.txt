@@ -1,0 +1,71 @@
+ML Papers List — 2026-10-21
+Generated for ClaudeMag
+
+1. Learning to Steer LLM Agents and Multi-Agent Systems
+   Authors: Leyang Shen, Yaxin Gong, et al.
+   Venue/ID: arXiv:2610.22316
+   URL: https://arxiv.org/abs/2610.22316
+   Summary: LLM agents and multi-agent systems suffer from goal drift—execution deviates from the
+   overall objective as steps accumulate, wasting resources and causing undesired outcomes. The
+   authors propose a dedicated steering agent that monitors ongoing execution and intervenes via
+   two paths: a low-cost fast path for common corrective actions and a high-cost slow path for
+   complex interventions. Both are jointly trained with GRPO using a pairwise ranking objective.
+   Experiments on information-seeking tasks show the steering agent improves performance and
+   efficiency for both single-agent and multi-agent settings, and the learned policy transfers to
+   out-of-domain tasks and unseen executors without retraining.
+
+2. PACE: Pareto-Adaptive Compression for Efficient Native MLLMs
+   Authors: Lei Tian, Chunzheng Zhu, Kai Wu, Yifan Zhang, Haihua Yang
+   Venue/ID: arXiv:2610.24005 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2610.24005
+   Summary: Native multimodal large language models (MLLMs) process images directly without a
+   separate vision encoder, creating new challenges for visual token compression that prior
+   ViT-based methods cannot address. PACE decomposes spatial attention into orthogonal height and
+   width saliency estimates gated by a positional attention signal, and treats token budget
+   allocation as a Pareto optimization over performance preservation, inference efficiency, and
+   spatial coverage. At only 25–50% visual token retention, PACE maintains near-lossless
+   performance and even improves on several benchmarks, while delivering over 2× FLOPs reduction
+   against uncompressed baselines. Accepted at NeurIPS 2026.
+
+3. NestedVLA: Learning to Consolidate and Generate Skills for Vision-Language-Action Models
+   Authors: Guodong Du, Wanyu Lin
+   Venue/ID: arXiv:2610.23271 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2610.23271
+   Summary: Consolidating manipulation skills across heterogeneous tasks is hindered by cross-
+   platform data splits, multi-task training interference, and parameter conflicts in model
+   merging. NestedVLA sidesteps these issues by learning skills independently first and
+   consolidating post hoc through generation rather than aggregation. A nested hypernetwork,
+   conditioned on the target task, synthesizes task-adaptive action-expert parameter deltas that
+   compose with a frozen base VLA. Task-specific VLM residuals are stored as compressed patches
+   enabling flexible reuse. On MetaWorld, ManiSkill, and CALVIN, NestedVLA outperforms the
+   strongest model-merging baseline by 41 pp on average. Accepted at NeurIPS 2026.
+
+4. Intra-Rubric Reward Divergence: Mitigating Rubric Hacking through Latent Dimension
+   Recovery and Balancing
+   Authors: Jianqiang Xia, Han Xu, Dianxi Shi
+   Venue/ID: arXiv:2610.26685
+   URL: https://arxiv.org/abs/2610.26685
+   Summary: In rubric-based reinforcement learning for language models, total rubric score can
+   rise while individual sub-dimension scores systematically fall—a phenomenon the authors call
+   Intra-Rubric Reward Divergence (IRRD), driven by dimension imbalance and dimension absence in
+   rubric specification. They introduce two remedies: Fair-Race Dimension Aggregation (FRDA),
+   which has generations compete within each sub-dimension separately, and Residual Semantic
+   Dimension Completion (RSDC), which recovers evaluation dimensions latent in holistic preference
+   signals to fill rubric gaps. Across chat, science, and medical evaluation domains, FRDA yields
+   more stable anti-hacking improvements and RSDC outperforms both single-reward training and
+   naive multi-reward aggregation.
+
+5. Agent World Model in the Wild: Computer-Use Agent Environment Synthesis
+   Authors: Zhaoyang Wang, Qianhui Wu, Huaxiu Yao, et al.
+   Venue/ID: arXiv:2610.26828
+   URL: https://arxiv.org/abs/2610.26828
+   Summary: Training general computer-use agents requires realistic, controllable environments
+   that remain scarce and expensive to build manually. WildAWM synthesizes such environments by
+   grounding them in user personas and daily activities: it generates executable personal-computer
+   worlds with websites, MCP services, and local files, then synthesizes cross-agent interface
+   (XAI) tasks with execution-based quality gates combining heterogeneous agent rollouts,
+   cross-judge consistency checks, and counterfactual probes of judgment robustness. The resulting
+   341 long-horizon task-environment pairs require over 100 agent steps to solve; GPT-6-Astra
+   solves only 60% of them. Qwen models trained exclusively in WildAWM environments achieve
+   substantial gains across 8 out-of-distribution benchmarks spanning web, desktop, and
+   computer-use tasks.

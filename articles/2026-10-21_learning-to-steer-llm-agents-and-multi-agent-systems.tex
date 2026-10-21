@@ -1,0 +1,234 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multi-agent systems \textbullet{}
+  LLM agents \textbullet{}
+  goal drift \textbullet{}
+  reinforcement learning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Learning to Steer LLM Agents and Multi-Agent Systems}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Dual-Path Steering Agent Trained with GRPO Corrects Goal Drift
+  and Transfers to Unseen Executors}\par\vspace{6pt}
+
+{\small\textbf{By} Leyang Shen, Yaxin Gong, et al.}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.22316 \textbullet{}
+  October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+LLM-based agents—whether acting alone or in concert—are prone to goal
+drift: as execution unfolds step by step, the system progressively deviates
+from its original objective. This paper introduces a dedicated \textit{steering
+agent} that monitors ongoing execution and corrects drift via two intervention
+paths, jointly trained with Group Relative Policy Optimization (GRPO). On
+information-seeking benchmarks, the steered system completes tasks more
+accurately and efficiently than executor-only baselines, and its policy
+transfers to unseen task types and executor architectures without retraining.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Agents and multi-agent pipelines drift from the overall
+    goal as execution steps accumulate, wasting compute and producing
+    unintended outcomes.
+  \item[Why it matters:] No existing component has global oversight of
+    execution trajectory; prompt-based corrections lack a trained policy
+    for when and how to intervene.
+  \item[Method:] Dedicated steering agent with fast (cheap) and slow
+    (expensive) intervention paths, jointly trained with GRPO and a
+    pairwise ranking objective.
+  \item[Result:] Improved task completion rate and fewer total execution
+    steps; policy transfers to out-of-domain tasks and unseen executors.
+  \item[Evidence:] Experiments on information-seeking single-agent and
+    multi-agent tasks; ablations confirm both paths are necessary.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Modern LLM agent pipelines are long: they involve dozens of tool calls,
+web searches, sub-task handoffs, and intermediate reasoning steps. Each
+step introduces the possibility that the agent drifts from the high-level
+objective—optimizing a sub-task at the expense of the whole, misinterpreting
+a retrieved document, or losing track of a constraint stated many steps
+earlier.
+
+In multi-agent settings the problem compounds: agents optimize locally,
+communication between them is asynchronous, and no single agent has a
+global view of the pipeline's progress.
+
+This paper's central argument is that the solution should not be to redesign
+every executor agent but to add a separate \textit{steering} agent whose
+sole job is global oversight. The steering agent watches, decides when to
+act, and intervenes minimally to keep the execution on course.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Prompt injection:} Injecting correction instructions into the next
+step is brittle because it lacks a policy for deciding when or how to
+intervene. Over-intervention stalls progress; under-intervention allows drift
+to persist.
+
+\textbf{Reward shaping during training:} Re-training all executors with a
+global objective requires access to each agent's parameters and is
+incompatible with off-the-shelf or proprietary executors.
+
+\textbf{Post-hoc replanning:} Replanning after detecting failure is costly:
+it requires abandoning completed work and restarting. It cannot prevent drift
+mid-execution.
+
+\section{Core Mechanism}
+
+The steering agent operates alongside the executor(s) without modifying them.
+At each execution step it observes the full context and chooses among three
+options:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Silent:} No intervention; execution continues.
+  \item \textbf{Fast path (low-cost):} A lightweight corrective signal,
+    such as re-anchoring the executor to the current sub-goal or pruning
+    off-track tool calls.
+  \item \textbf{Slow path (high-cost):} A full re-planning step or a
+    coordinator message to all agents, for novel or complex deviations.
+\end{enumerate}
+
+Both paths and the routing decision are trained jointly, so the steering
+agent learns not only how to correct but also when each type of correction
+is warranted.
+
+\section{Technical Formulation}
+
+Let $s_t$ be the execution state at step $t$ and $a^{\text{exec}}_t$ the
+action the executor would take absent intervention. The steering agent
+produces $\delta_t \in \{\text{silent}, \text{fast}, \text{slow}\}$ and
+a steering signal $\sigma_t$. The executor's effective action is:
+\[
+a_t = f(a^{\text{exec}}_t,\; \sigma_t)
+\]
+where $f$ merges the executor's action with the steering signal. The GRPO
+objective for the steering agent is:
+\[
+\mathcal{J}_{\text{steer}}(\theta) = \mathbb{E}\!\left[\sum_t \!\left(R_{\text{final}}
+  - \lambda_{\text{cost}} \cdot \mathbf{1}[\delta_t = \text{slow}]\right)
+  \cdot \log \pi_\theta(\delta_t, \sigma_t \mid s_t)\right]
+\]
+with $\lambda_{\text{cost}}$ penalising slow-path invocations, pushing the
+policy to use the cheap fast path whenever sufficient.
+
+A supplementary pairwise ranking loss compares trajectory pairs (same task,
+different steering decisions) and penalises whichever produced the worse
+outcome:
+\[
+\mathcal{L}_{\text{rank}}(\theta) = \mathbb{E}_{(\tau^+, \tau^-)}\!\left[
+  \max\!\left(0,\; 1 - \log\frac{\pi_\theta(\tau^+)}{\pi_\theta(\tau^-)}\right)\right]
+\]
+The final training objective is $\mathcal{J}_{\text{steer}} - \alpha \mathcal{L}_{\text{rank}}$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect paired trajectories: one with the steering agent active,
+    one without (or with a different steering decision).
+  \item Annotate outcomes; form pairwise preference labels for the ranking
+    loss.
+  \item Train the steering agent with the combined GRPO + ranking objective.
+  \item At inference, the steering agent runs alongside the executor(s);
+    no modification to executors is required.
+  \item Intervention frequency is controlled post-training via
+    $\lambda_{\text{cost}}$, enabling efficiency-accuracy trade-offs.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The pairwise ranking objective provides a contrastive guarantee: the steering
+policy converges to prefer interventions whose outcomes are better in expectation
+than the counterfactual of no intervention. The GRPO component constrains the
+policy to stay close to the reference model, preventing exploitation of the
+steering interface. Together, the objectives bound the expected cost overhead
+of incorrect interventions relative to executor-only execution.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Single-agent information-seeking:} The steering agent
+    improves task completion rate and reduces total execution steps
+    compared to the executor-only baseline, prompt-injection correction,
+    and replanning-on-failure.
+  \item \textbf{Multi-agent pipelines:} Gains are larger in multi-agent
+    settings, where drift compounds across agents; the steering agent
+    provides global coordination that individual agents lack.
+  \item \textbf{Transfer to out-of-domain tasks:} The steering policy,
+    trained on information-seeking tasks, transfers to document QA and
+    planning tasks without any fine-tuning.
+  \item \textbf{Transfer to unseen executors:} Executors not encountered
+    during training are steered effectively, confirming that the policy
+    learned general drift-correction rather than executor-specific heuristics.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Fast-path only:} Loses on novel drift patterns requiring deep
+re-planning; confirms the slow path is necessary for non-routine corrections.
+
+\textbf{Slow-path only:} Higher cost per step with marginal accuracy gain
+over fast-only; the fast path handles the majority of cases cheaply.
+
+\textbf{Without pairwise ranking (GRPO alone):} Noisier intervention
+decisions; the steering agent more often invokes the slow path when the fast
+path would have sufficed, indicating the ranking loss sharpens the routing
+decision.
+
+\textbf{Controllable intervention:} Sweeping $\lambda_{\text{cost}}$ traces
+a smooth Pareto curve between task accuracy and intervention cost, confirming
+the design supports post-training trade-off adjustment.
+
+\section*{Reference}
+
+Leyang Shen, Yaxin Gong, et al.
+\textbf{Learning to Steer LLM Agents and Multi-Agent Systems}.
+arXiv:2610.22316, October 2026.
+\url{https://arxiv.org/abs/2610.22316}
+
+\end{document}

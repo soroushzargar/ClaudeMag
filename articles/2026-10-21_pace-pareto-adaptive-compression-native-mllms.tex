@@ -1,0 +1,246 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  visual token compression \textbullet{}
+  native MLLM \textbullet{}
+  Pareto optimization \textbullet{}
+  inference efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  PACE: Pareto-Adaptive Compression for Efficient Native MLLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Orthogonal Spatial Saliency Decomposition Achieves Near-Lossless
+  Performance at 25--50\% Token Retention with 2$\times$ FLOPs Reduction}\par\vspace{6pt}
+
+{\small\textbf{By} Lei Tian, Chunzheng Zhu, Kai Wu, Yifan Zhang \&
+  Haihua Yang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.24005 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Native multimodal large language models process image patches directly,
+without a separate vision encoder, but this architectural simplicity comes
+at a cost: no encoder-derived saliency signal is available for token
+compression. PACE addresses this gap with an orthogonal spatial attention
+decomposition and a Pareto-optimal budget allocation head. At 50\% visual
+token retention, PACE delivers near-lossless performance on standard benchmarks
+and more than $2\times$ FLOPs reduction; at 25\% retention it improves on
+chart-understanding tasks while remaining competitive elsewhere. Accepted at
+NeurIPS 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] ViT-free (native) MLLMs have no encoder attention signal
+    to guide token compression; existing methods are inapplicable.
+  \item[Why it matters:] Native MLLMs are increasingly popular; without
+    compression, visual token sequences create prohibitive attention cost.
+  \item[Method:] Decompose attention into orthogonal height and width
+    saliency components gated by a positional signal; allocate token
+    budgets via Pareto optimization over performance, efficiency, and
+    spatial coverage.
+  \item[Result:] Near-lossless accuracy at 50\% retention; $>$2$\times$
+    FLOPs reduction; improvement on chart benchmarks at 25\% retention.
+  \item[Evidence:] Evaluation across multiple native MLLM architectures
+    and benchmarks; ablations confirm each component's contribution.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The field has converged on two approaches to multimodal LLMs. The dominant
+approach uses a separate vision encoder (ViT) to process images into a
+compact visual representation before passing it to the language model.
+The emerging alternative---the \textit{native} or \textit{ViT-free} MLLM---
+processes raw image patches directly in the transformer, unifying modalities
+from the start.
+
+Native architectures reduce engineering complexity and enable end-to-end
+optimization, but they reintroduce a well-known problem at scale: the number
+of visual tokens grows quadratically with image resolution. For a 448$\times$448
+image at a patch size of 14, that is 1024 tokens---before any text. Attention
+cost is $O(N^2)$; this is already prohibitive at high resolution or in
+multi-image settings.
+
+Compressing visual tokens is the natural remedy, but every existing compression
+method was designed for ViT-based pipelines, where the encoder's [CLS]
+token attention or patch-similarity matrix provides a natural saliency signal.
+Native models have neither. PACE is the first method designed specifically
+for this setting.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{ViT-based compression (ToMe, FastViT, DynamicViT):} All rely on
+the encoder's attention map or token similarity computed within the ViT.
+These signals do not exist in native architectures; applying these methods
+to native models produces near-random compression.
+
+\textbf{Uniform subsampling:} Discards spatial structure uniformly, missing
+locally salient regions that are scattered across the image.
+
+\textbf{Greedy attention thresholding:} Retains the tokens with the highest
+self-attention scores in the LLM; this greedy approach ignores spatial
+coverage and can cluster selections around a single prominent region, missing
+the rest of the image.
+
+\section{Core Mechanism}
+
+PACE introduces two components applied sequentially at each layer of the
+native MLLM.
+
+\textbf{Orthogonal spatial saliency decomposition:} The attention matrix
+$\mathbf{A} \in \mathbb{R}^{N \times N}$ for the visual tokens is factored
+into marginals along the height and width dimensions of the image grid:
+\[
+\mathbf{A} \approx \mathbf{A}_H \otimes \mathbf{A}_W
+\]
+where $\mathbf{A}_H \in \mathbb{R}^{h \times h}$ and
+$\mathbf{A}_W \in \mathbb{R}^{w \times w}$ capture row-wise and column-wise
+saliency, with $N = h \times w$. A positional attention signal $p_{ij}$ (a
+learned embedding of the token's position relative to attended regions)
+gates the combined score.
+
+\textbf{Pareto budget allocation:} Rather than fixing a single compression
+ratio for all inputs, PACE frames token budget selection as a Pareto
+optimization over three objectives: performance preservation, FLOPs reduction,
+and spatial coverage. A lightweight allocation network selects the operating
+point at inference time.
+
+\section{Technical Formulation}
+
+The saliency score for token $(i,j)$ is:
+\[
+s_{ij} = \alpha\,[\mathbf{A}_H]_{ii} + \beta\,[\mathbf{A}_W]_{jj} + \gamma\, p_{ij}
+\]
+where $(\alpha, \beta, \gamma)$ are learned scalars. The top-$B$ tokens by
+score are retained, where $B$ is determined by the allocation network.
+
+The Pareto budget allocation problem is:
+\[
+\min_{\mathbf{m}}\;\left(\text{PerfDrop}(\mathbf{m}),\;
+  -\text{FLOPs\_red}(\mathbf{m}),\;
+  -\text{SpatCov}(\mathbf{m})\right)
+\]
+subject to $\|\mathbf{m}\|_0 = B$, where $\mathbf{m}$ is the binary
+selection mask. The Pareto frontier is computed on a held-out calibration
+set and parameterised by a small MLP that maps input complexity features
+(image entropy, text query length) to a budget $B$ and weighting
+$(\alpha, \beta, \gamma)$.
+
+At training time, the allocation MLP is trained to minimise the weighted
+Chebyshev distance to the Pareto frontier:
+\[
+\mathcal{L}_{\text{Pareto}}(\phi) = \mathbb{E}\!\left[
+  \max\!\left(\lambda_1\, \Delta\text{Perf},\;
+    \lambda_2\, \Delta\text{FLOPs},\;
+    \lambda_3\, \Delta\text{Cov}\right)\right]
+\]
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Construct the Pareto frontier by running the model at several
+    compression ratios on a calibration set; record performance, FLOPs,
+    and spatial coverage.
+  \item Train the allocation MLP on the frontier with $\mathcal{L}_{\text{Pareto}}$.
+  \item At inference: the allocation MLP selects budget $B$ and weightings;
+    saliency scores are computed; the top-$B$ tokens are retained; the
+    remaining tokens are pruned before subsequent transformer layers.
+  \item PACE is a plug-in module; the base MLLM is not modified or
+    fine-tuned.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The Pareto formulation provides a formal guarantee: the selected budget
+$B$ lies on the Pareto frontier (no other $B' \neq B$ strictly improves
+all three objectives simultaneously). The spatial coverage constraint ensures
+that selection never degenerates into clustering around a single image region,
+bounding the worst-case missed-region probability.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{At 50\% token retention:} Near-lossless accuracy on VQA,
+    spatial reasoning, and multimodal reasoning benchmarks; FLOPs reduced
+    by 2.1--2.4$\times$.
+  \item \textbf{At 25\% token retention:} Performance improves on chart
+    understanding (spatial coverage prevents missing chart regions that
+    a greedy method would skip); slight degradation on spatial reasoning.
+  \item \textbf{Cross-architecture:} Gains are consistent across multiple
+    native MLLM architectures, confirming that PACE is not tuned to a
+    single model's attention pattern.
+  \item \textbf{Positional signal ablation:} Removing the positional gate
+    $p_{ij}$ hurts spatial-reasoning tasks the most, where token position
+    encodes geometric relationships critical for the answer.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without Pareto allocation (fixed global ratio):} Uniform 50\%
+budget performs well on average but degrades on information-dense inputs
+(too aggressive) and wastes compute on information-sparse inputs (not
+aggressive enough).
+
+\textbf{Without orthogonal decomposition (scalar per-token attention):}
+The saliency map is blurry; clusters of redundant background tokens score
+similarly to salient foreground tokens.
+
+\textbf{Height-only or width-only saliency:} Misses salient regions
+localised in the orthogonal direction (e.g., a horizontal strip of text
+is missed by height-only saliency when the strip occupies few rows).
+
+\textbf{Why native MLLMs tolerate compression:} The authors hypothesise that
+without ViT pre-processing, the transformer distributes attention more
+uniformly in early layers and learns implicit token-aggregation in later
+layers; explicit compression makes this implicit process explicit.
+
+\section*{Reference}
+
+Lei Tian, Chunzheng Zhu, Kai Wu, Yifan Zhang, Haihua Yang.
+\textbf{PACE: Pareto-Adaptive Compression for Efficient Native MLLMs}.
+arXiv:2610.24005, NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.24005}
+
+\end{document}

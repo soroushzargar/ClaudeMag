@@ -1,0 +1,238 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  robot manipulation \textbullet{}
+  skill consolidation \textbullet{}
+  hypernetwork \textbullet{}
+  VLA models}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  NestedVLA: Learning to Consolidate and Generate Skills for
+  Vision-Language-Action Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Nested Hypernetwork Generates Task-Adaptive Parameters Post Hoc,
+  Outperforming Model Merging by 41 Percentage Points}\par\vspace{6pt}
+
+{\small\textbf{By} Guodong Du \& Wanyu Lin (WanyuGroup)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.23271 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Teaching a robot to consolidate skills learned across heterogeneous tasks
+has long been limited by cross-platform data splits, gradient interference
+in joint training, and parameter conflicts in model merging. NestedVLA sidesteps
+all three by learning skills independently and consolidating post hoc through
+\textit{generation} rather than aggregation: a nested hypernetwork, conditioned
+on task context, synthesises task-adaptive action-expert parameter deltas
+on demand and composes them with a frozen base VLA. On MetaWorld, ManiSkill,
+and CALVIN combined, NestedVLA outperforms the best model-merging baseline
+by an average of 41 percentage points. Accepted at NeurIPS 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Consolidating VLA skills across heterogeneous tasks
+    causes gradient interference in joint training and parameter conflicts
+    in model merging.
+  \item[Why it matters:] A general-purpose robot must master dozens of
+    skills without one degrading another; current merging methods degrade
+    all.
+  \item[Method:] Learn skills independently; train a nested hypernetwork
+    to generate task-specific parameter deltas on demand; compose with
+    frozen base VLA.
+  \item[Result:] $+41$ pp average success rate over strongest model-merging
+    baseline across MetaWorld, ManiSkill, and CALVIN.
+  \item[Evidence:] Ablations confirm generation over aggregation is the
+    key factor; adding new skills post hoc requires no global retraining.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+A generalist robot manipulation agent must be a jack of all trades:
+grasping fragile objects, pushing heavy boxes, drawing precise trajectories,
+stacking irregular items. Each skill is typically learned from a dataset
+collected on specific hardware, with a specific camera setup, and sometimes
+on a completely different robot platform.
+
+The dream is a single model that holds all these skills simultaneously. The
+nightmare is that every approach to combining them introduces a new failure
+mode: joint training causes gradient interference; model merging causes
+parameter conflicts; mixture-of-experts routing requires end-to-end
+co-training of all experts from the start.
+
+NestedVLA's key insight is to separate skill \textit{learning} from skill
+\textit{consolidation}, and to implement consolidation as parameter
+generation rather than parameter aggregation.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Joint multi-task training:} Gradient interference arises when
+different skills require conflicting parameter updates; catastrophic
+forgetting prevents stable incorporation of new skills after initial
+training.
+
+\textbf{Model merging (TIES, DARE, task arithmetic):} These methods
+produce a single merged checkpoint by combining parameter deltas; when
+deltas conflict in sign and magnitude, the merged parameters satisfy no
+task well.
+
+\textbf{Mixture of Experts with routing:} All experts must be trained
+end-to-end simultaneously; post-hoc addition of a new skill requires
+full retraining to update the router.
+
+\textbf{Adapter methods:} Per-task adapters do not share structure;
+the number of parameters grows linearly with the number of tasks.
+
+\section{Core Mechanism}
+
+\textbf{Stage 1 --- Independent skill learning:} Each skill $k$ is trained
+independently on its own data $\mathcal{D}_k$, producing a parameter delta
+$\Delta\theta_k^*$ relative to a shared base VLA $\theta_0$.
+
+\textbf{Stage 2 --- Hypernetwork-based consolidation:} A nested hypernetwork
+$\mathcal{H}_\phi$ is trained to reconstruct any $\Delta\theta_k^*$ from
+task context $\tau_k$ and a compressed skill token $e_k = \text{Enc}(\Delta\theta_k^*)$.
+The skill tokens are stored in a compact library. At inference, the
+hypernetwork generates the appropriate delta for the queried task and
+composes it additively with the frozen base:
+\[
+\theta(\tau) = \theta_0 + \mathcal{H}_\phi(\tau,\, \{e_k\})
+\]
+
+\textbf{VLM residuals:} Task-specific shifts in text-conditioned attention
+are stored separately as compressed vectors alongside the skill tokens,
+capturing linguistic context the action expert alone cannot reconstruct.
+
+\section{Technical Formulation}
+
+For skill $k$, the effective policy parameters are
+$\theta_k = \theta_0 + \Delta\theta_k^*$, and the compressed skill token
+is $e_k = \text{Enc}(\Delta\theta_k^*)$.
+
+The hypernetwork $\mathcal{H}_\phi$ is trained with a combined objective:
+\[
+\mathcal{L}(\phi) = \mathbb{E}_{k,(s,a)\sim\mathcal{D}_k}\!\bigl[
+  \|\hat{\Delta\theta}(\tau_k) - \Delta\theta_k^*\|_F^2
+  + \lambda_{\text{BC}}\,\mathcal{L}_{\text{BC}}(\theta_0
+    + \hat{\Delta\theta}(\tau_k);\,s,a)\bigr]
+\]
+where $\hat{\Delta\theta}(\tau_k) = \mathcal{H}_\phi(\tau_k, \{e_k\})$,
+$\|\cdot\|_F$ is the Frobenius norm of the delta, and $\mathcal{L}_{\text{BC}}$
+is the behavioural cloning loss on skill-$k$ demonstrations.
+
+The delta compression uses a patch tokenizer:
+$\Delta\theta_k \in \mathbb{R}^{P \times Q} \mapsto e_k \in \mathbb{R}^d$,
+where $d \ll PQ$. Reconstruction quality vs.\ storage is governed by
+the compression ratio $r = d/(PQ)$.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train each skill independently on $\mathcal{D}_k$ to obtain
+    $\Delta\theta_k^*$.
+  \item Compress each delta: $e_k = \text{Enc}(\Delta\theta_k^*)$.
+  \item Train $\mathcal{H}_\phi$ on all $(e_k, \tau_k, \Delta\theta_k^*)$
+    triples.
+  \item At inference: encode task context $\tau$; retrieve relevant $e_k$;
+    run $\mathcal{H}_\phi$ to obtain $\hat{\Delta\theta}$; execute with
+    $\theta_0 + \hat{\Delta\theta}$.
+  \item To add a new skill: train it independently, encode its delta,
+    add token to the library. No global retraining required.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The Frobenius norm objective provides a formal recovery guarantee: if
+$\mathcal{H}_\phi$ achieves zero training loss, then at test time it recovers
+$\Delta\theta_k^*$ exactly for any task whose context $\tau_k$ was seen
+during training. In practice, the reconstruction error is a measure of how
+well the hypernetwork generalises to novel task phrasings; the paper shows
+generalisation holds empirically to held-out phrasings not seen in training.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{MetaWorld (50 tasks):} NestedVLA outperforms task arithmetic,
+    TIES, and DARE; gains are largest on dexterous tasks where merging
+    creates severe delta conflicts.
+  \item \textbf{ManiSkill:} Consistent improvements across diverse
+    manipulation categories; the hypernetwork generalises to task phrasings
+    not seen during consolidation training.
+  \item \textbf{CALVIN:} Language-conditioned manipulation; VLM residuals
+    contribute strongly here, confirming that the linguistic context they
+    carry is not recoverable from the action-expert delta alone.
+  \item \textbf{Average gain:} $+41$ pp over the strongest merging baseline
+    across all three benchmarks combined.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without hypernetwork (direct merge):} Returns to merging baseline
+performance; the generation step is the critical ingredient.
+
+\textbf{Without independent pretraining (jointly trained):} Hypernetwork
+training becomes unstable; the fixed deltas serve as stable anchors for
+the generation objective.
+
+\textbf{Without VLM residuals:} Performance drops on CALVIN; the action
+expert alone cannot reconstruct task-specific language-conditioned attention.
+
+\textbf{Compression ratio sweep:} Aggressive compression ($r < 0.05$)
+degrades fine-grained dexterous tasks while performing well on coarse
+manipulation; a ratio of $r \approx 0.1$ is the practical sweet spot.
+
+\textbf{Why generation beats aggregation:} Parameter averaging smooths
+task-specific directions in parameter space; a hypernetwork preserves
+them by mapping context to the appropriate structured delta directly.
+
+\section*{Reference}
+
+Guodong Du, Wanyu Lin.
+\textbf{NestedVLA: Learning to Consolidate and Generate Skills for
+Vision-Language-Action Models}.
+arXiv:2610.23271, NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.23271}
+
+\end{document}

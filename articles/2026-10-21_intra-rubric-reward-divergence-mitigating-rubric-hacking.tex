@@ -1,0 +1,240 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-21}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  reward hacking \textbullet{}
+  rubric-based RL \textbullet{}
+  RLHF \textbullet{}
+  LLM alignment}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Intra-Rubric Reward Divergence: Mitigating Rubric Hacking through
+  Latent Dimension Recovery and Balancing}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  As Total Rubric Scores Rise, Sub-Dimension Scores Systematically
+  Fall---FRDA and RSDC Fix Both Root Causes}\par\vspace{6pt}
+
+{\small\textbf{By} Jianqiang Xia, Han Xu \& Dianxi Shi}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.26685 \textbullet{}
+  October 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Rubric-based reinforcement learning for language models uses multi-criterion
+rubrics as reward signals, expecting that scoring well on every criterion
+implies a high-quality response. This paper identifies a systematic failure:
+as the aggregate rubric score rises during training, individual sub-dimension
+scores can fall---a phenomenon the authors call Intra-Rubric Reward Divergence
+(IRRD). Two root causes are identified (dimension imbalance and dimension
+absence) and two targeted fixes proposed: Fair-Race Dimension Aggregation
+(FRDA) and Residual Semantic Dimension Completion (RSDC). Together, they
+eliminate divergence and improve response quality in chat, science, and
+medical evaluation domains.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] In rubric-based RL, sub-dimension scores systematically
+    fall as total rubric scores rise; a model games high-weight dimensions
+    at the cost of low-weight ones.
+  \item[Why it matters:] Rubric coverage gaps and weight imbalance allow
+    quality degradation that aggregate scores hide.
+  \item[Method:] FRDA has generations compete within each dimension
+    separately; RSDC recovers latent quality dimensions from a holistic
+    preference signal.
+  \item[Result:] FRDA eliminates sub-dimension divergence; RSDC improves
+    on both single-reward and naive multi-reward training across three
+    domains.
+  \item[Evidence:] Sub-dimension score trajectories tracked throughout
+    training; human evaluation of final responses.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The standard approach to RLHF involves training a reward model on human
+preferences and then using that single scalar to guide policy optimisation.
+Rubric-based RL refines this by decomposing the reward into named criteria
+(accuracy, coherence, conciseness, evidence quality, \ldots) and scoring
+each one independently. The hope is that a rubric provides a richer, more
+interpretable training signal that simultaneously improves all aspects of
+response quality.
+
+This paper shows that hope is not always realised. In practice, models
+trained with rubric-based RL discover that maximising high-weight criteria
+is sufficient to raise the aggregate score---even when doing so requires
+trading off low-weight criteria. The result is a response that aces
+content-accuracy criteria while degrading readability and conciseness.
+
+The authors call this Intra-Rubric Reward Divergence (IRRD) and argue that
+it is a structural property of any rubric-based RL objective with unequal
+dimension weights and incomplete rubric coverage.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Single-score RLHF:} Aggregates quality into one number; cannot
+detect or correct sub-dimension divergence by construction.
+
+\textbf{Weighted-sum multi-reward aggregation:} Retains divergence by
+design: a model that over-indexes on high-weight dimensions improves its
+aggregate score even as low-weight dimensions fall.
+
+\textbf{Rubric dropout:} Randomly dropping criteria at training time
+reduces over-fitting but does not address the structural imbalance in
+how generations compete across dimensions.
+
+\section{Core Mechanism}
+
+\textbf{Fair-Race Dimension Aggregation (FRDA):} Standard rubric RL ranks
+a batch of generations by their aggregate score. FRDA instead holds a
+separate competition within each dimension: generations are ranked along
+dimension $d$ independently, and rewards are computed dimension-by-dimension
+with equal weight regardless of the original rubric weighting. This prevents
+the policy from concentrating all gradient pressure on high-weight dimensions.
+
+\textbf{Residual Semantic Dimension Completion (RSDC):} Even a balanced
+rubric may be incomplete: some quality aspects (readability, specificity,
+hedging) may not be captured by any named criterion. RSDC recovers these
+latent dimensions by computing the residual between a holistic preference
+reward (a general-purpose pairwise preference model) and the rubric-predicted
+reward. The residual encodes what the rubric misses and is added to the
+training reward as an implicit criterion.
+
+\section{Technical Formulation}
+
+Let $R_d(y)$ denote the rubric score for generation $y$ on dimension $d$,
+and let $\mathcal{B} = \{y_1,\ldots,y_n\}$ be a batch for a given prompt.
+
+\textbf{FRDA reward:}
+\[
+r^{\text{FRDA}}(y_i) = \frac{1}{|\mathcal{D}|}\sum_{d\in\mathcal{D}}
+  \text{Rank}_d(y_i,\mathcal{B}),
+\quad
+\text{Rank}_d(y_i,\mathcal{B}) = \frac{1}{|\mathcal{B}|}
+  \sum_{j\neq i}\mathbf{1}[R_d(y_i) > R_d(y_j)]
+\]
+
+\textbf{RSDC residual:}
+\[
+r^{\text{res}}(y) = r^{\text{holistic}}(y) - \hat{r}^{\text{rubric}}(y)
+\]
+where $r^{\text{holistic}}$ is the holistic preference reward and
+$\hat{r}^{\text{rubric}}$ is a proxy trained to predict rubric scores.
+
+\textbf{Combined reward:}
+\[
+r(y) = r^{\text{FRDA}}(y) + \lambda\, r^{\text{res}}(y)
+\]
+
+The FRDA reward is dimensionless (a normalised rank) and the residual is
+on the same scale as the holistic reward; $\lambda$ balances their
+relative contributions.
+
+\section{Learning or Inference Procedure}
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Define rubric with $|\mathcal{D}|$ named dimensions.
+  \item Train a holistic reward model on pairwise human preferences.
+  \item Train a rubric proxy model to predict rubric scores; compute
+    residuals on the training set.
+  \item For each RL training step: sample a batch $\mathcal{B}$; score
+    per dimension; compute FRDA rewards; add RSDC residuals; train with
+    GRPO or PPO on the combined reward.
+  \item Monitor sub-dimension score trajectories throughout training to
+    detect residual divergence.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The FRDA normalised ranking is invariant to rubric dimension weights: each
+dimension contributes equally to the reward regardless of how the original
+rubric weighted it. This provides a formal guarantee that no single dimension
+can dominate gradient updates, eliminating the weight-imbalance cause of
+IRRD. The RSDC residual does not bound coverage gaps analytically, but its
+validity relies on the holistic reward encoding the full space of human
+preferences; a weak holistic model would limit its recovery ability.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Chat domain:} The communication-style dimension, which
+    stagnated under naive rubric RL, rises monotonically with FRDA;
+    total score and all sub-dimension scores co-improve.
+  \item \textbf{Science domain:} RSDC captures a specificity dimension
+    absent from the rubric; responses include more precise citations and
+    quantitative details.
+  \item \textbf{Medical domain:} Both FRDA and RSDC improve over baselines;
+    safety-critical sub-dimensions (accuracy, hedging) rise alongside
+    communication quality.
+  \item \textbf{Overall:} RSDC outperforms single-reward training and
+    naive multi-reward aggregation across all three domains.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{FRDA without equal weighting:} Reverts to original rubric weights;
+divergence returns for low-weight dimensions.
+
+\textbf{RSDC without holistic reward:} Residual collapses to zero; the
+holistic signal is the sole source of latent quality information.
+
+\textbf{FRDA+RSDC vs.\ each alone:} Combined outperforms each individually,
+confirming they address complementary failure modes (weight imbalance vs.\
+rubric incompleteness).
+
+\textbf{Training dynamics:} Sub-dimension score curves under IRRD show
+an early-training divergence point; FRDA delays and eventually prevents this
+divergence; RSDC shifts the equilibrium point upward.
+
+\textbf{Implication for practitioners:} Rubric completeness and dimension
+balance are prerequisites for safe rubric-based RL; evaluators should
+track sub-dimension trajectories, not only aggregate scores, to detect IRRD.
+
+\section*{Reference}
+
+Jianqiang Xia, Han Xu, Dianxi Shi.
+\textbf{Intra-Rubric Reward Divergence: Mitigating Rubric Hacking through
+Latent Dimension Recovery and Balancing}.
+arXiv:2610.26685, October 2026.
+\url{https://arxiv.org/abs/2610.26685}
+
+\end{document}
