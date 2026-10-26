@@ -1,0 +1,270 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-26}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  safe reinforcement learning \textbullet{}
+  constrained MDP \textbullet{}
+  representation learning \textbullet{}
+  low-rank MDP}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Primal-Dual Representation Learning for Low-Rank Constrained MDPs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  The First Sample-Efficient Algorithms with Theoretical Guarantees for
+  Continuous-State Safe RL Under Both Soft and Hard Violation Constraints}\par\vspace{6pt}
+
+{\small\textbf{By} Chenhao Zhou, Chao Zhang, Wensong Bai, Hanbin Zhao,
+  Hui Qian}\par\vspace{2pt}
+
+{\small\color{keywordgray}NeurIPS 2026 (Poster \#151600)}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Safe reinforcement learning requires an agent to maximize return while
+keeping constraint violations within a budget---a challenge that, for
+continuous high-dimensional state spaces, has lacked end-to-end
+theoretical guarantees when the transition model must be learned from
+data. This paper introduces REP-PD-TEG and REP-PD-H-TEG, two
+primal-dual algorithms that jointly learn low-rank transition
+representations and satisfy safety constraints, achieving
+$\tilde{O}(\sqrt{K})$ return regret (soft violation) and certified
+per-episode constraint satisfaction (hard violation) respectively. The
+key insight is that representation learning and dual updates can be
+decoupled: the former proceeds by maximum-likelihood exploration,
+independent of the safety objective, while the latter handles constraints
+via an optimistic Lagrangian with a stabilized dual search.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Safe RL in continuous state spaces requires learning
+    transition representations and satisfying constraints simultaneously;
+    no prior method provided end-to-end guarantees for both.
+  \item[Why it matters:] Real-world safe RL (robotics, autonomous driving)
+    has continuous state spaces; tabular guarantees do not apply, and
+    deep safe RL methods (CPO, PDO) lack theoretical backing.
+  \item[Method:] Decoupled representation learning via ML exploration,
+    followed by optimistic Lagrangian planning (REP-PD-TEG for soft
+    violation) or per-episode feasibility certification (REP-PD-H-TEG).
+  \item[Result:] $\tilde{O}(\sqrt{K})$ regret and $\tilde{O}(K^{3/4})$
+    total samples (soft); certified per-episode zero violation (hard).
+  \item[Evidence:] Continuous-state safety gridworld, constrained LQR;
+    ablations on features, exploration rate, dual step size.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Safe RL is the problem of training policies that maximize cumulative reward
+while respecting safety constraints expressed as budgets on cumulative or
+per-episode costs. It is central to deploying RL in physical systems---robots
+that should not fall, vehicles that should not collide, and medical dosing
+agents that should not exceed toxic thresholds.
+
+The theoretical safe RL literature has largely studied tabular settings, where
+finite-sample guarantees can be derived from counting arguments over a discrete
+state space. For continuous state spaces, function approximation is necessary,
+and the low-rank MDP model---where the transition kernel factorizes as
+$P(s' \mid s, a) = \phi(s, a)^\top \mu(s')$ for low-dimensional features
+$\phi$ and $\mu$---is the natural extension that retains mathematical tractability.
+
+Until this paper, no work had provided end-to-end sample-efficiency guarantees
+for the combined problem of learning the representation $\phi$ and satisfying
+a safety constraint in a continuous-state low-rank CMDP.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Tabular constrained RL (C-UCBVI, OptPess-LP):}
+Provides finite-sample guarantees but requires discretizing the state space,
+which is computationally intractable in high dimensions and introduces
+approximation error proportional to the discretization resolution.
+
+\textbf{Linear function approximation for CMDPs:}
+Assumes the true features $\phi$ are given; cannot handle the setting where
+they must be estimated from data, which introduces feature estimation error
+that can violate constraint guarantees.
+
+\textbf{Deep safe RL (CPO, PDO, RCPO):}
+Achieves strong empirical performance but provides no finite-sample bounds on
+regret or constraint violation; convergence guarantees require idealized
+assumptions rarely met in practice.
+
+\textbf{Unconstrained low-rank MDP representation learning:}
+Techniques such as FLAMBE and REPUCB learn $\phi$ by maximum likelihood and
+achieve provably near-optimal policies---but the dual variable of the safety
+constraint interacts non-trivially with the UCB bonus, breaking the direct
+extension.
+
+\section{Core Mechanism}
+
+The key architectural insight is that representation learning and safety
+constraint handling can be \emph{decoupled}:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Representation learning:} Run a decaying epsilon-greedy
+    exploration policy to collect transition data; fit $\hat{\phi}$ by
+    maximum-likelihood. This is independent of the safety objective.
+  \item \textbf{Primal-dual planning:} Use $\hat{\phi}$ to construct UCB-style
+    optimistic estimates of both the return $\hat{V}^r_\pi$ and the constraint
+    utility $\hat{V}^c_\pi$. Plan with the optimistic Lagrangian:
+    $\max_\pi \min_\lambda \hat{V}^r_\pi - \lambda(\hat{V}^c_\pi - b)$.
+    Update $\lambda$ by dual gradient ascent.
+\end{enumerate}
+
+\textbf{REP-PD-TEG} handles the soft (cumulative) violation case with
+standard UCB bonuses and gradient ascent on the dual.
+
+\textbf{REP-PD-H-TEG} handles the hard (per-episode certified) violation case
+by adding a lower-confidence constraint certificate: before deploying any policy,
+the algorithm verifies that the pessimistic constraint estimate $\underline{V}^c_\pi$
+is below the budget $b$, preventing episodes that violate the constraint even in
+the worst case.
+
+\section{Technical Formulation}
+
+The low-rank CMDP structure assumes:
+\[
+P(s' \mid s, a) = \phi(s,a)^\top \mu(s'), \quad \phi: \mathcal{S}\times\mathcal{A} \to \mathbb{R}^d
+\]
+The constrained optimization problem is:
+\[
+\max_\pi V^r_\pi \quad \text{s.t.} \quad V^c_\pi \leq b
+\]
+The Lagrangian relaxation is:
+\[
+\mathcal{L}(\pi, \lambda) = V^r_\pi - \lambda(V^c_\pi - b), \quad \lambda \geq 0
+\]
+Maximum-likelihood feature learning from an epsilon-greedy exploration policy
+with budget $T_0$ achieves feature error $\|\hat{\phi} - \phi^*\|_\infty \leq \epsilon_\phi$
+with high probability for $T_0 = \tilde{O}(d^2/\epsilon_\phi^2)$.
+
+With the learned features, the optimistic return and constraint estimates are:
+\[
+\hat{V}^r_\pi = V^r_\pi(\hat{\phi}) + \underbrace{\beta_r \cdot b^\phi_\pi}_{\text{UCB bonus}},
+\quad
+\hat{V}^c_\pi = V^c_\pi(\hat{\phi}) + \beta_c \cdot b^\phi_\pi
+\]
+The main theoretical results for REP-PD-TEG are:
+\[
+\text{Return regret} = \tilde{O}(\sqrt{K}), \quad
+\text{Total samples} = \tilde{O}(K^{3/4})
+\]
+For REP-PD-H-TEG, the per-episode hard-violation guarantee holds with
+probability $1-\delta$ for all $K$ episodes simultaneously.
+
+\section{Learning or Inference Procedure}
+
+\textbf{REP-PD-TEG:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect $T_0$ episodes of epsilon-greedy data; fit $\hat{\phi}$ by MLE.
+  \item For each episode $k$: compute optimistic $\hat{V}^r$, $\hat{V}^c$
+    using $\hat{\phi}$ and UCB bonuses; solve the optimistic Lagrangian for
+    $\pi_k$; deploy $\pi_k$; update $\lambda$ by gradient ascent:
+    $\lambda \leftarrow \lambda + \eta_\lambda (V^c_{\pi_k} - b)$.
+\end{enumerate}
+
+\textbf{REP-PD-H-TEG:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Steps 1--2 as above, but before deploying $\pi_k$, compute the
+    pessimistic lower bound $\underline{V}^c_{\pi_k}$ using a lower-confidence
+    interval on $\hat{V}^c$.
+  \item If $\underline{V}^c_{\pi_k} \leq b$: deploy $\pi_k$ (certified safe).
+  \item Otherwise: invoke the stabilized dual search to find a feasible policy
+    (shrink dual step size if the certificate is tight).
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+\textbf{Soft violation (REP-PD-TEG):}
+The cumulative return regret over $K$ episodes is $\text{Reg}_K = \tilde{O}(\sqrt{K})$,
+and the total cumulative constraint violation is bounded by $\tilde{O}(\sqrt{K})$.
+Total episodes including exploration: $\tilde{O}(K^{3/4})$.
+
+\textbf{Hard violation (REP-PD-H-TEG):}
+With probability $1-\delta$, the deployed policy satisfies $V^c_{\pi_k} \leq b$
+for all $k = 1, \ldots, K$ simultaneously. Return regret is slightly worse than
+the soft case due to the conservative certification step but remains
+$\text{poly}(K)$-sublinear.
+
+\textbf{First result of its kind:}
+The authors claim these are the first finite-sample guarantees for
+representation learning in low-rank CMDPs with continuous state spaces
+under both soft and certified hard violation settings.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Continuous safety gridworld:} REP-PD-TEG keeps cumulative
+    constraint violations below budget; REP-PD-H-TEG achieves zero per-episode
+    violations after an initial feature-learning phase.
+  \item \textbf{Constrained LQR:} Both algorithms outperform CPO and PDO
+    (which use fixed features) when the provided features are incorrect;
+    performance matches CPO with correct features.
+  \item \textbf{Benefit of learned features:} Methods with fixed (incorrect)
+    features consistently violate the constraint budget; the adaptive feature
+    learning of REP-PD-TEG removes this failure mode.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Fixed vs.\ learned features:}
+Ground-truth features in the primal-dual step achieve near-optimal performance;
+incorrect fixed features fail to satisfy constraints and achieve poor return,
+confirming the necessity of end-to-end representation learning.
+
+\textbf{Epsilon-greedy schedule:}
+A decaying schedule is critical; a constant rate leads to over-exploration and
+slower convergence; an overly fast decay leads to poor feature quality and
+constraint violations.
+
+\textbf{Dual step size stability (REP-PD-H-TEG):}
+The stabilized dual search (reduced step size near the constraint boundary)
+is essential for hard-violation safety; naive gradient ascent on the dual
+oscillates and produces intermittent per-episode violations.
+
+\section*{Reference}
+
+Chenhao Zhou, Chao Zhang, Wensong Bai, Hanbin Zhao, Hui Qian.
+\textbf{Primal-Dual Representation Learning for Low-Rank Constrained MDPs}.
+NeurIPS 2026 (Poster \#151600).
+\url{https://neurips.cc/virtual/2026/poster/151600}
+
+\end{document}

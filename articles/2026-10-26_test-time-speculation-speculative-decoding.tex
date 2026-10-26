@@ -1,0 +1,249 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-26}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  speculative decoding \textbullet{}
+  LLM inference acceleration \textbullet{}
+  online distillation \textbullet{}
+  chain-of-thought}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Test-Time Speculation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Continuously Adapting the Draft Model During Generation Sustains
+  Speculative Speedups Throughout Long Chain-of-Thought Outputs}\par\vspace{6pt}
+
+{\small\textbf{By} Avinash Kumar, Sujay Sanghavi, Poulami Das
+  (UT Austin)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2605.09329 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Speculative decoding accelerates LLM inference by having a small draft
+model propose candidate tokens that a large target model verifies in
+parallel. In practice, however, the acceptance length of trained
+speculators---including state-of-the-art systems EAGLE-3, DFlash, and
+PARD---decays to near 1 after a few thousand output tokens, eliminating
+the speedup for long chain-of-thought generation. Test-Time Speculation
+(TTS) fixes this by adapting the draft model online, using the
+target-model evaluations that the verification step already performs, at
+zero added inference cost. On Qwen-3, Qwen-3.5, and Llama~3.1 model
+families, TTS improves acceptance length by up to 72\% and 41\% on average
+over the best static speculator, translating to $2.1$--$3.4\times$ wall-clock
+speedup on 5K-token generation tasks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Trained speculators are distilled offline on short sequences;
+    their acceptance length decays toward 1 on the long CoT outputs that matter
+    most for reasoning tasks.
+  \item[Why it matters:] Speculative decoding is the leading inference
+    acceleration technique, but its speedup evaporates precisely for the
+    long-horizon tasks that consume the most compute.
+  \item[Method:] Online KL distillation of the draft model using
+    target-model token probabilities already computed by the verification step,
+    plus a proximity regularizer to prevent forgetting.
+  \item[Result:] Up to 72\% improvement in acceptance length; $2.1$--$3.4\times$
+    wall-clock speedup on 5K+ token outputs.
+  \item[Evidence:] MATH-500, HumanEval+, long-document summarization;
+    Qwen-3/3.5 and Llama~3.1 families; ablations on regularizer and step count.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Speculative decoding exploits the asymmetry between generation and
+verification: a small, fast draft model proposes $k$ tokens, and the large
+target model verifies all $k$ in one forward pass---accepting the longest
+prefix consistent with its distribution. When the draft model agrees with the
+target model, the effective throughput multiplies by $k$; when it does not,
+the cost is at most one wasted draft pass.
+
+The technique's Achilles' heel is draft quality at long context lengths.
+All existing speculators are trained on datasets of typical generation lengths
+(hundreds to low thousands of tokens); at inference, reasoning-intensive tasks
+such as MATH, LiveCodeBench, and multi-step QA generate five to ten thousand
+tokens. The draft model's internal representations, tuned for short contexts,
+drift from the target's as the context grows, and acceptance length collapses.
+
+Test-Time Speculation reframes speculative decoding as a continual learning
+problem: the draft model is a student that should track the target's
+distribution throughout generation, not just at the start.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Static draft models (EAGLE-3, DFlash, PARD):}
+All trained offline on sequences far shorter than inference-time CoT outputs.
+No mechanism exists to update the draft as the context lengthens.
+
+\textbf{Longer training sequences:}
+Simply including longer sequences in offline training is expensive, requires
+representative CoT data that may not be available, and still does not adapt to
+the specific prompt or intermediate reasoning steps of a given inference call.
+
+\textbf{Online re-training approaches:}
+Prior online adaptation methods for NLP require periodic re-training runs with
+additional target-model calls, breaking the generation pipeline and negating
+the speedup.
+
+\section{Core Mechanism}
+
+At each speculative decoding step, the target model already evaluates the
+$k$ draft tokens and produces per-token probability distributions
+$\pi^*(\cdot \mid x_{<j})$ for $j = t, \ldots, t+k$. These distributions are
+the exact student-teacher signal needed to distill the draft model for the
+current context---and conventional speculative decoding discards them after
+acceptance/rejection decisions.
+
+TTS re-uses these distributions to take one gradient step on the draft model
+after each verification pass. The gradient step minimizes a KL distillation
+loss plus a proximity regularizer that prevents the draft from forgetting its
+base distribution. Because the gradient is taken on a small draft model
+(1--3B parameters) and no additional target-model calls are needed, the
+per-step overhead is negligible.
+
+\section{Technical Formulation}
+
+Let $\pi^*$ denote the target model and $\pi_\theta$ the draft model with
+parameters $\theta$. At step $t$, the token-level KL distillation loss over
+the $k$ verified positions is:
+\[
+\mathcal{L}_t(\theta)
+  = \frac{1}{k}\sum_{j=t}^{t+k} D_{\text{KL}}\!\left(
+    \pi^*(\cdot \mid x_{<j}) \;\|\; \pi_\theta(\cdot \mid x_{<j})
+  \right)
+\]
+The proximity regularizer prevents catastrophic forgetting:
+\[
+\Omega(\theta, \theta_{t-1}) = \|\theta - \theta_{t-1}\|_2^2
+\]
+The combined update is a single gradient step:
+\[
+\theta_t = \theta_{t-1} - \eta\,\nabla_\theta\!\left[
+  \mathcal{L}_t(\theta_{t-1}) + \beta\,\Omega(\theta_{t-1}, \theta_{t-2})
+\right]
+\]
+with learning rate $\eta$ following a cosine decay schedule over the
+generation horizon, and regularization weight $\beta$ set so that total
+parameter shift remains within a small budget.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Standard speculative decoding (baseline):}
+Frozen draft model; acceptance length decays with context length.
+
+\textbf{TTS (proposed):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialize $\pi_\theta$ from any pre-trained speculator.
+  \item At each verification step:
+    \begin{enumerate}[label=(\alph*),itemsep=1pt,parsep=0pt]
+      \item Accept/reject draft tokens as usual.
+      \item Compute $\mathcal{L}_t$ using the target distributions already
+        obtained.
+      \item Take one gradient step to update $\theta$.
+    \end{enumerate}
+  \item Continue generation with the updated draft model.
+\end{enumerate}
+
+No additional target-model calls. The gradient step on the small draft model
+adds $< 5\%$ latency overhead in practice.
+
+\section{What the Guarantee Says}
+
+The distillation loss minimized at each step is the expected log-probability
+ratio between the target and draft at the \emph{current} context. Minimizing
+it pushes the draft toward the target's distribution at the positions just
+verified. The proximity regularizer bounds the per-step parameter shift,
+ensuring that adaptation at step $t$ does not degrade draft quality at step
+$t-1$'s context distribution beyond a controlled amount. Together, these
+properties imply that the acceptance rate converges to a level bounded by the
+target's entropy at the current context---the theoretical maximum for any
+draft model---rather than decaying toward 1.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{MATH-500 (long mathematical reasoning):} TTS achieves $3.4\times$
+    wall-clock speedup over the target at 5K tokens; the best static speculator
+    achieves $1.5\times$ at the same length.
+  \item \textbf{HumanEval+ (long code generation):} $2.7\times$ vs.\ $1.8\times$
+    for TTS and the best static speculator respectively.
+  \item \textbf{Acceptance length trajectory:} Static speculators show a monotonic
+    decay from $\sim 4.5$ tokens at 500 tokens to $\sim 1.2$ at 5K tokens;
+    TTS maintains $\sim 4.0$ tokens throughout.
+  \item \textbf{Model families:} Gains are consistent across Qwen-3-8B,
+    Qwen-3.5-32B, and Llama-3.1-70B with their respective draft models.
+  \item \textbf{Compatibility:} TTS improves acceptance length for all three
+    base speculators (EAGLE-3, DFlash, PARD); EAGLE-3 + TTS achieves the
+    best absolute acceptance length.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{No proximity regularizer:}
+The draft overfits to the current context window and loses generalization to
+the next step; acceptance length drops by 18\% compared to full TTS.
+
+\textbf{Multiple gradient steps per verification:}
+Two steps per round adds compute without improving acceptance; one step is
+both necessary and sufficient.
+
+\textbf{Fixed vs.\ cosine learning rate:}
+Cosine decay improves stability and final acceptance length by $\sim 5\%$;
+a fixed high rate causes oscillation in later generation steps.
+
+\textbf{Gains grow with output length:}
+Improvement over the base speculator is near-zero at $< 500$ tokens (where
+the training distribution covers the context) and reaches its maximum at
+$> 5{,}000$ tokens, confirming that TTS specifically addresses the
+out-of-distribution long-context problem.
+
+\section*{Reference}
+
+Avinash Kumar, Sujay Sanghavi, Poulami Das.
+\textbf{Test-Time Speculation}.
+arXiv:2605.09329. NeurIPS 2026.
+\url{https://arxiv.org/abs/2605.09329}
+
+\end{document}

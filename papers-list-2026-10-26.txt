@@ -1,0 +1,72 @@
+ML Papers List — 2026-10-26
+Generated for ClaudeMag
+
+1. MoEZip: Routing-Aware KV Cache Compression for Sparse Mixture-of-Experts LLMs
+   Authors: Minsang Kim, Seungjun Baek
+   Venue/ID: arXiv:2610.30206 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2610.30206
+   Summary: Existing KV cache compression methods for dense transformers overlook a problem
+   unique to sparse mixture-of-experts (MoE) architectures: evicting context entries changes
+   which experts are selected at decode time, degrading generation quality in ways that
+   attention-only scoring cannot detect. MoEZip proposes a Fisher-information-based routing
+   sensitivity metric that measures how each context position perturbs the router's distribution,
+   for both softmax-type and sigmoid-type MoE routing. Combined with attention scores from
+   instruction tokens, this dual-signal importance measure selects entries to retain. At a 10%
+   KV retention ratio, MoEZip outperforms the prior state-of-the-art (KVZip) by +24 and +20
+   average points on LongBench and RULER, corresponding to 2.3× and 4.9× higher scores.
+
+2. FiRe: Fine-grained Multimodal Reasoning for Enhanced Image Generation
+   Authors: Yongjin Kim, Yoonjin Oh, Yerin Kim, Hyomin Kim, Jeeyoung Yun, Yujung Heo,
+            Minjun Kim, Sungwoong Kim
+   Venue/ID: arXiv:2604.13491 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2604.13491
+   Summary: Text-to-image generation guided by reasoning typically relies on prompt augmentation
+   or whole-image feedback, which limits fine-grained control. FiRe decomposes the user prompt
+   into a set of visual requirements, checks each requirement against the generated image using a
+   multimodal LLM, and refines the image locally based on per-requirement feedback. The method
+   also introduces FiRe-GRPO, a reinforcement learning variant that assigns a reward to each
+   reasoning step in the check-refine cycle rather than only to the final image. FiRe achieves
+   consistent gains over text-to-image baselines, with the largest improvements on compositional
+   prompts requiring simultaneous satisfaction of multiple visual constraints.
+
+3. Human Cognitive Benchmarks Reveal Foundational Visual Gaps in MLLMs
+   Authors: Jen-Tse Huang, Dasen Dai, Jen-Yuan Huang, Youliang Yuan, Xiaoyuan Liu,
+            Wenxuan Wang, Wenxiang Jiao, Pinjia He, Zhaopeng Tu, Haodong Duan
+   Venue/ID: arXiv:2502.16435 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2502.16435
+   Summary: Multimodal LLMs are routinely evaluated on academic visual benchmarks, but these
+   tasks may not expose the low-level visual cognitive capabilities that human vision depends on.
+   The authors introduce VisFactor, which digitizes 20 vision-centric subtests from FRCT (a
+   well-established cognitive psychology battery) covering four domains: spatial reasoning,
+   perceptual speed, visualization, and visual memory. Evaluated on 23 frontier MLLMs—including
+   GPT, Gemini, LLaMA, and Qwen—the best model scores only 30.17 out of 100, exposing large
+   foundational visual gaps that aggregate accuracy metrics on conventional benchmarks conceal.
+
+4. Test-Time Speculation
+   Authors: Avinash Kumar, Sujay Sanghavi, Poulami Das
+   Venue/ID: arXiv:2605.09329 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2605.09329
+   Summary: Speculative decoding can dramatically accelerate LLM inference, but the acceptance
+   length of trained draft models—including state-of-the-art systems like EAGLE-3, DFlash, and
+   PARD—degrades toward 1 within a few thousand output tokens because they are trained on short
+   sequences. Test-Time Speculation (TTS) addresses this by continuously adapting the draft model
+   during generation using the target-model evaluations already performed by the verification step,
+   at no added inference cost. The student-teacher KL loss with a proximity regularizer recovers
+   and sustains high acceptance lengths throughout long chain-of-thought outputs. TTS improves
+   acceptance length by up to 72% and 41% on average over state-of-the-art speculators across
+   Qwen-3, Qwen-3.5, and Llama 3.1 models.
+
+5. Primal-Dual Representation Learning for Low-Rank Constrained MDPs
+   Authors: Chenhao Zhou, Chao Zhang, Wensong Bai, Hanbin Zhao, Hui Qian
+   Venue/ID: NeurIPS 2026 (Poster #151600)
+   URL: https://neurips.cc/virtual/2026/poster/151600
+   Summary: Safe reinforcement learning in continuous-state settings requires learning transition
+   representations while keeping constraint violations under control—a combination that prior
+   theory did not address jointly. The authors study low-rank CMDPs with continuous state spaces
+   and propose two algorithms: REP-PD-TEG for the soft (cumulative) violation setting, achieving
+   an Õ(√K) regret bound on the return policy, and REP-PD-H-TEG for the hard (certified
+   per-episode) violation setting. The key technique combines maximum-likelihood feature learning
+   from a decaying-epsilon-greedy exploration policy with optimistic Lagrangian planning and a
+   stabilized dual search. The paper claims to be the first to provide theoretical guarantees for
+   representation learning in low-rank continuous-state CMDPs under both soft and hard violation
+   constraints.

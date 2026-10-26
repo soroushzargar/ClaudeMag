@@ -1,0 +1,244 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-26}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal LLM evaluation \textbullet{}
+  visual cognition \textbullet{}
+  psychometric benchmark \textbullet{}
+  spatial reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Human Cognitive Benchmarks Reveal Foundational Visual Gaps
+  in MLLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  VisFactor: 23 Frontier Models Score Below 31\% on Psychometric Visual
+  Tests Normed to Human Populations}\par\vspace{6pt}
+
+{\small\textbf{By} Jen-Tse Huang, Dasen Dai, Jen-Yuan Huang, Youliang Yuan,
+  Xiaoyuan Liu, Wenxuan Wang, Wenxiang Jiao, Pinjia He, Zhaopeng Tu,
+  Haodong Duan (CUHK-ARISE)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2502.16435 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multimodal LLMs score impressively on academic visual benchmarks, yet
+those benchmarks allow language priors and common-sense shortcuts to
+compensate for weak raw visual perception. VisFactor digitizes 20
+vision-centric subtests from the Factor-Referenced Cognitive Tests
+(FRCT)---a decades-old psychometric battery designed to isolate specific
+human visual faculties---and reveals that 23 frontier MLLMs, including
+GPT, Gemini, and Qwen families, achieve a best score of 30.17 out of
+100. The human norm is approximately 80. Neither scale nor
+chain-of-thought prompting closes the gap, exposing foundational
+deficits in spatial reasoning and visualization that conventional
+benchmarks conceal.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Academic MLLM benchmarks allow language shortcuts and
+    miss the low-level visual cognition that human vision relies on.
+  \item[Why it matters:] Systems deployed in visually demanding roles
+    (medical imaging, robotics, design) require the cognitive visual
+    capabilities that current benchmarks do not probe.
+  \item[Method:] VisFactor digitizes 20 FRCT vision subtests spanning
+    spatial reasoning, perceptual speed, visualization, and visual memory
+    into zero-shot multiple-choice questions.
+  \item[Result:] Best of 23 frontier MLLMs scores 30.17/100; human
+    norm $\approx$ 80; no model reaches the human level on any domain.
+  \item[Evidence:] 23 MLLMs (GPT, Gemini, Claude, LLaMA, Qwen, InternVL);
+    ablations confirm visual engagement, rule out position bias.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The standard narrative in multimodal AI is one of rapid convergence: each
+new MLLM generation narrows the gap to human performance on VQA, image
+captioning, and visual reasoning benchmarks. This narrative is misleading
+because those benchmarks are designed by ML researchers and systematically
+admit language-based strategies that bypass genuine visual computation.
+
+Cognitive psychologists have known for decades that human visual cognition
+is a multi-factor system encompassing spatial visualization, perceptual
+speed, form completion, and short-term visual memory---each measurable
+independently with psychometric instruments normed to large human populations.
+VisFactor applies those instruments to MLLMs and finds a strikingly different
+picture: all frontier models score far below the human norm on every domain,
+with the largest gaps in 3D-to-2D spatial transformations and form completion.
+
+\section{Why Existing Benchmarks Fall Short}
+
+\textbf{Language shortcuts:}
+Many VQA questions can be answered partially from the question text alone;
+models with strong language priors achieve inflated scores without parsing
+the image carefully.
+
+\textbf{Coarse granularity:}
+Aggregate accuracy on tasks like MMBench or MMMU merges many heterogeneous
+subtasks, making it impossible to identify which specific visual process is
+failing.
+
+\textbf{Saturation and ceiling effects:}
+Frontier models now saturate several prominent benchmarks, leaving no
+headroom to distinguish capability levels among top systems.
+
+\textbf{Lack of psychometric grounding:}
+Existing benchmarks carry no normative calibration against human populations,
+so ``state-of-the-art'' accuracy has no reference point against actual human
+visual cognitive ability.
+
+\section{Core Mechanism: VisFactor}
+
+VisFactor digitizes 20 vision-centric subtests from the FRCT battery, grouped
+into four domains:
+
+\begin{description}[leftmargin=0pt,labelsep=6pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Spatial Reasoning:] Card Rotations, Paper Folding---tests of mental
+    rotation and spatial visualization in 3D.
+  \item[Perceptual Speed:] Finding A's, Number Comparison---tests of rapid
+    figure-ground segregation and symbol matching.
+  \item[Visualization:] Surface Development, Form Board---tests of 3D-to-2D
+    reasoning and shape completion.
+  \item[Visual Memory:] Shape Memory, Position Memory---tests of short-term
+    retention of visual configurations.
+\end{description}
+
+Each item is digitized as a multiple-choice question. The FRCT scoring key
+provides ground-truth answers. No image captioning or text-only reasoning
+is possible on any item; answering requires genuine visual computation.
+
+\section{Technical Formulation}
+
+Let $M$ be an MLLM, $\mathcal{Q} = \{(q_i, A_i, a_i^*)\}_{i=1}^N$ the
+question set (image $q_i$, options $A_i$, correct answer $a_i^*$). The
+VisFactor score is:
+\[
+\text{Score}(M) = \frac{1}{N}\sum_{i=1}^N \mathbf{1}\!\left[M(q_i, A_i) = a_i^*\right] \times 100
+\]
+Domain subscores partition the sum over the four cognitive domains. Random
+baseline performance is 25 (four options). Human FRCT norm is approximately 80.
+The gap $\Delta(M) = 80 - \text{Score}(M)$ measures how far a model is
+from average human performance.
+
+\section{Learning or Inference Procedure}
+
+VisFactor is a zero-shot evaluation protocol:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Present the model with the item image and the four multiple-choice
+    options.
+  \item Use a fixed instruction: ``Which option is correct? Answer with a
+    single letter.''
+  \item Record the model's response; compare to the FRCT scoring key.
+  \item Compute domain subscores and total score.
+\end{enumerate}
+
+A chain-of-thought variant instructs models to explain their reasoning before
+answering. Both standard and CoT protocols are reported.
+
+\section{What the Guarantee Says}
+
+VisFactor's psychometric grounding provides several validity properties:
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Construct validity:} FRCT subtests were validated against
+    factor-analytic studies of human visual cognition; each subtest measures
+    a theoretically distinct visual factor.
+  \item \textbf{Convergent validity:} High within-domain correlations across
+    models confirm that subtests in the same domain measure a common latent
+    visual ability in MLLMs.
+  \item \textbf{No language-shortcut confound:} Removing the image reduces
+    all models to chance (25\%), confirming that scores reflect visual
+    engagement rather than language priors.
+\end{itemize}
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Best model:} Scores 30.17/100; human norm $\approx 80$.
+    All 23 models score between 25 (chance) and 31.
+  \item \textbf{Domain asymmetry:} Perceptual speed $\approx 45\%$;
+    spatial reasoning $\approx 28\%$; visualization $\approx 20\%$;
+    visual memory $\approx 22\%$.
+  \item \textbf{Scale does not help:} Larger models within each family
+    show no consistent improvement on VisFactor, unlike most academic
+    visual benchmarks.
+  \item \textbf{Chain-of-thought:} Marginal improvement on spatial
+    reasoning; slight degradation on perceptual speed (CoT slows the
+    rapid comparison process the subtest is designed to measure).
+  \item \textbf{No saturation:} No model approaches the human norm on
+    any domain, leaving substantial room for future progress.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Image removal:}
+All models score $\approx 25\%$ when the image is removed and only the
+question text and options are provided, confirming genuine visual engagement.
+
+\textbf{Option order shuffling:}
+Results are stable under option permutation (variance $< 2$ percentage points),
+ruling out position bias as a confound.
+
+\textbf{Item difficulty calibration:}
+Items requiring mental rotation of complex 3D figures are the hardest;
+items requiring simple symbol comparison are easiest---matching the
+psychometric structure designed for humans. The cross-model difficulty
+ordering correlates with human item difficulty at $r = 0.73$.
+
+\textbf{Closed-source vs.\ open-source models:}
+Closed-source models (GPT, Gemini, Claude) score marginally higher than
+open-source models of comparable size, but the gap is small relative
+to the distance from the human norm.
+
+\section*{Reference}
+
+Jen-Tse Huang, Dasen Dai, Jen-Yuan Huang, Youliang Yuan, Xiaoyuan Liu,
+Wenxuan Wang, Wenxiang Jiao, Pinjia He, Zhaopeng Tu, Haodong Duan.
+\textbf{Human Cognitive Benchmarks Reveal Foundational Visual Gaps in MLLMs}.
+arXiv:2502.16435. NeurIPS 2026.
+\url{https://arxiv.org/abs/2502.16435}
+
+\end{document}

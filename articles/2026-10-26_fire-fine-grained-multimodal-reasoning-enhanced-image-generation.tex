@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-26}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  text-to-image generation \textbullet{}
+  compositional reasoning \textbullet{}
+  iterative refinement \textbullet{}
+  GRPO}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  FiRe: Fine-grained Multimodal Reasoning for Enhanced Image
+  Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Requirement-Level Check-Refine Cycles and Per-Step RL Rewards
+  Fix the Fix-One-Break-Another Problem in Compositional T2I}\par\vspace{6pt}
+
+{\small\textbf{By} Yongjin Kim, Yoonjin Oh, Yerin Kim, Hyomin Kim,
+  Jeeyoung Yun, Yujung Heo, Minjun Kim, Sungwoong Kim (KU-AGI)}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2604.13491 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Text-to-image models fail on compositional prompts because whole-image
+feedback cannot isolate which individual visual requirement is
+violated---so fixing one element inadvertently breaks another. FiRe
+decomposes prompts into atomic visual requirements, checks each one
+independently using a multimodal LLM, and applies \emph{local}
+refinements to only the failing regions. FiRe-GRPO, the accompanying
+reinforcement learning variant, assigns a per-step reward to each
+check-refine action, enabling the model to learn when and how to refine
+rather than merely whether the final image is correct. On compositional
+benchmarks including T2I-CompBench and GenAI-Bench, FiRe achieves
+consistent improvement over T2I baselines, with the largest gains on
+prompts specifying three or more simultaneous visual constraints.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Compositional T2I prompts impose multiple simultaneous
+    visual constraints; whole-image feedback cannot localize failures or
+    guide targeted corrections.
+  \item[Why it matters:] State-of-the-art T2I models still fail on multi-constraint
+    prompts despite improved language understanding; the bottleneck is the
+    feedback signal, not the generator.
+  \item[Method:] Decompose the prompt into visual requirements; check each
+    with an MLLM; refine locally; train with FiRe-GRPO assigning step-level
+    rewards to each check-refine action.
+  \item[Result:] Consistent improvement on compositional benchmarks,
+    especially on prompts with $\geq 3$ simultaneous constraints.
+  \item[Evidence:] T2I-CompBench, GenAI-Bench; ablations isolate local vs.\
+    global refinement and step-level vs.\ terminal-only reward.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Language-guided image generation has improved dramatically, yet compositional
+prompts---requests that simultaneously specify object counts, attributes,
+spatial relationships, and interactions---remain a known failure mode. A
+prompt such as ``a red cup to the left of a blue vase on a wooden table''
+imposes three simultaneous visual constraints; any failure in the generated
+image requires identifying \emph{which} constraint is violated before attempting
+a correction.
+
+Existing reasoning-augmented approaches attempt to fix this by elaborating the
+prompt before generation or by scoring the whole image after generation. Neither
+approach can localize the failure to a specific requirement or avoid disrupting
+already-satisfied constraints during refinement.
+
+FiRe reframes image generation as a sequential decision process where each step
+either checks one requirement or applies one local refinement, and learns via
+reinforcement learning to execute this process efficiently.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Prompt augmentation (chain-of-thought elaboration):}
+Improves average image quality but generates the same elaborated prompt for
+every seed; it cannot recover from specific failures in a generated image.
+
+\textbf{Whole-image feedback (DALL-E Reflect, ImageReward):}
+Produces a scalar or sentence-level critique. This is too coarse to guide
+targeted corrections and does not indicate which region or property to change.
+
+\textbf{Terminal-only RL for T2I:}
+Assigning reward only to the final image creates a sparse signal that is
+difficult to optimize and does not credit or penalize intermediate refinement
+decisions.
+
+\section{Core Mechanism}
+
+\textbf{Step 1 --- Requirement decomposition.}
+An MLLM parses the prompt into a list of atomic visual requirements
+$\mathcal{R} = \{r_1, \ldots, r_n\}$, where each $r_i$ is a checkable
+property (e.g., ``red cup present'', ``cup to the left of the vase'').
+
+\textbf{Step 2 --- Initial generation.}
+A base T2I model generates $I_0$ from the prompt.
+
+\textbf{Step 3 --- Fine-grained check.}
+For each unsatisfied requirement $r_i$, the MLLM answers ``Is $r_i$
+satisfied in $I_{t-1}$?'' with a binary verdict and a natural-language
+diagnosis specifying the region and nature of the failure.
+
+\textbf{Step 4 --- Local refinement.}
+The least-satisfied requirement $i^* = \arg\min_i \mathcal{V}_i(I_{t-1})$
+triggers an inpainting or latent edit confined to the region described in the
+diagnosis, yielding $I_t$. Unaffected regions are left unchanged.
+
+\textbf{Step 5 --- Iteration.}
+Steps 3--4 repeat until all requirements are satisfied or the step budget
+$T$ is exhausted.
+
+\section{Technical Formulation}
+
+Let $\mathcal{V}_i(I) \in [0,1]$ denote the MLLM's estimated probability
+that requirement $r_i$ is satisfied in image $I$. The step-level reward at
+refinement step $t$ (targeting requirement $i^*$) is:
+\[
+\rho_t = \mathcal{V}_{i^*}(I_t) - \mathcal{V}_{i^*}(I_{t-1})
+\]
+The FiRe-GRPO policy gradient objective is:
+\[
+\mathcal{J}_{\text{GRPO}}(\theta)
+  = \mathbb{E}\!\left[\sum_{t=1}^T \rho_t \cdot \log \pi_\theta(\delta_t \mid I_{t-1}, r_{i^*})\right]
+  - \beta \cdot D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})
+\]
+where $\delta_t$ is the refinement action (diagnosis + edit), $\pi_\theta$ is
+the MLLM policy being trained, and $\pi_{\text{ref}}$ is a frozen reference
+policy. The KL term prevents the policy from diverging far from a well-behaved
+prior and controls mode collapse.
+
+The combined requirement satisfaction score at the end of generation is:
+\[
+\text{Score}(I_T) = \frac{1}{n} \sum_{i=1}^n \mathcal{V}_i(I_T)
+\]
+This is the final metric reported on benchmarks.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a compositional prompt; decompose into requirements.
+  \item Generate $I_0$ with the base T2I model.
+  \item Run the check-refine cycle for $T$ steps; collect $\{\rho_t\}$.
+  \item Update the MLLM backbone with FiRe-GRPO.
+  \item The 300-step checkpoint (FiRe-300Step) is used for all evaluations.
+\end{enumerate}
+
+\textbf{Inference:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Parse the prompt; generate $I_0$.
+  \item Iterate: check all requirements, identify the most violated,
+    apply a local refinement.
+  \item Return $I_T$ after the budget is exhausted or all requirements
+    are satisfied.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+The step-level reward $\rho_t$ provides a per-requirement improvement signal.
+Under mild assumptions on the MLLM's calibration (i.e., $\mathcal{V}_i$
+monotonically correlates with human satisfaction judgments), the GRPO
+objective with the KL regularizer converges to a policy that maximizes
+expected total requirement satisfaction while remaining close to the
+reference policy. This ensures that FiRe does not sacrifice the reference
+model's general image quality in pursuit of compositional accuracy.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{T2I-CompBench:} FiRe improves attribute binding and spatial
+    relationship accuracy over all baselines; largest gains on prompts with
+    $\geq 3$ simultaneous constraints.
+  \item \textbf{GenAI-Bench:} Consistent improvement across compositional
+    categories (color, count, spatial, interaction).
+  \item \textbf{Fix-one-break-another:} Global refinement baselines show
+    improvement in the targeted attribute but regression in other attributes;
+    FiRe's local edits preserve already-satisfied requirements.
+  \item \textbf{FiRe-GRPO vs.\ supervised fine-tuning:} Step-level RL
+    converges faster and produces better refinement policies than training
+    with supervised labels for each step.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Global vs.\ local refinement:}
+Applying refinement to the whole image rather than the failing region degrades
+already-satisfied requirements by an average of 12 percentage points on
+T2I-CompBench; local refinement avoids this regression entirely.
+
+\textbf{Step-level vs.\ terminal-only reward:}
+Terminal-only reward (only $\mathcal{V}_{i^*}(I_T)$ at the final step)
+trains 40\% slower and achieves 8 percentage points lower compositional
+accuracy; step-level rewards provide a denser credit assignment signal.
+
+\textbf{Number of refinement steps $T$:}
+Performance improves with $T$ up to 3--4 steps and plateaus beyond; additional
+steps add compute without further gains on typical 3-constraint prompts.
+
+\textbf{Without requirement decomposition:}
+Using a single holistic verdict instead of per-requirement checks degrades
+performance to below the whole-image feedback baseline, confirming that
+the decomposition is the key structural contribution.
+
+\section*{Reference}
+
+Yongjin Kim, Yoonjin Oh, Yerin Kim, Hyomin Kim, Jeeyoung Yun, Yujung Heo,
+Minjun Kim, Sungwoong Kim.
+\textbf{FiRe: Fine-grained Multimodal Reasoning for Enhanced Image Generation}.
+arXiv:2604.13491. NeurIPS 2026.
+\url{https://arxiv.org/abs/2604.13491}
+
+\end{document}
