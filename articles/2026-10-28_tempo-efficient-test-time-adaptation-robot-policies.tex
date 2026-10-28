@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  test-time adaptation \textbullet{}
+  robot locomotion \textbullet{}
+  reinforcement learning \textbullet{}
+  distribution shift}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  TEMPO: Efficient Test-Time Adaptation For
+  Robot Policies}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Critic Entropy Regularization and Score-Based Memory Enable
+  On-Device Policy Adaptation---Up to 80\% Performance Recovery
+  on Physical Quadrupeds Under Load}\par\vspace{6pt}
+
+{\small\textbf{By} Motasem Alfarra, Pietro Mazzaglia, Markus Peschl,
+  Daniel Dijkman, Christos Louizos}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.20318 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Reinforcement-learned locomotion policies trained in simulation
+degrade in deployment when conditions shift---payload changes the
+center of mass, terrain modifies effective friction, sensors drift
+with temperature. TEMPO addresses this with a surprisingly effective
+combination: an entropy regularizer on the critic that prevents
+value collapse under distribution shift, paired with a score-based
+memory buffer that upweights hard observations during on-device
+adaptation. Across three quadruped platforms (Go1, Go2, G1) and
+four shift types in MuJoCo Playground, TEMPO yields up to 80\%
+improvement in the single-device setting; on a physical Unitree Go2
+carrying an added payload, TEMPO recovers pre-shift performance
+within minutes.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Sim-to-real locomotion policies degrade when
+    deployment conditions (payload, terrain, sensors) differ from
+    training---and no simulator is available at test time.
+  \item[Why it matters:] Real-world deployment requires policies that
+    adapt autonomously; simulator-based fine-tuning is impractical
+    on hardware.
+  \item[Method:] Critic entropy regularizer prevents value collapse;
+    score-based memory oversamples observations the policy finds hard.
+  \item[Result:] Up to 80\% performance improvement in simulation;
+    physical Unitree Go2 recovers from payload shift.
+  \item[Evidence:] Go1, Go2, G1 in MuJoCo Playground under four
+    distribution shifts; physical Unitree Go2 experiment.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning in simulation remains the dominant approach for
+robot locomotion, but the sim-to-real gap means deployed policies face
+conditions their training never covered. The standard remedy---domain
+randomisation---widens the training distribution but cannot anticipate
+all deployment shifts. Once deployed, the robot's own experience is the
+only data available for further improvement.
+
+Test-time adaptation (TTA) of neural networks has been studied for
+supervised classification, but RL policies present a harder challenge:
+there are no ground-truth labels, the reward is expensive to evaluate,
+the critic can diverge under distribution shift, and compute is
+constrained to a single embedded device. TEMPO is the first method to
+address all four constraints simultaneously.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard PPO fine-tuning at test time:}
+Without a simulator, PPO must use on-device rollouts directly. The
+off-policy nature of the limited experience combined with a shifting
+observation distribution causes the critic to diverge, destabilising
+policy updates.
+
+\textbf{Domain randomisation:}
+Broad randomisation reduces peak sim performance and still fails for
+shifts outside the randomised range (e.g., a specific payload not
+anticipated during training).
+
+\textbf{Meta-learning (MAML, PEARL):}
+Meta-learning requires a distribution over adaptation tasks at training
+time---unavailable when the real-world distribution is unknown---and
+inner-loop gradient computation that is expensive on embedded hardware.
+
+\section{Core Mechanism}
+
+TEMPO adds two components on top of PPO, requiring no changes to the
+policy network or training procedure:
+
+\textbf{1. Critic Entropy Regularizer.}
+The critic loss is augmented with an entropy penalty:
+\[
+\mathcal{L}_V = \mathcal{L}_\mathrm{TD} + \beta\, H(V_\phi(s))
+\]
+where $H(V_\phi(s))$ is the entropy of the value distribution across
+a replay batch. This prevents the critic from collapsing to a
+near-constant value function under distribution shift, which would
+zero out policy gradient signals.
+
+\textbf{2. Score-Based Memory.}
+Each observation $s$ in the replay buffer is assigned a score
+proportional to its TD error:
+\[
+\mathrm{score}(s) \propto |r + \gamma V_\phi(s') - V_\phi(s)|
+\]
+Observations with high scores---those where the critic is most
+wrong---are sampled more frequently, biasing updates toward the
+hardest parts of the new distribution. Scores are updated online as
+the critic improves.
+
+\section{Technical Formulation}
+
+The full TEMPO objective at each adaptation step is:
+\[
+\mathcal{L}_\mathrm{TEMPO} = \mathcal{L}_\mathrm{PPO} +
+  \lambda_V \bigl[\mathcal{L}_\mathrm{TD} + \beta\, H(V_\phi)\bigr]
+\]
+where $\mathcal{L}_\mathrm{PPO}$ is the clipped surrogate objective
+and $\lambda_V$ balances the critic and actor losses.
+
+The score-based sampler maintains a priority queue over $N$ stored
+transitions, replacing the oldest with probability proportional to
+inverse score (keeping recent hard examples longer). Sampling
+probability for transition $i$ is:
+\[
+p_i = \frac{\mathrm{score}(s_i)^\alpha}
+  {\sum_j \mathrm{score}(s_j)^\alpha}, \quad \alpha = 0.6
+\]
+(Priority exponent $\alpha$ follows the PER convention.)
+
+\section{Learning or Inference Procedure}
+
+\textbf{Offline training (simulation):} Standard PPO with domain
+randomisation. No modifications to the training procedure.
+
+\textbf{Online adaptation (deployment):} At each deployment step:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Execute the current policy on the robot; collect transitions.
+  \item Update transition scores from critic TD errors.
+  \item Sample a batch from the priority queue.
+  \item Apply one PPO + entropy-regularised critic update step.
+\end{enumerate}
+Total compute per step: equivalent to one standard PPO update,
+feasible on the onboard CPU/GPU of a Unitree robot.
+
+\section{What the Guarantee Says}
+
+Under mild assumptions (bounded reward, Lipschitz value function,
+score ergodicity), the entropy regularizer prevents the critic from
+collapsing to a degenerate fixed point during distribution shift:
+\[
+H(V_\phi(s)) \geq H_\mathrm{min} > 0 \;\;\text{for all } t
+\]
+ensuring policy gradient variance stays non-zero. This provides a
+necessary condition for adaptation progress; a convergence rate
+depends on the magnitude of the distribution shift and the data
+collection speed.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Go2 (MuJoCo Playground, payload shift):} TEMPO reaches
+    80\% of pre-shift performance within 5 minutes of on-device
+    interaction; standard PPO fine-tuning diverges.
+  \item \textbf{Go1, G1 (MuJoCo Playground, four shift types):}
+    Consistent gains across all platforms and shift types; average
+    $+42\%$ over non-adapted baseline.
+  \item \textbf{Physical Unitree Go2:} TEMPO with a 2\,kg added
+    payload recovers stable locomotion within 10 minutes; the
+    non-adapted policy fails to sustain a trot gait.
+  \item \textbf{Baseline comparison:} Outperforms domain randomisation,
+    meta-RL (MAML), and test-time normalisation across all conditions.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Entropy regularizer only:}
+Without score-based memory, the critic stabilises but adaptation is
+slower ($-25\%$ performance at 5\,min); both components are needed.
+
+\textbf{Score-based memory only:}
+Without entropy regularization, the critic still diverges in 3 of 4
+shift scenarios, confirming that stability must come before
+curriculum selection.
+
+\textbf{Priority exponent $\alpha$:}
+Performance is robust to $\alpha \in [0.4, 0.7]$; $\alpha < 0.4$
+approaches uniform sampling and loses most gains.
+
+\textbf{Batch size:}
+Adaptation improves up to batch size 64 and plateaus, consistent
+with the variance reduction argument underlying critic entropy
+regularization.
+
+\section*{Reference}
+
+Motasem Alfarra, Pietro Mazzaglia, Markus Peschl, Daniel Dijkman,
+Christos Louizos.
+\textbf{Efficient Test-Time Adaptation For Robot Policies}.
+arXiv:2610.20318. NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.20318}
+
+\end{document}

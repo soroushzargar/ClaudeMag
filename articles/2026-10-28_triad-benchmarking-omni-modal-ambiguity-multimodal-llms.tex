@@ -1,0 +1,239 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  omni-modal benchmarking \textbullet{}
+  multimodal LLMs \textbullet{}
+  ambiguity resolution \textbullet{}
+  audio-visual integration}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  TRIAD: Benchmarking Omni-Modal Ambiguity in
+  Multimodal Large Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A New Benchmark Reveals That Even the Best Omni-Modal Systems
+  Trail Humans by Over 20 Points When All Three Modalities Are
+  Needed to Resolve a Scene}\par\vspace{6pt}
+
+{\small\textbf{By} Zhaolu Kang, Yidi Wang, Yile Li, Siqi Zeng,
+  Yingjie He, Richeng Xuan, Zhichao Hu}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.30841 \textbullet{}
+  NeurIPS 2026 Datasets \& Benchmarks Track}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multimodal language models that process text, images, and audio are
+routinely evaluated on benchmarks where a single dominant modality
+carries the answer---leaving intact an unmeasured gap between claimed
+omni-modal capability and the genuine ability to fuse all three
+modalities simultaneously. TRIAD closes this gap with 327 hand-crafted
+queries spanning 86 scene groups and 18 ambiguity categories, each
+designed so that the complete text--image--audio triplet yields a unique
+answer while any single-modality subset leaves two or more options open.
+Across 14 state-of-the-art omni-modal systems, the best model trails
+humans by over 20 group-accuracy points, and removing answer options
+drives model group accuracy to single digits.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Existing benchmarks do not require models to
+    integrate all three modalities; a single modality usually suffices
+    to answer correctly.
+  \item[Why it matters:] Omni-modal systems are deployed as universal
+    assistants; a model that silently ignores audio will fail in
+    safety-critical settings where acoustic context is essential.
+  \item[Method:] 327 text--image--audio triplets where the correct
+    answer requires all three modalities, evaluated on item and scene-
+    group accuracy with and without answer options.
+  \item[Result:] Best model trails humans by $>$20 points on group
+    accuracy; removing answer options drops model group accuracy to
+    single digits.
+  \item[Evidence:] 14 state-of-the-art omni-modal systems on 86 scene
+    groups covering 18 ambiguity categories.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The ambition of omni-modal language models---processing text, image,
+and audio within a single system---promises agents that perceive the
+world as richly as humans do. Yet evaluating this ambition has relied
+on benchmarks that are functionally bimodal: image-question answering
+where text alone is sufficient, or audio tasks where the image adds
+marginal signal. True omni-modal integration requires all three
+modalities to be jointly necessary.
+
+TRIAD operationalizes this requirement through the principle of
+\emph{modal indispensability}: for each query, every modality is
+necessary and no proper subset is sufficient. The dataset captures
+everyday scenes where text, image, and audio together resolve what
+neither pair can---e.g., hearing an alarm while seeing a clock while
+reading a date.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Item-level evaluation is misleading.}
+A model that achieves 70\% accuracy on individual items may still fail
+every scene group, because group accuracy requires consistent
+disambiguation across all items sharing a scene. TRIAD reports both
+metrics; the gap between them exposes unreliable partial reasoning.
+
+\textbf{Answer options inflate performance.}
+Multiple-choice formats let models exploit statistical regularities in
+the option set (e.g., always picking the longest option). TRIAD
+evaluates both with and without answer options; performance drops to
+single digits in the open-ended condition, confirming option exploitation.
+
+\textbf{Audio cues are underweighted.}
+Models trained on predominantly text--vision data default to text--image
+reasoning even when the disambiguating signal is acoustic. TRIAD's
+audio-indispensable categories expose this systematic underweighting.
+
+\section{Core Mechanism}
+
+TRIAD's benchmark construction follows three stages:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Scene collection:} Authors collect or synthesize
+    naturalistic scenes representable in all three modalities with
+    complementary but partially overlapping information.
+  \item \textbf{Ambiguity verification:} Each triplet is manually
+    reviewed to confirm that any two-modality combination leaves
+    at least two consistent answer options.
+  \item \textbf{Query authoring:} Questions are written to be
+    answerable only with the full triplet; distractors are crafted
+    to be plausible given incomplete modality access.
+\end{enumerate}
+
+Scene groups (86 in total) share a common real-world context and
+each contain 3--5 queries, allowing the group accuracy metric to
+test whether disambiguation generalizes within a scenario.
+
+\section{Technical Formulation}
+
+Let $\mathcal{T} = (t, v, a)$ denote a triplet of text $t$, image $v$,
+and audio $a$, and let $\mathcal{A} = \{a_1, \ldots, a_K\}$ be the
+answer set. A triplet is modally indispensable if:
+\[
+|\arg\max_k P(a_k \mid \mathcal{T})| = 1
+\quad\text{but}\quad
+|\arg\max_k P(a_k \mid \mathcal{T} \setminus \{m\})| > 1
+\]
+for every modality $m \in \{t, v, a\}$. This condition defines the 327
+items in TRIAD; it is verified by human annotators, not automatically.
+
+Group accuracy for scene group $g$ is:
+\[
+\text{GroupAcc}(g) = \mathbf{1}\!\left[\forall q \in g,\;
+  \hat{a}(q) = a^*(q)\right]
+\]
+where $\hat{a}(q)$ is the model's predicted answer and $a^*(q)$ the
+ground-truth. Mean group accuracy across all 86 groups is the primary
+metric.
+
+\section{Learning or Inference Procedure}
+
+TRIAD is a static evaluation benchmark; no training is involved.
+Models are prompted with the triplet in their native input format
+(text + image + audio), asked to output either a multiple-choice
+letter or a free-form answer, and scored automatically. Human
+performance is estimated from a held-out annotator pool distinct
+from the construction team.
+
+\section{What the Guarantee Says}
+
+The modal-indispensability design guarantee is:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Soundness:} A model that answers correctly must have
+    accessed all three modalities (no single-modality shortcut exists
+    by construction).
+  \item \textbf{Completeness:} Group accuracy measures consistent
+    disambiguation within a scene, ruling out lucky individual item
+    guesses.
+\end{itemize}
+These are guarantees about the benchmark's diagnostic validity, not
+about any particular model's capability.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Group accuracy gap:} The best of 14 evaluated omni-modal
+    systems achieves group accuracy $>$20 points below human performance.
+  \item \textbf{Item vs.\ group accuracy:} Models with high item accuracy
+    (e.g., $>$65\%) still fail most scene groups, confirming inconsistency.
+  \item \textbf{Open-ended collapse:} Removing answer options drops average
+    model group accuracy to single digits; human group accuracy declines
+    only modestly (from $\sim$85\% to $\sim$70\%).
+  \item \textbf{Audio underuse:} On audio-indispensable items, models score
+    near chance even in the multiple-choice condition, confirming that
+    acoustic reasoning is the primary failure mode.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Modality ablation:}
+Providing models with only text+image, text+audio, or image+audio gives
+performance close to random, confirming benchmark validity.
+
+\textbf{Model family comparison:}
+Closed-source frontier models outperform open-source models by a
+larger margin on TRIAD than on existing benchmarks, suggesting that
+scale and instruction tuning improve omni-modal integration but do not
+close the gap.
+
+\textbf{Category breakdown:}
+The hardest ambiguity categories involve temporal audio events (e.g.,
+distinguishing two events from their sounds alone) and spatial
+sound-source localization, pointing toward specific architectural
+improvements.
+
+\section*{Reference}
+
+Zhaolu Kang, Yidi Wang, Yile Li, Siqi Zeng, Yingjie He, Richeng Xuan,
+Zhichao Hu.
+\textbf{TRIAD: Benchmarking Omni-Modal Ambiguity in Multimodal Large
+Language Models}.
+arXiv:2610.30841. NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.30841}
+
+\end{document}

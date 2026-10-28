@@ -1,0 +1,244 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multi-objective reinforcement learning \textbullet{}
+  ensemble policies \textbullet{}
+  trajectory attribution \textbullet{}
+  objective conflict}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Multi-Objective Reinforcement Learning Using Routed
+  Ensembles and Trajectory Attribution}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Objective-Conflict Coefficients Quantify Preference Trade-offs, While
+  Routed Ensembles and Kernel-Surrogate Attribution Close the
+  Multi-Objective Efficiency Gap}\par\vspace{6pt}
+
+{\small\textbf{By} Zhenshuo Zhang, Ruoxuan Xiong, Hongyang R.\ Zhang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.35733 \textbullet{}
+  NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multi-objective reinforcement learning demands a single agent to
+simultaneously satisfy multiple reward objectives weighted by a
+user-supplied preference vector---a task made hard when objectives
+conflict and gradient directions oppose each other. This paper
+introduces objective-conflict coefficients that formally quantify
+this conflict, derives matching online regret bounds, and proposes
+two practical algorithms: a routed ensemble that routes each trajectory
+to the basis policy with highest expected return under its preference
+weight, and a trajectory attribution module based on kernel ridge
+regression that identifies which trajectories are most valuable for
+which preference objectives.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] A single preference-conditioned policy fails when
+    objectives strongly conflict; the degree of conflict was not
+    previously formalised.
+  \item[Why it matters:] MORL is central to robotics, resource
+    allocation, and fairness-aware learning, where trade-offs among
+    objectives must be navigated at deployment.
+  \item[Method:] Objective-conflict coefficients + routed ensemble
+    policy learning (trajectory routing to K basis policies) +
+    kernel ridge regression trajectory attribution.
+  \item[Result:] Consistent improvements over single-policy and
+    standard ensemble baselines on multi-objective robotic control
+    benchmarks.
+  \item[Evidence:] Multi-objective MuJoCo locomotion benchmarks;
+    formal regret analysis as a function of maximum conflict
+    coefficient.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+In multi-objective reinforcement learning (MORL), the agent receives a
+vector reward $\mathbf{r} = (r_1, \ldots, r_K)$ and a preference
+weight $\mathbf{w} \in \Delta^{K-1}$. The goal is to find a policy
+$\pi$ that maximises $\mathbf{w}^\top J(\pi)$ across many possible
+$\mathbf{w}$, effectively learning the entire Pareto front of
+preference-weighted returns.
+
+Conflict arises when $\nabla_\theta J_i(\pi_\theta)$ and
+$\nabla_\theta J_j(\pi_\theta)$ point in opposing directions, forcing
+any gradient step to damage at least one objective. Prior approaches
+either concatenate $\mathbf{w}$ to the state (ignoring conflict) or
+use hand-crafted ensemble partitions (ignoring data efficiency). This
+work addresses both gaps.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Conditioned single policy:}
+Appending $\mathbf{w}$ to the state does not prevent gradient conflicts.
+For strongly conflicting objectives, the single policy converges to a
+suboptimal compromise across all preferences rather than achieving the
+Pareto front.
+
+\textbf{Na\"ive ensembles:}
+Manually partitioning the preference space into $K$ fixed regions assigns
+trajectories to basis policies by region membership, ignoring that
+trajectories generated under one preference weight may be highly
+informative for another.
+
+\textbf{No formal measure of conflict:}
+Without a quantitative measure of objective conflict, there is no
+principled way to predict how many basis policies are needed or which
+trajectory assignments are most beneficial.
+
+\section{Core Mechanism}
+
+\textbf{Routed Ensemble Policy Learning} maintains $K$ basis policies
+$\{\pi_1, \ldots, \pi_K\}$ and iterates:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect trajectories $\{\tau_j\}$ by sampling basis policies
+    according to the current preference weight distribution.
+  \item \textbf{Route:} Assign each $\tau_j$ to the basis policy with
+    the highest expected return under $\tau_j$'s preference weight:
+    $k^*(\tau_j) = \arg\max_k \mathbf{w}_j^\top J_k(\pi_k)$.
+  \item \textbf{Update:} Apply PPO to each $\pi_k$ using only
+    trajectories routed to it.
+\end{enumerate}
+
+\textbf{Trajectory Attribution} uses a kernel ridge regression surrogate
+$\hat{f}(\pi, \mathbf{w}; \mathcal{D})$ to estimate policy performance
+as a function of the training trajectory set $\mathcal{D}$.
+Leave-one-out attribution scores $\phi_j^k$ identify which trajectories
+help or hurt each basis policy under each preference weight, enabling
+curriculum sampling.
+
+\section{Technical Formulation}
+
+\textbf{Objective-Conflict Coefficient.} For objectives $i$ and $j$:
+\[
+c_{ij}(\pi_\theta) = \frac{-\nabla_\theta J_i^\top \nabla_\theta J_j}
+  {\|\nabla_\theta J_i\|\,\|\nabla_\theta J_j\|}
+\]
+A positive $c_{ij}$ indicates conflict (gradients oppose); the maximum
+over all pairs and all preference weights bounds the MORL regret:
+\[
+\text{Regret}(T) = O\!\left(\sqrt{T \cdot c_{\max}}\right)
+\]
+where $c_{\max} = \max_{i \neq j, \mathbf{w}} c_{ij}(\pi^*(\mathbf{w}))$.
+
+\textbf{Kernel Surrogate.} Let $\phi(\tau, \mathbf{w})$ be a feature
+embedding of trajectory $\tau$ and preference weight $\mathbf{w}$.
+The surrogate is:
+\[
+\hat{f}(\mathbf{w}; \mathcal{D}) =
+  \mathbf{y}^\top (K + \lambda I)^{-1} k(\mathbf{w})
+\]
+where $K_{ij} = \kappa(\phi(\tau_i), \phi(\tau_j))$,
+$\mathbf{y}_j = \mathbf{w}_j^\top J(\pi)$, and $\lambda$ is a
+regularisation constant. The attribution of trajectory $\tau_j$ for
+preference $\mathbf{w}$ is the leave-one-out change in $\hat{f}$.
+
+\section{Learning or Inference Procedure}
+
+Each training step:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a batch of preference weights $\{\mathbf{w}_j\}_{j=1}^B$
+    from the prior distribution over $\Delta^{K-1}$.
+  \item Collect trajectories by rolling out each $\pi_k$ under its
+    currently assigned preference weights.
+  \item Compute attribution scores; upsample high-attribution trajectories.
+  \item Route trajectories to basis policies and apply PPO updates.
+\end{enumerate}
+
+At test time, given a user preference $\mathbf{w}^*$, the system
+evaluates $J_k(\pi_k)$ for each basis policy and returns the best.
+
+\section{What the Guarantee Says}
+
+The regret bound $O(\sqrt{T \cdot c_{\max}})$ provides an
+instance-dependent characterisation: MORL is hard when objectives
+conflict strongly ($c_{\max}$ large) and easy when they are compatible
+($c_{\max}$ small). The routed ensemble achieves this rate for any
+$K \geq c_{\max} / \epsilon$ for tolerance $\epsilon$.
+This is the first formal characterisation of MORL hardness in terms
+of objective geometry.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Multi-objective MuJoCo locomotion:} Routed ensemble
+    outperforms conditioned single-policy baselines by $8$--$15\%$
+    in hypervolume metric across 4 multi-objective task suites.
+  \item \textbf{Versus na\"ive ensemble:} Attribution-based curriculum
+    sampling improves sample efficiency by $\sim$30\% (same
+    hypervolume with fewer environment interactions).
+  \item \textbf{Conflict coefficient:} Empirical $c_{\max}$ correlates
+    strongly with the observed performance gap between single-policy
+    and ensemble methods ($r = 0.81$), validating the theoretical
+    predictor.
+  \item \textbf{Scalability:} Performance improvements hold for
+    $K \in \{2, 4, 8\}$ basis policies; gains plateau at $K = 8$.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Routing vs.\ random assignment:}
+Random assignment of trajectories to basis policies reduces hypervolume
+by 7\%, confirming that conflict-aware routing is the key driver.
+
+\textbf{Attribution vs.\ uniform sampling:}
+Replacing kernel attribution with uniform trajectory sampling costs
+$\sim$20\% in sample efficiency, isolating the contribution of the
+surrogate.
+
+\textbf{Conflict coefficient threshold:}
+Task suites with $c_{\max} < 0.1$ show no significant gain from ensembles;
+the single-policy baseline already matches. This provides a practical
+criterion for when ensembles are needed.
+
+\section*{Reference}
+
+Zhenshuo Zhang, Ruoxuan Xiong, Hongyang R.\ Zhang.
+\textbf{Multi-Objective Reinforcement Learning Using Routed Ensembles
+and Trajectory Attribution}.
+arXiv:2610.35733. NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.35733}
+
+\end{document}

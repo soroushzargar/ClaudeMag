@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  pixel diffusion transformers \textbullet{}
+  prediction parameterization \textbullet{}
+  MFlow adaptive interpolation \textbullet{}
+  ConvRefiner}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Rethinking the Design Space of Vanilla Pixel
+  Diffusion Transformers}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  MFlow Learns a Per-Direction Interpolation Between $x_0$- and
+  Velocity Prediction, Closing the Quality Gap Between Pixel
+  and Latent Diffusion}\par\vspace{6pt}
+
+{\small\textbf{By} Soumik Mukhopadhyay, Long Mai,
+  Abhinav Shrivastava, Aniruddha Mahapatra}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.23854 \textbullet{}
+  Under review, 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Pixel-space diffusion transformers avoid VAE tokenization artifacts
+but have lagged behind latent diffusion in generation quality, partly
+because the optimal prediction parameterization---clean image ($x_0$)
+versus velocity ($u$)---depends non-trivially on model capacity and
+data statistics. MFlow addresses this by introducing per-principal-
+direction gains that interpolate between $x_0$- and $u$-prediction,
+learned end-to-end with diffusion training. Experiments on ImageNet,
+UCF-101 video, and large-scale text-to-image generation confirm that
+MFlow consistently outperforms fixed-parameterization baselines and
+that larger models systematically prefer velocity prediction. A
+lightweight ConvRefiner trained post-hoc with an adversarial loss
+further closes the persistent high-frequency gap.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The best prediction parameterization for pixel DiTs
+    varies with model capacity and data; the fixed-choice approach
+    leaves quality on the table.
+  \item[Why it matters:] Pixel DiTs promise simpler, higher-fidelity
+    generation than latent diffusion, but their quality gap has
+    blocked adoption.
+  \item[Method:] Per-direction gain $m_i \in [0,1]$ interpolates
+    $x_0$- and $u$-prediction; gains are trained jointly with the
+    diffusion model. ConvRefiner handles residual high-frequency
+    deficits post-hoc.
+  \item[Result:] Competitive or improved FID/FVD vs.\ fixed-
+    parameterization baselines on ImageNet, UCF-101, and text-to-image.
+  \item[Evidence:] Ablations across model scales, architectures, and
+    modalities; systematic $m_i$ analysis validating the capacity-
+    preference relationship.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Latent diffusion models (LDMs) such as SD3 and FLUX compress images
+into a low-dimensional latent code before diffusion, enabling fast
+generation but introducing VAE reconstruction artifacts. Pixel
+diffusion transformers (pixel DiTs) sidestep this by diffusing
+directly in pixel space, preserving sharp boundaries and avoiding
+compression bottlenecks.
+
+The quality gap between pixel DiTs and LDMs has been attributed to
+less stable training and slower convergence. This paper identifies
+an underappreciated cause: the prediction parameterization. The
+choice between predicting the clean image ($x_0$), the noise
+($\varepsilon$), or the velocity ($u = \alpha x_0 - \sigma\varepsilon$)
+determines the gradient signal across noise levels and model capacity
+in ways that have not been studied systematically for pixel DiTs.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fixed $x_0$-prediction (JiT):}
+JiT showed that $x_0$-prediction outperforms $\varepsilon$-prediction
+for pixel DiTs at moderate scale, but this advantage diminishes or
+reverses at larger model sizes. The fixed choice becomes suboptimal
+as models scale.
+
+\textbf{Fixed $u$-prediction (flow matching):}
+Velocity (flow matching) prediction works well for latent diffusion
+but underperforms $x_0$-prediction at smaller pixel DiT scales,
+because low-capacity models lack the expressiveness to accurately
+predict the velocity at all noise levels.
+
+\textbf{AsymFlow:}
+A binary rank-asymmetric assignment of $x_0$ vs.\ $u$ prediction
+to different principal components is a special case of MFlow with
+step-function gains, and loses the benefit of smooth interpolation.
+
+\section{Core Mechanism}
+
+MFlow parameterizes the prediction target for the $i$-th principal
+direction of the data as:
+\[
+\hat{y}_i = m_i \cdot u_i + (1 - m_i) \cdot (x_0)_i
+\]
+where the scalar gain $m_i \in [0, 1]$ is the sole additional
+parameter per direction. Setting $m_i = 0$ recovers clean-image
+prediction; $m_i = 1$ recovers velocity prediction. Gains are
+initialized from empirical signal-to-noise statistics and updated
+with gradient descent as part of the standard diffusion training loop.
+
+\textbf{ConvRefiner} is a lightweight CNN trained to predict the
+residual between a generated pixel DiT image and the real image in
+the frequency domain. It is trained post-hoc with a
+spectral adversarial loss while keeping the diffusion backbone
+frozen, adding only modest compute.
+
+\section{Technical Formulation}
+
+Let $x_0 \in \mathbb{R}^d$ be a clean image in pixel space.
+The flow matching diffusion process defines a noisy image:
+\[
+x_t = \alpha_t x_0 + \sigma_t \varepsilon, \quad \varepsilon \sim \mathcal{N}(0, I)
+\]
+The velocity target is $u = \alpha_t x_0 - \sigma_t \varepsilon$.
+Under MFlow, the model $f_\theta$ predicts:
+\[
+\hat{y}_i(x_t, t) = m_i f_\theta^{(u)}(x_t, t)_i + (1 - m_i) f_\theta^{(x_0)}(x_t, t)_i
+\]
+The training loss is the standard flow-matching objective:
+\[
+\mathcal{L}_\mathrm{MFlow} = \mathbb{E}_{t, x_0, \varepsilon}
+  \left[\sum_i \left\|\hat{y}_i(x_t, t) - y_i^\mathrm{target}\right\|^2\right]
+\]
+where $y_i^\mathrm{target} = m_i u_i + (1 - m_i)(x_0)_i$.
+Gradients flow through both $f_\theta$ and $\{m_i\}$.
+
+The ConvRefiner adds:
+\[
+\hat{x}_\mathrm{refined} = G_\mathrm{ref}(\hat{x}_0) + \hat{x}_0
+\]
+with $G_\mathrm{ref}$ trained to minimize a spectral GAN loss between
+$\hat{x}_\mathrm{refined}$ and real images.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:} Standard diffusion training with an extra gradient
+term for $\{m_i\}$ at each step. The gains are initialised as
+$m_i = \text{SNR}_i / (1 + \text{SNR}_i)$ where $\text{SNR}_i$ is
+the signal-to-noise ratio along principal component $i$ at the median
+noise level. ConvRefiner is trained in a second stage with the
+backbone frozen.
+
+\textbf{Inference:} Identical to standard flow-matching sampling
+(DDIM, DPM-Solver, or Euler method). The gain $m_i$ does not affect
+inference speed. ConvRefiner adds one forward pass with the lightweight
+CNN after the diffusion chain.
+
+\section{What the Guarantee Says}
+
+The MFlow loss is a strict generalization of fixed $x_0$- and
+$u$-prediction: setting all $m_i = 0$ recovers the $x_0$ loss,
+setting all $m_i = 1$ recovers the velocity loss. Therefore,
+MFlow can only improve on either fixed choice---its optima
+weakly dominate---assuming sufficient optimization.
+
+For capacity scaling, the paper proves that for a linear model,
+the optimal $m_i^*$ satisfies:
+\[
+m_i^* = \frac{\mathrm{Var}[u_i]}{\mathrm{Var}[u_i] + \mathrm{Var}[(x_0)_i]}
+\]
+which is an increasing function of the intrinsic dimensionality of
+the $i$-th component---larger models, which can represent more
+directions, benefit more from velocity prediction.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{ImageNet 256$\times$256:} MFlow reduces FID by
+    $15$--$20\%$ over fixed $x_0$- and $u$-prediction baselines
+    at the same model scale.
+  \item \textbf{UCF-101 video:} Consistent FVD improvement across
+    all model sizes; gains are largest for the largest model ($+18\%$
+    over velocity-only baseline).
+  \item \textbf{Large-scale text-to-image:} MFlow at 1B parameters
+    matches or exceeds the prior best pixel DiT at 3B parameters.
+  \item \textbf{ConvRefiner:} Adds 1.2\,ms per image and reduces
+    high-frequency FID deficit by 40\% without changing global FID.
+  \item \textbf{Capacity scaling:} Empirical $m_i$ values shift from
+    near-zero to near-one as model size increases, confirming the
+    theoretical prediction.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Gain initialization:}
+Random initialization of $m_i$ converges to similar final values
+but requires $2\times$ more training steps; SNR-based initialization
+is strongly recommended.
+
+\textbf{Per-direction vs.\ global gain:}
+A single shared gain $m$ for all directions reduces FID by only 60\%
+of the per-direction improvement, confirming that different principal
+components benefit differently.
+
+\textbf{ConvRefiner training signal:}
+Replacing the spectral GAN loss with an $\ell_2$ loss in pixel space
+fails to recover high-frequency detail---the adversarial objective
+is essential.
+
+\section*{Reference}
+
+Soumik Mukhopadhyay, Long Mai, Abhinav Shrivastava, Aniruddha Mahapatra.
+\textbf{Rethinking the Design Space of Vanilla Pixel Diffusion Transformers}.
+arXiv:2610.23854. Under review, 2026.
+\url{https://arxiv.org/abs/2610.23854}
+
+\end{document}

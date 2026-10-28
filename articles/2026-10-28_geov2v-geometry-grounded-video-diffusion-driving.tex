@@ -1,0 +1,232 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-10-28}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  video diffusion \textbullet{}
+  novel view synthesis \textbullet{}
+  autonomous driving simulation \textbullet{}
+  geometry grounding}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  GeoV2V: Geometry-Grounded Video Diffusion Model
+  for Driving Scene Generation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  LiDAR-Warped Reference Frames and Synthetic Para4D Data Enable
+  Zero-Shot Lane-Shift Video Generation on Real-World Waymo
+  and nuScenes Benchmarks}\par\vspace{6pt}
+
+{\small\textbf{By} Yuchen Xi, Yuhan Guo, Chenwei Hou, Zixu Liu,
+  Jin Fang, Jason Liu, Ruigang Yang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.25245 \textbullet{}
+  ECCV 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Autonomous driving simulators require realistic video from camera
+poses that were never recorded---a lane shift, a slightly different
+heading, or a hypothetical trailing vehicle. GeoV2V addresses this
+challenge by combining LiDAR and depth-based geometric priors with
+full-video conditioning on the Wan~2.1 video diffusion backbone,
+generating temporally consistent, geometrically accurate driving
+videos under large trajectory shifts. Trained entirely on Para4D,
+a new synthetic CARLA-based dataset of synchronized multi-lane videos,
+GeoV2V transfers zero-shot to real-world Waymo and nuScenes data,
+achieving state-of-the-art visual quality and geometric consistency.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Large viewpoint shifts in novel-view driving video
+    reveal occluded regions; pure generation loses geometric coherence
+    across frames.
+  \item[Why it matters:] High-fidelity novel-view synthesis is essential
+    for scalable simulation of rare events (lane changes, near-misses)
+    that cannot be captured by fixed sensor rigs.
+  \item[Method:] Geometric warping of reference frames via LiDAR/depth
+    priors + Wan 2.1 video diffusion conditioned on warped sequence +
+    Para4D synthetic training data.
+  \item[Result:] State-of-the-art FID, FVD, and depth-consistency on
+    Waymo and nuScenes without fine-tuning on real data.
+  \item[Evidence:] Waymo, nuScenes, and Para4D benchmarks; ablations
+    isolating geometric conditioning and synthetic pretraining.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The long tail of driving scenarios---rare lane changes, unexpected
+obstacles, adverse weather---cannot be covered by fixed-route data
+collection. Novel view synthesis (NVS) addresses this by generating
+plausible videos from camera poses never recorded. For autonomous
+driving, NVS must satisfy two requirements that pure appearance-based
+generation fails to meet: (1) geometric consistency across time, and
+(2) faithfulness to 3D scene structure rather than statistical plausibility.
+
+GeoV2V grounds a powerful video diffusion prior (Wan~2.1) with
+explicit 3D geometry, turning the generation problem into a
+geometry-aware inpainting problem: warp what is visible, inpaint
+what is occluded, and preserve temporal dynamics.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Image-based NVS methods (NeRF, 3DGS):}
+These methods require dense multi-view captures or long sequences for
+3D reconstruction---unavailable in drive-by single-camera settings.
+
+\textbf{Pure video generation (Sora, Gen-3):}
+Unconstrained video generation ignores 3D structure, producing
+temporally inconsistent lane layouts and incorrect depth ordering.
+
+\textbf{Warping-only methods:}
+Geometric warp alone leaves holes where occluded content is revealed
+by the viewpoint shift; filling them with inpainting lacks temporal
+coherence across the full video.
+
+\section{Core Mechanism}
+
+GeoV2V operates in three stages per generated video:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Geometric warping:} Given the reference video and a
+    target viewpoint trajectory, LiDAR point clouds (or monocular depth
+    where LiDAR is unavailable) project each reference frame to the
+    target pose, producing a warped reference sequence with explicit
+    holes where geometry is occluded.
+  \item \textbf{Conditional video generation:} The Wan~2.1 video
+    diffusion transformer takes the warped reference sequence as a
+    conditioning signal via cross-attention, filling holes and refining
+    geometric artifacts while preserving large-scale 3D structure.
+  \item \textbf{Para4D training:} The model is trained on Para4D, a
+    synthetic multi-lane CARLA dataset providing pairs of synchronized
+    cameras at different lateral offsets under diverse weather, lighting,
+    and traffic conditions---the only source of explicit cross-lane
+    supervision.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+Let $V_\mathrm{ref} = \{I_t^{\mathrm{ref}}\}_{t=1}^T$ be the reference
+video and $P_\mathrm{tgt}$ the target camera pose sequence. The warp
+operator $\mathcal{W}$ uses depth $D_t$ and camera intrinsics $K$ to
+project pixels:
+\[
+\tilde{I}_t^{\mathrm{tgt}} = \mathcal{W}(I_t^{\mathrm{ref}}, D_t,
+  P_t^{\mathrm{ref}} \to P_t^{\mathrm{tgt}}, K)
+\]
+yielding a warped sequence $\tilde{V} = \{\tilde{I}_t^{\mathrm{tgt}}\}$
+with per-pixel validity masks $M_t$ marking visible regions.
+
+The video diffusion model $G_\theta$ generates the output:
+\[
+V_\mathrm{out} = G_\theta\!\left(z_T, \tilde{V}, M\right)
+\]
+where $z_T$ is Gaussian noise and conditioning on $(\tilde{V}, M)$
+is implemented via cross-attention at each transformer layer.
+The training objective is the standard flow-matching loss
+$\mathcal{L} = \mathbb{E}[\|G_\theta(z_t, \tilde{V}, M) - V_\mathrm{gt}\|^2]$
+on Para4D pairs.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:} GeoV2V is trained entirely on synthetic Para4D data
+(no real-world data). The model sees diverse CARLA scenes with
+lateral offsets of 1.0--5.0\,m, covering standard lane shifts and
+extreme viewpoints. Wan~2.1 weights are initialised from a pretrained
+checkpoint and fine-tuned with the geometric conditioning added.
+
+\textbf{Inference (zero-shot transfer):} On Waymo and nuScenes, only
+LiDAR-based depth is used for warping; the generator runs without
+any domain-specific fine-tuning, relying on the synthetic-to-real
+generalisation of the learned geometric prior.
+
+\section{What the Guarantee Says}
+
+The geometric warping step provides an explicit constraint: visible
+pixels in the reference frame are reproduced at the correct target
+location with sub-pixel registration accuracy (verified by LiDAR
+reprojection error). The diffusion model only hallucrinates content
+in provably occluded regions (mask $M_t = 0$), giving a formal
+separation between geometric reliability and generative uncertainty.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Waymo lane-shift NVS:} State-of-the-art FID and FVD
+    against prior methods (WoVoGen, GeoFlow, AnyScene), with
+    $>$15\% improvement in FVD at 3.5\,m lane shifts.
+  \item \textbf{nuScenes:} Consistent gains in geometric depth
+    consistency (homography error reduction $>$20\%) and visual
+    quality metrics.
+  \item \textbf{Challenging lighting:} GeoV2V maintains FVD gains in
+    night and adverse weather conditions where geometric priors are
+    noisiest.
+  \item \textbf{Para4D ablation:} Replacing Para4D with a warping-only
+    baseline increases FVD by 38\%, confirming the importance of
+    explicit cross-lane supervision.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{LiDAR vs.\ monocular depth:}
+LiDAR warping improves depth consistency by 12\% over monocular
+depth; monocular depth is sufficient for visual quality (FVD) but
+not for geometric accuracy (reprojection error).
+
+\textbf{Conditioning mechanism:}
+Replacing cross-attention conditioning with concatenation reduces FVD
+by 8\%, confirming that the temporal context of the warped sequence
+is best exploited through attention.
+
+\textbf{Training data scale:}
+Para4D with 10k scene pairs is sufficient; doubling to 20k improves
+FVD by only 2\%, suggesting diminishing returns from synthetic data.
+
+\section*{Reference}
+
+Yuchen Xi, Yuhan Guo, Chenwei Hou, Zixu Liu, Jin Fang, Jason Liu,
+Ruigang Yang.
+\textbf{GeoV2V: Geometry-Grounded Video Diffusion Model for Driving
+Scene Generation}.
+arXiv:2610.25245. ECCV 2026.
+\url{https://arxiv.org/abs/2610.25245}
+
+\end{document}

@@ -1,0 +1,76 @@
+ML Papers List — 2026-10-28
+Generated for ClaudeMag
+
+1. TRIAD: Benchmarking Omni-Modal Ambiguity in Multimodal Large Language Models
+   Authors: Zhaolu Kang, Yidi Wang, Yile Li, Siqi Zeng, Yingjie He, Richeng Xuan, Zhichao Hu
+   Venue/ID: arXiv:2610.30841 — NeurIPS 2026 (Datasets and Benchmarks Track)
+   URL: https://arxiv.org/abs/2610.30841
+   Summary: Current omni-modal benchmarks test whether MLLMs can answer questions given all
+   modalities but fail to measure whether models actually use all modalities to resolve ambiguity.
+   TRIAD fills this gap with 327 hand-crafted queries in 86 scene groups covering 18 ambiguity
+   categories across text, image, and audio. Each item is designed so the full text–image–audio
+   triplet yields a unique answer, but dropping any single modality leaves more than one consistent
+   option. Evaluating 14 state-of-the-art omni-modal systems reveals that strong item-level
+   accuracy does not translate to scene-level disambiguation: the best model trails humans by over
+   20 points in group accuracy. Removing answer options drives model group accuracy to single
+   digits, and models systematically underuse audio cues when text and image are available.
+
+2. Multi-Objective Reinforcement Learning Using Routed Ensembles and Trajectory Attribution
+   Authors: Zhenshuo Zhang, Ruoxuan Xiong, Hongyang R. Zhang
+   Venue/ID: arXiv:2610.35733 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2610.35733
+   Summary: Multi-objective reinforcement learning (MORL) requires a single policy to satisfy
+   multiple preference-weighted reward objectives simultaneously—a problem made hard by objective
+   conflict. This work introduces objective-conflict coefficients to quantify how much preference
+   objectives conflict and derives online regret bounds. The authors then propose routed ensemble
+   policy learning, which maintains a small set of basis policies and routes each trajectory to
+   the basis policy with the highest expected return under its preference weight, alternating
+   between trajectory routing and PPO updates. A complementary trajectory attribution module uses
+   kernel ridge regression to estimate the marginal value of each trajectory for each preference
+   objective, enabling data-efficient curriculum selection. The combined method yields strong
+   empirical results on multi-objective robotic control benchmarks.
+
+3. GeoV2V: Geometry-Grounded Video Diffusion Model for Driving Scene Generation
+   Authors: Yuchen Xi, Yuhan Guo, Chenwei Hou, Zixu Liu, Jin Fang, Jason Liu, Ruigang Yang
+   Venue/ID: arXiv:2610.25245 — ECCV 2026
+   URL: https://arxiv.org/abs/2610.25245
+   Summary: Generating novel-view driving videos (e.g., simulating a lane change from a
+   recorded straight-ahead clip) requires temporal consistency and geometric accuracy under large
+   viewpoint shifts. GeoV2V grounds a video-to-video diffusion model (built on Wan 2.1) with
+   LiDAR and depth-based geometric priors that warp reference frames to the target viewpoint
+   before generation. It also introduces Para4D, a synthetic CARLA-based dataset of synchronized
+   multi-lane videos, to provide explicit cross-lane transformation supervision. Trained on
+   Para4D, GeoV2V transfers zero-shot to real-world Waymo and nuScenes data, achieving
+   state-of-the-art visual quality, geometric consistency, and robustness to complex lighting
+   dynamics under large trajectory shifts.
+
+4. Rethinking the Design Space of Vanilla Pixel Diffusion Transformers
+   Authors: Soumik Mukhopadhyay, Long Mai, Abhinav Shrivastava, Aniruddha Mahapatra
+   Venue/ID: arXiv:2610.23854 — under review
+   URL: https://arxiv.org/abs/2610.23854
+   Summary: Pixel-space diffusion transformers sidestep the tokenization overhead of latent
+   diffusion but have lagged behind in quality, partly because choosing between x0-prediction
+   and velocity prediction (u-prediction) depends non-trivially on model capacity and data
+   statistics. This paper proposes MFlow, an adaptive parameterization that learns a per-
+   principal-direction gain m_i interpolating between clean-image (x0) and velocity (u)
+   prediction end-to-end with diffusion training. The authors show that the preferred
+   parameterization shifts systematically with model capacity toward velocity prediction and
+   that MFlow outperforms both fixed-parameterization baselines across ImageNet, UCF-101
+   video, and large-scale text-to-image generation. The paper also identifies a persistent
+   high-frequency deficit in vanilla pixel DiTs and introduces a lightweight convolutional
+   module (ConvRefiner) trained post-hoc with an adversarial loss to address it.
+
+5. TEMPO: Efficient Test-Time Adaptation For Robot Policies
+   Authors: Motasem Alfarra, Pietro Mazzaglia, Markus Peschl, Daniel Dijkman, Christos Louizos
+   Venue/ID: arXiv:2610.20318 — NeurIPS 2026
+   URL: https://arxiv.org/abs/2610.20318
+   Summary: Reinforcement-learned locomotion policies trained in simulation degrade when
+   deployed conditions differ—payloads change, terrain shifts, sensors drift—yet the
+   observations gathered during deployment contain the information needed to adapt. TEMPO
+   addresses this with an entropy regularizer on the critic that keeps the policy from
+   collapsing under distribution shift, paired with a score-based memory that upweights
+   hard observations during adaptation. Evaluated on Go1, Go2, and G1 quadrupeds in
+   MuJoCo Playground under four representative distribution shifts, TEMPO yields consistent
+   gains and up to 80% performance improvement in a single-device setting. On a physical
+   Unitree Go2 carrying an added payload, on-device adaptation with TEMPO recovers the
+   pre-shift performance baseline.
