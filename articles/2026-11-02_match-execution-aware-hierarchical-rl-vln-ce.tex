@@ -1,0 +1,261 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  vision-and-language navigation \textbullet{}
+  hierarchical reinforcement learning \textbullet{}
+  embodied AI \textbullet{}
+  continuous environments}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MATCH: Execution-Aware Hierarchical Reinforcement Learning
+  for Vision-and-Language Navigation}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Joint End-to-End Training of Planner and Executor Sets
+  New State-of-the-Art on R2R-CE and RxR-CE at 0.5B Parameters}\par\vspace{6pt}
+
+{\small\textbf{By} Shuhao Ye, Yufei Wei, Demao Wang,
+  Shichao Zhai, Rong Xiong, Yue Wang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.38248 \textbullet{} cs.RO
+  \textbullet{} submitted 28 Oct 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Hierarchical VLN agents that optimize the high-level planner while
+keeping the low-level executor fixed suffer from execution blindness:
+the planner proposes waypoints without knowing whether the executor
+can reach them. MATCH closes this loop by jointly training a
+language-conditioned planner and a goal-conditioned executor end-to-end
+with reinforcement learning, routing execution feedback back to inform
+future waypoint selection. With only 0.5B parameters, MATCH sets
+new state-of-the-art on R2R-CE (62.4\% SR) and RxR-CE (55.8\% SR).
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] In VLN-CE, hierarchical planners propose waypoints
+    without knowing what the executor can achieve, causing cascading
+    failures.
+  \item[Why it matters:] Embodied navigation in continuous 3D
+    environments with language instructions is a core capability
+    for household robots and assistive AI.
+  \item[Method:] End-to-end RL training of planner and executor;
+    execution-status feedback from executor to planner at each step;
+    shared visual backbone.
+  \item[Result:] 62.4\% SR on R2R-CE (val unseen) and 55.8\% SR on
+    RxR-CE (val unseen), surpassing all prior methods.
+  \item[Evidence:] R2R-CE and RxR-CE benchmarks, val unseen and
+    test splits; ablations over execution feedback and joint training.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Vision-and-Language Navigation (VLN) tests an agent's ability to
+follow free-form instructions like ``walk past the sofa, turn right at
+the kitchen, and stop in front of the bookshelf'' in a photo-realistic
+3D environment. In Continuous Environments (VLN-CE), the agent must
+produce raw motor actions---translation velocity and rotation---rather
+than selecting named waypoints on a graph, making the problem
+significantly harder.
+
+Hierarchical approaches decompose VLN-CE into two sub-problems:
+a \emph{planner} that parses the instruction and generates a
+sequence of subgoals (waypoints), and an \emph{executor} that
+drives the robot from its current position to each waypoint.
+This decomposition is intuitive but introduces a structural mismatch:
+the planner has no direct signal about whether its proposed waypoints
+are achievable given the current room geometry and the executor's
+capabilities.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fixed executor, trained planner:}
+Most prior hierarchical VLN-CE systems pretrain or fix the low-level
+executor (typically a model-predictive controller or a simple
+goal-conditioned policy) and focus all learning effort on the
+high-level planner. The planner therefore cannot receive gradient
+signal from execution failures and learns only from its own
+prediction errors.
+
+\textbf{Mismatched subgoal abstraction:}
+Even when both components are trained, they are typically trained
+separately on different objectives (language-goal matching for the
+planner; reaching accuracy for the executor), meaning there is no
+shared objective that penalizes the planner for proposing unreachable
+waypoints.
+
+\textbf{No execution feedback:}
+The planner selects its next waypoint based on the instruction and
+the current visual observation, but not on how the last waypoint
+was executed. Information about partial failures (executor reached
+70\% of the waypoint but collided) is discarded between planning
+steps.
+
+\section{Core Mechanism}
+
+\textbf{Language-Conditioned Planner.} Given the full instruction
+$I$ and the current visual observation $o_t$, the planner
+$\pi_P(w_t \mid I, o_t, h_t^P)$ produces a waypoint $w_t$ as a
+displacement vector relative to the current agent pose, where
+$h_t^P$ is the planner's recurrent state.
+
+\textbf{Goal-Conditioned Executor.} Given the current observation
+$o_t^{\text{low}}$ and the target waypoint $w_t$, the executor
+$\pi_E(a_t \mid o_t^{\text{low}}, w_t, h_t^E)$ produces a
+primitive action $a_t$ (linear velocity, angular velocity).
+
+\textbf{Execution-Status Feedback.} After the executor attempts
+waypoint $w_t$, the achieved displacement and an obstacle-collision
+indicator are compressed into an execution-status vector $s_t$ and
+appended to the planner's observation at step $t+1$:
+$h_{t+1}^P = \text{RNN}(h_t^P, [o_{t+1}, s_t])$.
+
+\textbf{Joint RL Training.} The planner and executor share a single
+reward: the navigation success reward at the episode terminus,
+discounted back through the waypoint sequence. Both are updated by
+PPO in a shared replay buffer.
+
+\section{Technical Formulation}
+
+The planner's policy is:
+\[
+w_t = \pi_P\!\left(I,\, o_t,\, h_t^P,\, s_{t-1}\right)
+\]
+The executor's policy unrolls for $T_{\text{exec}}$ steps per waypoint:
+\[
+a_\tau = \pi_E\!\left(o_\tau^{\text{low}},\, w_t - p_\tau,\, h_\tau^E\right)
+\]
+where $p_\tau$ is the agent's current position.
+
+The reward shaping for the planner uses a distance-based dense reward:
+\[
+r_t^P = d(p_t, g) - d(p_{t+1}, g) - \lambda_c \cdot \mathbf{1}[\text{collision}_t]
+\]
+where $g$ is the goal location and $\lambda_c$ penalizes collisions.
+The executor receives a waypoint-reaching reward:
+\[
+r_\tau^E = \max\!\left(0,\; d(p_\tau, w_t) - d(p_{\tau+1}, w_t)\right)
+\]
+
+The full PPO objective optimizes $\pi_P$ and $\pi_E$ jointly:
+\[
+\mathcal{L} = \mathcal{L}_{\text{PPO}}(\pi_P) + \beta\,
+  \mathcal{L}_{\text{PPO}}(\pi_E)
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Pretraining.} The shared visual backbone (ViT-B) is initialized
+from a pretrained visual-semantic embedding. The instruction encoder
+is initialized from a compact BERT variant.
+
+\textbf{Stage 1 -- Imitation Learning.} Both planner and executor are
+pretrained with behavior cloning on expert trajectories for 10k steps.
+
+\textbf{Stage 2 -- Joint RL Fine-tuning.} PPO is applied for 50k
+environment steps. The execution-feedback vector is activated after
+Stage 1, ensuring the planner does not receive noisy feedback
+from an untrained executor.
+
+\textbf{Inference.} The planner generates one waypoint at a time,
+the executor runs for up to $T_{\text{exec}} = 20$ steps, and the
+planner then receives the execution-status feedback and produces the
+next waypoint.
+
+\section{What the Guarantee Says}
+
+No theoretical guarantee is claimed. The paper's argument is
+empirical: execution-aware training produces better navigation
+policies, and the ablation studies isolate which components
+contribute. The success-rate metric on val unseen splits, which
+feature environments not seen during training, provides evidence
+of generalization.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{R2R-CE val unseen:} MATCH achieves
+    \textbf{SR = 62.4\%}, \textbf{GP = 65.1\%},
+    \textbf{NE = 3.8 m}, surpassing the prior SOTA
+    (SR = 58.1\%) by 4.3 points.
+  \item \textbf{RxR-CE val unseen:} MATCH achieves
+    \textbf{SR = 55.8\%}, improving over the prior best (51.3\%)
+    by 4.5 points.
+  \item \textbf{Parameter efficiency:} MATCH achieves these results
+    with \textbf{0.5B parameters}, outperforming prior
+    methods that use 2--7B parameters.
+  \item \textbf{Collision rate:} Joint RL training with the
+    collision penalty reduces the executor's collision rate by
+    31\% relative to the imitation-only baseline.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Execution feedback removed:}
+Removing the execution-status vector and training jointly on reward
+alone reduces SR on R2R-CE by 3.1 points, confirming that the
+information channel---not just joint training---is critical.
+
+\textbf{Fixed executor (standard hierarchical baseline):}
+Fixing the executor at its imitation-learning checkpoint and training
+only the planner reduces SR by 5.7 points, establishing the cost
+of decoupled training.
+
+\textbf{Imitation only (no RL):}
+Without RL, SR is 54.6\%, 7.8 points below MATCH. RL is necessary
+to generalize to execution scenarios not covered by expert data.
+
+\textbf{Waypoint granularity:}
+Decreasing the maximum number of waypoints per episode degrades
+SR smoothly, suggesting the planner learns to use waypoints
+efficiently rather than uniformly spacing them.
+
+\section*{Reference}
+
+Shuhao Ye, Yufei Wei, Demao Wang, Shichao Zhai, Rong Xiong, Yue Wang.
+\textbf{MATCH: Execution-Aware Hierarchical Reinforcement Learning for
+Vision-and-Language Navigation in Continuous Environment.}
+arXiv:2610.38248. 2026.
+\url{https://arxiv.org/abs/2610.38248}
+
+\end{document}

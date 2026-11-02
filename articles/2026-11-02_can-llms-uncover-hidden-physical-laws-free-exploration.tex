@@ -1,0 +1,253 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  scientific discovery \textbullet{}
+  LLM agents \textbullet{}
+  physical laws \textbullet{}
+  autonomous exploration}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Can LLMs Uncover Hidden Physical Laws\\
+  through Free Exploration?}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  LongChang Benchmarks Open-Ended Physical Discovery in
+  Altered-Physics MuJoCo Worlds: 11 of 12 Frontier Models Score Zero}\par\vspace{6pt}
+
+{\small\textbf{By} Zhen Yang, Wen Wang, Xander Xu, Ying-Cong Chen}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.37649 \textbullet{}
+  cs.CL \textbullet{} NeurIPS 2026 ML4PS Workshop}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Eleven of twelve frontier large language models fail entirely at
+open-ended physical discovery: placed in a MuJoCo simulation with
+silently altered physical laws and given tools to run experiments freely,
+they detect anomalies but cannot formulate the governing equation.
+Only GPT-6-Astra succeeds at all, with a 16.7\% discovery rate.
+The result documents a sharp gap between competent reasoning within
+known frameworks and genuine hypothesis-driven scientific inquiry.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] It is unknown whether LLMs can perform genuine
+    open-ended scientific discovery---designing experiments, iterating
+    hypotheses, and formulating laws without being prompted.
+  \item[Why it matters:] Autonomous AI scientists could accelerate
+    research, but only if their discovery capabilities go beyond
+    pattern matching on known science.
+  \item[Method:] LongChang framework: MuJoCo worlds with silently
+    altered physics; LLM agents given Python tools for free
+    exploration; discovery scored by law-formulation accuracy.
+  \item[Result:] 11 of 12 frontier models score 0\%; GPT-6-Astra
+    achieves 16.7\% (1 of 6 trials).
+  \item[Evidence:] 12 frontier LLMs evaluated across 6 altered-physics
+    environments; qualitative analysis of exploration patterns.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Scientific discovery requires more than retrieval or deduction from
+known facts. It requires \emph{abduction}: noticing that the world
+behaves unexpectedly, designing experiments to distinguish candidate
+explanations, accumulating evidence, and arriving at a formal law.
+This process is epistemically distinct from the question-answering
+and reasoning tasks on which LLMs currently excel.
+
+The question addressed by this paper is sharply defined: given a
+simulation world in which one or more physical constants have been
+silently altered, and given a set of Python tools with which to run
+experiments, can an LLM figure out which law has changed and state
+it correctly? No hint is given about which quantity to vary. No
+labeled data is provided. The agent must decide what to measure,
+how to measure it, and what to conclude.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Equation discovery benchmarks} (e.g., SRBench, AI Feynman)
+provide labeled $(x_i, y_i)$ pairs and ask models to fit a symbolic
+expression. This is regression, not discovery: the model is told
+which variables are relevant and is given cleaned, ready-made data.
+
+\textbf{Scientific reasoning benchmarks} (e.g., SciBench) test
+whether LLMs can answer physics questions correctly. This requires
+application of known laws, not their formulation.
+
+\textbf{Agent-with-tool benchmarks} (e.g., WebArena, SciAgent) give
+agents access to search or computation tools but define the task
+question explicitly. The agent does not decide what question to ask.
+
+LongChang differs on all three dimensions: no labeled data, no known
+applicable law, no predefined question.
+
+\section{Core Mechanism}
+
+\textbf{Altered-Physics Worlds.} A MuJoCo simulation is configured
+with one or more modified constants: gravitational acceleration $g$,
+coefficient of restitution $e$, or air drag coefficient $k$. The
+alteration is sampled from a set of plausible values (e.g.,
+$g \in \{4, 6, 14, 18\}$\,m/s$^2$) to prevent trivial detection.
+
+\textbf{Tool Suite.} The agent is provided with Python tools to:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item spawn and reset objects (balls, ramps, pendulums),
+  \item apply forces or initial velocities,
+  \item query sensor readings (position, velocity, force) over time,
+  \item log numerical results to a file.
+\end{itemize}
+The agent writes and executes Python code calling these tools.
+
+\textbf{Exploration Protocol.} The agent receives a budget of $N$
+tool calls (typically $N = 200$). It is told only that ``some
+physical properties of this world may differ from the standard physics
+you know.'' It must determine what those properties are and state
+them formally by the end of its budget.
+
+\textbf{Scoring.} A discovery is marked successful if the agent's
+final stated law is numerically correct within $\pm 5\%$ of the
+true altered value, and identifies the correct physical quantity.
+Partial credit is given for correct anomaly identification alone.
+
+\section{Technical Formulation}
+
+Let $\mathcal{W}_c$ denote a world with altered physical constant
+$c \in \mathcal{C}$. The agent is a language model $\mathcal{A}$
+that generates a sequence of tool calls $a_1, a_2, \ldots, a_N$
+and a terminal law statement $\hat{L}$.
+
+The discovery score is:
+\[
+S(\mathcal{A}, \mathcal{W}_c) = \mathbf{1}\!\left[
+  |\hat{c} - c| / c < \epsilon \;\wedge\; \hat{q} = q
+\right]
+\]
+where $\hat{c}$ is the agent's estimated value, $q$ is the correct
+quantity, and $\epsilon = 0.05$.
+
+The Collective Anomaly Detection score (CAD) measures partial credit:
+\[
+\text{CAD}(\mathcal{A}) = \mathbb{E}_{\mathcal{W}_c}\!\left[
+  \mathbf{1}[\text{agent flags anomaly in quantity } q]
+\right]
+\]
+
+The gap between CAD and $S$ quantifies the failure mode: detecting
+that something is wrong but not determining what.
+
+\section{Learning or Inference Procedure}
+
+No training is performed; all models are evaluated zero-shot with
+their standard system prompts. The evaluation is therefore a direct
+test of models' out-of-the-box capability for autonomous scientific
+discovery. Each model is given a standardized initial message
+describing the tools and the open-ended task.
+
+Chain-of-thought prompting is used (the model is asked to reason
+before each tool call), but no few-shot examples of discovery are
+provided to avoid biasing the exploration strategy.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is claimed. The paper's contribution is empirical:
+it establishes a lower bound of $\approx$0\% on the discovery ability
+of current frontier models (with one exception), and provides a
+repeatable benchmark for tracking progress. The LongChang framework's
+automatic world generation ensures that future evaluations can use
+fresh worlds not seen in any training data, preventing benchmark
+saturation.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Discovery rates:} GPT-6-Astra: \textbf{16.7\%};
+    all other 11 models: \textbf{0\%}.
+  \item \textbf{Anomaly detection (CAD):} GPT-6-Astra: 66.7\%;
+    average across all models: 41.2\%. Models can detect that
+    something is wrong far more reliably than they can determine
+    what is wrong.
+  \item \textbf{Hypothesis revision:} All models converge on an
+    initial hypothesis after the first 20--50 tool calls and rarely
+    revise it, even when subsequent measurements contradict it.
+  \item \textbf{Tool use quality:} Models tend to run many
+    single-variable experiments but fail to design the
+    controlled comparisons needed to isolate the altered constant.
+  \item \textbf{Gravity vs.\ drag:} Altered gravity is discovered
+    more often than altered drag (GPT-6-Astra discovers gravity in
+    all successful trials), consistent with gravity's more direct
+    effect on commonly simulated trajectories.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Provided anomaly hint:}
+When the agent is told ``the gravitational acceleration in this world
+has been altered,'' success rates rise to 50\%+ for GPT-6-Astra and
+16.7\% for several other models. The bottleneck is therefore anomaly
+targeting, not law formulation.
+
+\textbf{Reduced tool budget ($N = 50$):}
+GPT-6-Astra's discovery rate drops from 16.7\% to 0\%; it needs
+$\sim$150 calls to triangulate the correct value. Other models
+are equally unsuccessful at $N = 50$.
+
+\textbf{Single-alteration vs.\ multi-alteration worlds:}
+Success rates drop to 0\% for all models when two constants are
+simultaneously altered, suggesting that current LLMs cannot
+disentangle compound perturbations.
+
+\textbf{Failure mode categorization:}
+The authors classify failures as: (1) no anomaly detected (17\%),
+(2) anomaly detected but wrong quantity identified (51\%), and
+(3) correct quantity but incorrect value (32\%). Type~(3) is
+encouraging for the future: the bottleneck is precise estimation,
+not total blindness.
+
+\section*{Reference}
+
+Zhen Yang, Wen Wang, Xander Xu, Ying-Cong Chen.
+\textbf{Can LLMs Uncover Hidden Physical Laws through Free Exploration?}
+arXiv:2610.37649. NeurIPS 2026 ML4PS Workshop. 2026.
+\url{https://arxiv.org/abs/2610.37649}
+
+\end{document}

@@ -1,0 +1,257 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multi-agent LLMs \textbullet{}
+  collective reasoning \textbullet{}
+  alignment measurement \textbullet{}
+  information-efficient communication}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Collective Emergent Alignment in Multi-Agent LLMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  REMAP Quantifies Interaction-Induced Reasoning Gains;
+  Gap-Aware Factual Messages Amplify Them by $+3.1$ F1
+  While Cutting Token Cost by 58\%}\par\vspace{6pt}
+
+{\small\textbf{By} Boxuan Wang, Tianxiang Sun, Linyang Li,
+  Xipeng Qiu, Hang Yan}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.34836 \textbullet{} cs.AI
+  \textbullet{} submitted 26 Oct 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multi-agent LLM systems often outperform any individual agent on
+reasoning tasks---but is this due to genuine peer interaction or simply
+to extra self-refinement compute? This paper introduces Collective
+Emergent Alignment (CEA) to measure the interaction-specific gain, and
+the REMAP framework to quantify it at the level of individual facts.
+Across seven model families and two multi-hop benchmarks, CEA is
+consistently $+6.3$ F1 points above matched self-refinement, and
+gap-aware factual communication amplifies this by a further $+3.1$
+points while reducing communication tokens by 58\%.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] It is unclear whether multi-agent LLM performance
+    gains reflect genuine collective intelligence or just additional
+    self-refinement compute.
+  \item[Why it matters:] Multi-agent LLM systems are increasingly
+    deployed in production; understanding whether interaction
+    actually helps is essential for designing efficient systems.
+  \item[Method:] REMAP reference-entailment matrix measures per-fact
+    alignment gains attributable to interaction; gap-aware factual
+    messages route only missing facts between agents.
+  \item[Result:] CEA is $+6.3$ F1 over matched self-refinement;
+    gap-aware communication adds $+3.1$ F1 and cuts tokens by 58\%.
+  \item[Evidence:] 7 model families $\times$ 2 multi-hop QA benchmarks
+    (MuSiQue, 2WikiMultiHopQA); group sizes 2, 4, 8.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+In a multi-agent LLM system, several models communicate over multiple
+rounds to jointly arrive at an answer. The intuition is that diverse
+agents will catch each other's errors and combine partial knowledge.
+Empirically, these systems often outperform single-model baselines.
+But this comparison is confounded: a multi-agent system at round $k$
+has performed more computation than a single agent that runs $k$
+self-refinement steps on its own. The improvement could be
+\emph{collective}---arising from information transfer between agents---
+or \emph{individual}---arising from additional self-refinement
+at matched compute.
+
+This paper disentangles the two. It defines Collective Emergent
+Alignment (CEA) as the improvement in reference-grounded reasoning
+that arises specifically from inter-agent interaction, over and above
+what the same total compute would yield in independent self-refinement.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Multi-agent vs.\ single-agent comparisons:} Most prior work
+compares a multi-agent system directly to a single-agent baseline
+without controlling for compute. The multi-agent system always
+has more iterations and more tokens; any gain is ambiguous.
+
+\textbf{Aggregate metrics only:} Existing evaluations report final
+F1 or accuracy but do not attribute performance gains to specific
+communication events. There is no way to tell which round or which
+message was responsible for a correct answer.
+
+\textbf{No formal model of collective gain:} Prior work lacks a
+framework for defining what ``collective'' means in a measurable
+sense. Terms like ``debate,'' ``collaboration,'' and ``consensus''
+are used loosely without formal grounding.
+
+\section{Core Mechanism}
+
+\textbf{Reference-Entailment Matrix.} REMAP constructs a binary
+matrix $M \in \{0, 1\}^{A \times R \times F}$ where $A$ is the
+number of agents, $R$ the number of rounds, and $F$ the number of
+atomic facts in the reference answer. $M_{a, r, f} = 1$ if fact $f$
+is entailed by agent $a$'s response at round $r$. The matrix is
+populated using a pretrained natural-language inference model.
+
+\textbf{Collective Emergent Alignment.} A fact $f$ is attributed to
+CEA if:
+\begin{itemize}[itemsep=1pt,parsep=0pt]
+  \item It first appears in some agent's response after a communication
+    round (not at round 0), and
+  \item It does not appear in the counterfactual trajectory where
+    that agent self-refines without receiving peer messages.
+\end{itemize}
+The CEA score is the fraction of reference facts attributed to CEA
+under this definition.
+
+\textbf{Gap-Aware Factual Communication.} Instead of exchanging full
+reasoning traces, each agent identifies which facts in its peer's
+last response are absent from or contradict its own response.
+It then routes a compact message containing only those ``gap facts''
+to the peer. This is implemented with a lightweight LLM step that
+extracts the gap-fact set from both responses.
+
+\section{Technical Formulation}
+
+Let $R_{a, r}$ denote agent $a$'s response at round $r$, and let
+$E(R, f)$ be the entailment probability for fact $f$ given response
+$R$. The binary matrix is:
+\[
+M_{a,r,f} = \mathbf{1}[E(R_{a,r}, f) > \tau]
+\]
+The Semantic Coverage of the collective at round $r$ is:
+\[
+\text{SC}(r) = \frac{|\{f : \exists\, a,\; M_{a,r,f} = 1\}|}{|F|}
+\]
+The CEA score is:
+\[
+\text{CEA} = \frac{1}{|F|}\sum_f \mathbf{1}[f \in F_{\text{collective}}
+  \setminus F_{\text{individual}}]
+\]
+where $F_{\text{collective}}$ are facts recovered by the multi-agent
+system and $F_{\text{individual}}$ are those recovered by the
+matched self-refinement baseline.
+
+For gap-aware communication, the message from agent $a$ to agent $b$
+at round $r$ is:
+\[
+\mathcal{G}_{a \to b}^r = \{f : M_{a,r,f} = 1,\; M_{b,r,f} = 0\}
+\]
+and the message content is a natural-language summary of
+$\mathcal{G}_{a \to b}^r$ generated by a compact auxiliary LLM.
+
+\section{Learning or Inference Procedure}
+
+No model training is required for REMAP measurement. All LLMs are
+used in their pretrained, instruction-tuned states. The evaluation
+procedure is:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Initialize $A$ agents with the same question.
+  \item Run $R$ rounds of communication, alternating between
+    standard full-trace and gap-aware factual modes.
+  \item Construct $M$ using the NLI model after each round.
+  \item Compute SC, CEA, and per-round alignment gains.
+\end{enumerate}
+
+The self-refinement counterfactual is obtained by re-running each
+agent independently for the same number of rounds, receiving no
+peer messages.
+
+\section{What the Guarantee Says}
+
+The paper provides no formal guarantee about CEA's optimality or
+about the gap-aware communication protocol. The theoretical
+contribution is the definition of CEA itself, which is grounded
+in the entailment matrix and admits a clean counterfactual
+interpretation. The gap-aware communication protocol is justified
+empirically: it consistently amplifies CEA and reduces token cost
+across all evaluated settings.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{CEA is real:} Across 7 model families and both
+    benchmarks, CEA averages \textbf{$+6.3$ F1 points}
+    over matched self-refinement. All model families show
+    positive CEA; none is negative.
+  \item \textbf{Gap-aware communication:} Amplifies CEA by
+    \textbf{$+3.1$ F1} while reducing communication tokens
+    by \textbf{58\%} compared to full-trace exchange.
+  \item \textbf{Group size:} CEA increases with group size (2 to 8
+    agents) but with diminishing returns; going from 2 to 4 agents
+    yields $+4.1$ F1, while going from 4 to 8 yields only $+1.8$ F1.
+  \item \textbf{Benchmarks:} MuSiQue (harder, requiring 4-hop
+    reasoning) shows higher CEA ($+8.1$) than 2WikiMultiHopQA
+    ($+4.5$), consistent with more room for collective benefit when
+    individual models struggle.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Communication timing:} Communicating every round is better
+than every 2 rounds ($+1.2$ F1), but the gap narrows with gap-aware
+messages (which are shorter and can be communicated more frequently).
+
+\textbf{Message content:} Full-trace exchange vs.\ gap-aware facts:
+full-trace exchange achieves 3.1\% lower F1 and costs 58\% more
+tokens. Gap-aware messages are both cheaper and better.
+
+\textbf{NLI threshold $\tau$:} CEA is robust to $\tau \in [0.6, 0.8]$;
+below 0.6, noisy entailment decisions inflate CEA artificially;
+above 0.8, the definition becomes too strict and CEA underestimates
+the true gain.
+
+\textbf{Dominance phenomenon:} In 22\% of episodes, one agent
+provides $>$70\% of the CEA facts. Sequential communication
+reduces this to 9\%, suggesting that synchronous communication
+can lead to one agent dominating the group.
+
+\section*{Reference}
+
+Boxuan Wang, Tianxiang Sun, Linyang Li, Xipeng Qiu, Hang Yan.
+\textbf{Collective Emergent Alignment: Measuring and Amplifying
+Interaction-Induced Reasoning Alignment in Multi-Agent LLMs.}
+arXiv:2610.34836. 2026.
+\url{https://arxiv.org/abs/2610.34836}
+
+\end{document}

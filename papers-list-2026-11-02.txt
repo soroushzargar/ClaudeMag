@@ -1,0 +1,85 @@
+ML Papers List — 2026-11-02
+Generated for ClaudeMag
+
+1. Rectified Language Flow
+   Authors: Baiyu Su, Runlong Liao, Lizhang Chen, Qiang Liu
+   Venue/ID: arXiv:2610.33811 — cs.AI / cs.LG (UT Austin)
+   URL: https://arxiv.org/abs/2610.33811
+   Summary: Autoregressive language models generate tokens one at a time, while discrete
+   diffusion models suffer from slow iterative denoising. Rectified Language Flow (ReLF)
+   bypasses both limitations by training a flow model that moves continuously from noise
+   to token embeddings, with a rectified (straight-path) objective that supports few-step
+   generation. Fixed token embeddings are constructed via Hellinger-SVD, self-conditioning
+   guidance is trained with cross-entropy, and a regularized reflow stage enables 1–4-step
+   sampling without quality collapse. A novel "singular logits" mechanism handles the
+   final discrete commitment as the flow approaches the data manifold. ReLF achieves lower
+   generative perplexity than autoregressive baselines on OpenWebText at matched diversity,
+   and outperforms prior continuous flow methods such as ELF across all evaluated model
+   sizes, while generating sequences 15–19× faster at batch size 1.
+
+2. MATCH: Execution-Aware Hierarchical Reinforcement Learning for Vision-and-Language Navigation in Continuous Environments
+   Authors: Shuhao Ye, Yufei Wei, Demao Wang, Shichao Zhai, Rong Xiong, Yue Wang
+   Venue/ID: arXiv:2610.38248 — cs.RO (submitted 28 Oct 2026)
+   URL: https://arxiv.org/abs/2610.38248
+   Summary: Vision-and-Language Navigation in Continuous Environments (VLN-CE) requires
+   an embodied agent to follow free-form natural language instructions in realistic 3D
+   scenes with continuous action spaces. Prior hierarchical methods optimize the high-level
+   planner separately from a fixed low-level executor, creating a mismatch between planned
+   subgoals and what the executor can actually achieve. MATCH jointly learns a
+   language-conditioned planner that produces intermediate waypoints and a goal-conditioned
+   executor that produces primitive actions, training both end-to-end with RL. Execution
+   feedback is propagated back to inform waypoint selection, closing the loop between
+   planning and control. With only 0.5B parameters, MATCH achieves state-of-the-art
+   performance on the R2R-CE and RxR-CE benchmarks, surpassing prior methods by a
+   meaningful margin on success rate and goal-progress metrics.
+
+3. Can LLMs Uncover Hidden Physical Laws through Free Exploration?
+   Authors: Zhen Yang, Wen Wang, Xander Xu, Ying-Cong Chen
+   Venue/ID: arXiv:2610.37649 — cs.CL; NeurIPS 2026 ML4PS Workshop
+   URL: https://arxiv.org/abs/2610.37649
+   Summary: Can a language model act as a scientist—designing experiments, interpreting
+   results, and formulating laws—without being told what to look for? LongChang provides
+   an automated framework for this question by constructing MuJoCo simulation worlds in
+   which one or more physical constants are silently altered. Twelve frontier LLMs are
+   deployed as free explorers that design their own queries, build their own tools, and
+   must ultimately formulate the hidden law. Among 12 evaluated models, GPT-6-Astra
+   achieves a discovery rate of 16.7% while all others score 0%, suggesting that even
+   the most capable current models largely fail at open-ended physical discovery. Analysis
+   of exploration records reveals that models frequently notice unexplained anomalies but
+   fail to systematically investigate them, pointing to a gap between anomaly detection
+   and hypothesis formation in LLMs.
+
+4. Vision-Language Agents Can Learn in Their Own Latent Worlds
+   Authors: Haoxi Li, Sikai Bai, Jianfei Ma, Qinglin Hou, Xiaocheng Lu, Tao Han, Jie Zhang, Song Guo
+   Venue/ID: arXiv:2610.36925 — cs.AI (submitted 27 Oct 2026)
+   URL: https://arxiv.org/abs/2610.36925
+   Summary: Model-based reinforcement learning for vision-language agents typically
+   requires reconstructing future frames, which is computationally expensive and may
+   focus the world model on perceptually salient but task-irrelevant details. Dwell
+   introduces a different approach: it treats a vision-language model as a recurrent
+   latent transition operator that predicts the next latent state directly, without
+   pixel-level reconstruction. Latent states are grounded using a frozen V-JEPA2 visual
+   encoder, and the VLM itself learns to imagine task-relevant transitions in that space.
+   Evaluated across five interactive visual environments, Dwell achieves the strongest
+   overall performance among trainable methods while requiring substantially less compute
+   for imagination than reconstruction-based baselines. The approach suggests that useful
+   world models for VLM agents need not be pixel-faithful, but must capture the aspects
+   of the environment that matter for acting.
+
+5. Collective Emergent Alignment: Measuring and Amplifying Interaction-Induced Reasoning Alignment in Multi-Agent LLMs
+   Authors: Boxuan Wang, Tianxiang Sun, Linyang Li, Xipeng Qiu, Hang Yan
+   Venue/ID: arXiv:2610.34836 — cs.AI (submitted 26 Oct 2026)
+   URL: https://arxiv.org/abs/2610.34836
+   Summary: When multiple LLMs collaborate on a reasoning task, they often converge
+   toward more reference-grounded answers than any individual agent would reach alone.
+   This paper asks whether this collective gain is real and separable from matched
+   single-agent self-refinement. The authors define Collective Emergent Alignment (CEA)
+   as the reference-grounded reasoning improvement that arises specifically from
+   inter-agent interaction. They introduce REMAP (Reference-Entailment-Matrix for
+   Agentic Process), which quantifies this effect through Semantic Coverage and
+   interaction-specific alignment gains. Experiments across seven model families and
+   two multi-hop reasoning benchmarks show that CEA exists, varies systematically with
+   communication style, and can be amplified by replacing full reasoning-trace exchange
+   with compact, gap-aware, selectively routed factual messages. The framework provides
+   both a measurement tool for diagnosing multi-agent system quality and a practical
+   method for improving it.

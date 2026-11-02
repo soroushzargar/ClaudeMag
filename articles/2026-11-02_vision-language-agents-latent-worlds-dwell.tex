@@ -1,0 +1,260 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  model-based reinforcement learning \textbullet{}
+  vision-language models \textbullet{}
+  latent world models \textbullet{}
+  V-JEPA}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Vision-Language Agents Can Learn in Their Own Latent Worlds}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Dwell Replaces Pixel-Space World Models with Recurrent Latent
+  Transition in Frozen V-JEPA2 Embeddings, Cutting Imagination
+  Compute by 2.3$\times$}\par\vspace{6pt}
+
+{\small\textbf{By} Haoxi Li, Sikai Bai, Jianfei Ma, Qinglin Hou,
+  Xiaocheng Lu, Tao Han, Jie Zhang, Song Guo}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.36925 \textbullet{} cs.AI
+  \textbullet{} submitted 27 Oct 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Dwell builds a world model for vision-language agents that predicts the
+next latent state directly in the frozen embedding space of V-JEPA2,
+rather than reconstructing future frames. This removes the costly pixel
+decoder from model-based RL for VLMs, reducing imagination compute by
+2.3$\times$ while achieving the strongest overall performance among
+trainable methods across five interactive visual environments.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Pixel-space world models for VLM agents are
+    computationally expensive and may focus on perceptually salient
+    but task-irrelevant details.
+  \item[Why it matters:] Sample-efficient VLM agents are needed for
+    tasks where environment interaction is costly (robotics, real-world
+    planning, interactive apps).
+  \item[Method:] Recurrent latent transition model in frozen V-JEPA2
+    embedding space; VLM imagines ahead in latent space; no pixel
+    decoder.
+  \item[Result:] Best overall performance across 5 visual environments
+    among trainable methods; 2.3$\times$ lower imagination compute.
+  \item[Evidence:] 5 interactive visual environments; ablation over
+    world model type and encoder choice.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Model-based reinforcement learning (MBRL) aims to improve sample
+efficiency by training a world model---a learned simulator of
+the environment---and using it to plan or generate synthetic
+experience for policy learning. In the RL literature, Dreamer and
+its successors demonstrated that pixel-space world models trained
+with reconstruction objectives could dramatically outperform
+model-free methods on visual control tasks.
+
+For vision-language agents, however, pixel-space world models
+introduce a double burden. First, they require a large image decoder
+to reconstruct future frames, which is computationally expensive.
+Second, the reconstruction objective encourages the world model
+to represent all visual details, including those that are irrelevant
+to the agent's task (e.g., the exact texture of a wall, the shadow
+of an object). This can distract representation learning from task-
+relevant features.
+
+Dwell (Dreaming With Latent Embeddings for VLMs) proposes a
+minimal world model that operates entirely in latent space,
+predicting the next latent state rather than the next frame.
+The key design choice is to ground the latent space in a frozen
+pretrained visual encoder (V-JEPA2) rather than learning it jointly
+with the world model.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Pixel-space Dreamer variants:} These reconstruct future
+frames using a stochastic state space model and a convolutional
+decoder. For VLM agents, the decoder must handle high-resolution
+images aligned with the language context, which is expensive.
+The reconstruction loss does not distinguish task-relevant from
+task-irrelevant visual details.
+
+\textbf{End-to-end latent world models:} Training the latent
+representation jointly with the world model is unstable for
+vision-language agents, where the latent space must simultaneously
+support language-conditioned reasoning and state prediction.
+Prior work (TD-MPC2 for VLMs) addresses this with complex auxiliary
+objectives; Dwell eliminates the problem by using a frozen encoder.
+
+\textbf{Model-free fine-tuning:} Direct RL fine-tuning of VLMs
+without a world model is sample-inefficient and can catastrophically
+forget pretrained language abilities if the RL signal is too strong.
+
+\section{Core Mechanism}
+
+\textbf{Frozen V-JEPA2 Encoder.} All visual observations are encoded
+by a V-JEPA2 ViT-L encoder whose weights are frozen throughout
+training. V-JEPA2 was pretrained on video prediction; its embeddings
+are therefore already rich in temporal and semantic information,
+well-suited for predicting the next state.
+
+\textbf{Recurrent Latent Transition Model (RLTM).} The core world
+model is a recurrent neural network:
+$h_{t+1} = \text{RLTM}(h_t, z_t, a_t, g_t)$
+where $h_t$ is the recurrent state, $z_t = \text{V-JEPA2}(o_t)$
+is the current visual embedding, $a_t$ is the action embedding,
+and $g_t$ is the language goal embedding from the VLM.
+
+\textbf{Imagination and Policy Learning.} For policy updates, the
+agent unrolls the RLTM for $H$ steps in latent space: starting from
+a real observed state $z_t$, it generates an imagined trajectory
+$(\hat{z}_{t+1}, \hat{z}_{t+2}, \ldots, \hat{z}_{t+H})$.
+A value head on top of the RLTM outputs reward predictions for each
+imagined state. The policy is updated by actor-critic on the
+imagined trajectories.
+
+\section{Technical Formulation}
+
+Let $z_t = f_{\text{JEPA}}(o_t) \in \mathbb{R}^d$ be the frozen
+V-JEPA2 embedding and $g = f_{\text{VLM}}(\ell)$ the language goal
+encoding. The RLTM is trained by minimizing:
+\[
+\mathcal{L}_{\text{RLTM}} = \sum_{t=1}^{T} \left\|
+  \hat{z}_t - z_t \right\|^2
+  + \lambda_r \sum_{t=1}^{T} \left(\hat{r}_t - r_t\right)^2
+\]
+where $\hat{z}_t = h_t W_z$ and $\hat{r}_t = h_t w_r$ are
+predicted from the recurrent state.
+
+The policy $\pi_\theta(a \mid h, g)$ and value $V_\phi(h)$ are
+trained with a model-based actor-critic objective over imagined
+trajectories of length $H$:
+\[
+\mathcal{L}_{\text{actor}} = -\mathbb{E}_{\hat{\tau}}\!
+  \left[\sum_{k=0}^{H} \gamma^k \hat{r}_{t+k}
+  + \lambda_e \mathcal{H}[\pi_\theta]\right]
+\]
+\[
+\mathcal{L}_{\text{critic}} = \mathbb{E}_{\hat{\tau}}\!
+  \left[\left(V_\phi(h_{t+k}) - \hat{V}_{\text{target}}\right)^2\right]
+\]
+
+\section{Learning or Inference Procedure}
+
+\textbf{Warm-up:} Collect $N_{\text{warmup}}$ real environment
+transitions to initialize the replay buffer.
+
+\textbf{Alternate:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Collect $M$ real steps with the current policy.
+  \item Update RLTM on the replay buffer for $K$ gradient steps.
+  \item Unroll $H$-step imagined trajectories from the buffer.
+  \item Update $\pi_\theta$ and $V_\phi$ on imagined + real data.
+\end{enumerate}
+
+The VLM backbone is fine-tuned with a small learning rate to adapt
+language-goal encoding to the new tasks, but the V-JEPA2 encoder is
+never updated.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is claimed. The paper argues informally that using
+a pretrained visual encoder that already captures temporal dynamics
+(V-JEPA2) as the latent space provides a better-conditioned prediction
+target than a randomly initialized latent, reducing the risk of the
+world model diverging from the true dynamics. Empirically, the RLTM
+prediction error is lower for V-JEPA2 than for randomly initialized
+or reconstructed latents, supporting this claim.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Best overall:} Dwell achieves the highest mean
+    task success across 5 visual environments among all
+    trainable methods.
+  \item \textbf{Compute reduction:} Imagination using the RLTM
+    requires \textbf{2.3$\times$ less compute} than a pixel-space
+    Dreamer baseline with the same planning horizon $H$.
+  \item \textbf{Sparse reward advantage:} On tasks with sparse
+    rewards, Dwell's margin over model-free baselines is 12.4
+    percentage points; on dense-reward tasks, the margin narrows
+    to 3.1 points.
+  \item \textbf{V-JEPA2 vs.\ other encoders:} Using CLIP instead
+    of V-JEPA2 as the frozen encoder reduces performance by
+    8.2\% on average, confirming the value of a temporally-aware
+    encoder for the world model.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Latent prediction vs.\ pixel reconstruction:}
+Replacing RLTM with a pixel-decoder world model of similar capacity
+reduces performance by 4.1\% and increases imagination compute
+by 2.3$\times$, validating the latent-only design.
+
+\textbf{Frozen vs.\ fine-tuned V-JEPA2:}
+Fine-tuning V-JEPA2 alongside the world model degrades performance
+by 5.3\%, likely due to the joint instability of learning the
+latent space and predicting in it simultaneously.
+
+\textbf{Imagination horizon $H$:}
+Performance peaks at $H = 5$ steps and degrades for $H > 10$,
+consistent with the compounding prediction error in long latent
+rollouts.
+
+\textbf{RLTM size:}
+Scaling the RLTM from a 2-layer GRU to a 4-layer Transformer adds
+2.7\% success, suggesting that the world model's capacity is not
+yet a bottleneck at the evaluated environment scales.
+
+\section*{Reference}
+
+Haoxi Li, Sikai Bai, Jianfei Ma, Qinglin Hou, Xiaocheng Lu,
+Tao Han, Jie Zhang, Song Guo.
+\textbf{Vision-Language Agents Can Learn in Their Own Latent Worlds.}
+arXiv:2610.36925. 2026.
+\url{https://arxiv.org/abs/2610.36925}
+
+\end{document}

@@ -1,0 +1,273 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-02}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  flow matching \textbullet{}
+  language generation \textbullet{}
+  diffusion language models \textbullet{}
+  fast inference}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Rectified Language Flow}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Straight-Path Flow Matching in Token Embedding Space Beats
+  Autoregressive Baselines at 15--19$\times$ Inference Speedup}\par\vspace{6pt}
+
+{\small\textbf{By} Baiyu Su, Runlong Liao, Lizhang Chen, Qiang Liu}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2610.33811 \textbullet{}
+  cs.AI / cs.LG \textbullet{} University of Texas at Austin}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Rectified Language Flow (ReLF) generates text by training a flow model
+to move noise continuously toward token embeddings along straight
+(rectified) paths, enabling accurate generation in as few as one to
+four function evaluations. At batch size 1 it produces 1,024-token
+sequences 15--19$\times$ faster than a matched autoregressive baseline,
+while achieving lower generative perplexity on OpenWebText and
+outperforming all prior continuous-flow language models.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Autoregressive models are slow at inference due to
+    serial token generation; discrete diffusion models require many
+    costly denoising steps over a large discrete space.
+  \item[Why it matters:] Fast, high-quality text generation is
+    critical for interactive AI, serving efficiency, and real-time
+    applications such as code completion and dialogue.
+  \item[Method:] Continuous flow matching in Hellinger-SVD token
+    embeddings with self-conditioning guidance, regularized reflow for
+    distillation, and singular logits for discrete commitment.
+  \item[Result:] Lower perplexity than autoregressive baselines on
+    OpenWebText; 15--19$\times$ faster generation at batch size 1
+    with 4 function evaluations.
+  \item[Evidence:] OpenWebText language modeling benchmarks across
+    three model sizes; ablation over number of function evaluations.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models have converged on autoregressive (AR) generation:
+at each step the model conditions on all previous tokens and samples
+the next one. This left-to-right serial process is the primary
+bottleneck at inference time---each token requires a full forward pass,
+and a sequence of $T$ tokens requires $T$ passes.
+
+Diffusion language models offer an alternative: start from a noisy
+sequence and iteratively refine it over $K$ denoising steps. Because
+denoising steps can be parallelized across positions, the number of
+forward passes is $K \ll T$ for long sequences. But discrete diffusion
+models operate over a large categorical space at each position,
+introducing its own inefficiencies, and $K$ is typically still in the
+tens to hundreds.
+
+ReLF takes a third approach: flow matching in a continuous embedding
+space. A flow model is trained to transport a simple noise distribution
+$p_0$ (e.g., Gaussian) to the distribution of token embeddings $p_1$.
+The rectified flow objective enforces straight paths between noise and
+data, enabling accurate generation with as few as 1--4 function
+evaluations.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Autoregressive models} require $T$ serial forward passes for a
+length-$T$ sequence. Speculative decoding and other parallelization
+heuristics reduce this in practice but don't change the fundamental
+asymptotic cost.
+
+\textbf{Discrete diffusion models} work directly in token space,
+avoiding the need to commit to embeddings. However, the discrete state
+space is large (vocabulary $\sim 50\text{k}$), and the denoising
+objective must define meaningful noise over discrete categories. Prior
+models report 32--64 steps to achieve quality competitive with AR
+models.
+
+\textbf{Prior continuous-flow language models} (ELF, DiLaDiff) use
+learned continuous embeddings that are unstable to train and require
+reconstruction losses that decouple the flow from the discrete output
+space. Committing a continuous embedding to a discrete token at
+generation time via nearest-neighbor lookup introduces discretization
+error that accumulates over the sequence.
+
+\section{Core Mechanism}
+
+ReLF's four key components work together to address these issues:
+
+\textbf{1. Hellinger-SVD Embeddings.} Token embeddings are initialized
+from the SVD of the Hellinger-transformed co-occurrence matrix of the
+training corpus. This produces a geometry in which frequent co-occurring
+tokens are nearby, providing a meaningful flow target that is fixed
+throughout training. Crucially, no embedding training is needed.
+
+\textbf{2. Self-Conditioning Guidance.} At each training step the model
+is first run with the corrupted input $x_t$ to produce a preliminary
+estimate $\hat{x}_0$. On the same forward pass (with gradients detached),
+$\hat{x}_0$ is concatenated to $x_t$ and passed to the model again.
+A cross-entropy loss between $\hat{x}_0$ and the true $x_0$ trains the
+guidance branch. This conditioning helps the model resolve ambiguous
+intermediate states near $t = 0.5$.
+
+\textbf{3. Regularized Reflow.} After initial training, a reflow stage
+distills the learned curved flow into a straighter one by training on
+$(x_0, x_1)$ pairs sampled from the original model's trajectories.
+A regularization term penalizes degenerate straight lines that pass
+outside the data manifold, preventing the reflow from creating diversity
+collapse.
+
+\textbf{4. Singular Logits.} As $t \to 1$ the flow approaches the data
+manifold and must commit to a discrete token. Singular logits is a
+differentiable mechanism that computes token logits from the flow's
+velocity direction at $t = 1$, rather than from the embedding value
+itself, enabling sharp, gradient-compatible token selection.
+
+\section{Technical Formulation}
+
+Let $x_0 \sim \mathcal{N}(0, I)$ be noise and $x_1 \sim p_{\text{data}}$
+be a token embedding sequence. The rectified flow objective minimizes:
+\[
+\mathcal{L}_{\text{flow}} = \mathbb{E}_{t, x_0, x_1}\!\left[
+  \left\| v_\theta(x_t, t) - (x_1 - x_0) \right\|^2
+\right]
+\]
+where $x_t = (1-t)x_0 + t\, x_1$ and $v_\theta$ is the learned velocity
+field.
+
+The self-conditioning guidance loss augments training with:
+\[
+\mathcal{L}_{\text{sc}} = -\log p_\theta(x_1 \mid \hat{x}_0, x_t, t)
+\]
+where $\hat{x}_0 = x_t + (1-t)\,v_\theta(x_t, t)$ is the preliminary
+clean estimate.
+
+The regularized reflow loss is:
+\[
+\mathcal{L}_{\text{reflow}} = \mathcal{L}_{\text{flow}}^{\text{straight}}
+  + \lambda \cdot \mathbb{E}\!\left[\text{dist}(x_t^{\text{reflow}},
+  \mathcal{M})\right]
+\]
+where $\mathcal{M}$ is an approximation of the data manifold and $\lambda$
+is a regularization weight. Singular logits are defined as:
+\[
+\ell_v = W_{\text{vocab}}\, v_\theta(x_1, 1) \cdot \|W_{\text{vocab}}\|^{-1}
+\]
+mapping the terminal velocity to logits via the vocabulary matrix.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Pre-compute Hellinger-SVD embeddings from corpus statistics.
+  \item Train $v_\theta$ with $\mathcal{L}_{\text{flow}} + \alpha \cdot
+    \mathcal{L}_{\text{sc}}$ for $N$ steps.
+  \item Collect $(x_0, x_1)$ pairs from teacher model trajectories.
+  \item Fine-tune with $\mathcal{L}_{\text{reflow}}$ for $M \ll N$
+    additional steps.
+\end{enumerate}
+
+\textbf{Inference:} Sample $x_0 \sim \mathcal{N}(0, I)$, integrate
+the velocity field over $K \in \{1, 2, 4, 8, 16, 64\}$ Euler steps,
+apply singular logits at $t = 1$ to decode token distributions, and
+sample.
+
+\section{What the Guarantee Says}
+
+The rectified flow objective guarantees that the expected trajectory
+length $\mathbb{E}[\int_0^1 \|v_\theta\| \,dt]$ is minimized when
+trajectories are straight, which corresponds to the lower bound on
+the number of function evaluations required for a given discretization
+error. While this is an asymptotic argument, the regularized reflow
+empirically achieves near-straight paths and the 1-step sample quality
+confirms the practical benefit. No PAC-style generalization bound is
+provided; the guarantee is about transport efficiency, not sample quality.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Perplexity:} On OpenWebText, with 64 function
+    evaluations, ReLF achieves \textbf{lower perplexity than AR
+    baselines} at matched parameter counts for all three model sizes
+    (90M, 350M, 1.2B).
+  \item \textbf{Speed:} At 4 function evaluations, ReLF generates
+    1,024-token sequences \textbf{15--19$\times$ faster} than the AR
+    baseline at batch size 1, with less than 0.5 perplexity units of
+    degradation relative to the 64-step setting.
+  \item \textbf{Comparison to ELF:} ReLF outperforms ELF at all model
+    sizes by 1.2--2.8 perplexity points.
+  \item \textbf{Diversity:} At matched perplexity, ReLF self-BLEU
+    scores are lower (more diverse) than the AR baseline, suggesting
+    the flow's sampling process does not collapse to near-deterministic
+    outputs.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Hellinger-SVD vs.\ learned embeddings:}
+Learned embeddings reduce final perplexity by 0.3 points on average
+but add training instability; the fixed Hellinger-SVD embeddings are
+more robust and are used in all reported experiments.
+
+\textbf{Without self-conditioning:}
+Removing self-conditioning increases perplexity by 1.8--3.4 points,
+with the largest degradation at small $K$ (few steps). This confirms
+that guidance is most critical in the low-step regime.
+
+\textbf{Without reflow:}
+Without the reflow stage, 4-step generation degrades by 5.1 perplexity
+points relative to the 64-step setting. With reflow, the gap closes to
+$<0.5$ points.
+
+\textbf{Singular logits vs.\ nearest neighbor:}
+Replacing singular logits with nearest-neighbor lookup in embedding
+space increases perplexity by 0.7--1.1 points and degrades diversity.
+The directional signal at $t=1$ is more discriminative than the
+position signal.
+
+\section*{Reference}
+
+Baiyu Su, Runlong Liao, Lizhang Chen, Qiang Liu.
+\textbf{Rectified Language Flow.}
+arXiv:2610.33811. 2026.
+\url{https://arxiv.org/abs/2610.33811}
+
+\end{document}
