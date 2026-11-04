@@ -1,0 +1,229 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-04}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  zeroth-order optimization \textbullet{}
+  reinforcement learning for LLMs \textbullet{}
+  noise amplification \textbullet{}
+  memory-efficient fine-tuning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  The Cost of Mismatch}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Noise Amplification in Zeroth-Order Reinforcement Learning
+  Scales as $1/\mu^2$; Matched-Data BOLT Cancels It}\par\vspace{6pt}
+
+{\small\textbf{By} Lianmin Chen, Junbin Qiu, Chenxing Wei, Yao Shu,
+  Kun He}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.03260 \textbullet{}
+  cs.LG \textbullet{} NeurIPS 2026 Poster}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Zeroth-order reinforcement learning for large language models suffers
+from a fundamental noise amplification effect in the mismatched-data
+setting: gradient variance scales as $1/\mu^2$, creating an irreducible
+noise floor as the perturbation scale $\mu$ shrinks. The authors identify
+the matched-data BOLT estimator as the antidote, derive ZO-BOLT, and
+demonstrate 3--5$\times$ lower gradient variance and 40\% faster
+convergence on GSM8K and HumanEval.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] ZO RL for LLMs is unstable in practice; the reason
+    is not understood theoretically.
+  \item[Why it matters:] ZO methods are the only approach that enables
+    policy-gradient RL without backpropagation, keeping memory at
+    inference cost; instability blocks their practical use.
+  \item[Method:] The authors prove a $1/\mu^2$ variance lower bound for
+    mismatched-data ZO RL and derive ZO-BOLT, which shares rollout
+    randomness between both perturbation evaluations to cancel the
+    dominant noise term.
+  \item[Result:] ZO-BOLT reduces gradient variance by 3--5$\times$
+    and reduces forward passes to target accuracy by 40\% on
+    GSM8K and HumanEval.
+  \item[Evidence:] Gradient variance measurements; convergence curves on
+    mathematical reasoning (GSM8K, MATH) and code generation
+    (HumanEval).
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Policy gradient RL requires differentiating through a reward signal that
+is typically non-differentiable (discrete text actions, binary correctness
+signals). Zeroth-order methods estimate the gradient by measuring reward
+differences between two parameter-perturbed policies, avoiding
+backpropagation entirely. This makes ZO RL attractive for fine-tuning
+LLMs with RL, since the memory footprint equals that of inference.
+
+Despite this appeal, practitioners have found ZO RL for LLMs to be
+unstable---high variance, slow convergence, sensitive to hyperparameters.
+In contrast, ZO supervised fine-tuning methods such as MeZO work reliably.
+This discrepancy motivates the central question of the paper: is there a
+fundamental difference between ZO SFT and ZO RL that explains the
+instability?
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Standard ZO RL} uses the two-point estimator:
+\[
+  \hat{g} = \frac{r(\theta + \mu z) - r(\theta - \mu z)}{2\mu} \cdot z
+\]
+where the two reward evaluations use independently sampled rollouts. The
+mismatch between these rollouts is the fundamental problem.
+
+\textbf{Smaller perturbation scale $\mu$} reduces the bias of the
+estimator but, as the paper shows, the variance grows proportionally to
+$1/\mu^2$---the two effects cannot be balanced simultaneously.
+
+\textbf{More rollouts per update} reduces variance linearly but does not
+address the $1/\mu^2$ structure, requiring a quadratic increase in rollouts
+to halve the variance floor.
+
+\section{Core Mechanism: The $1/\mu^2$ Lower Bound}
+
+Let $r(\theta)$ be the stochastic reward with noise variance
+$\sigma^2_\text{env}$. The paper shows that the variance of the standard
+ZO RL estimator decomposes as:
+\[
+  \mathrm{Var}\!\left(\hat{g}\right)
+  = \frac{\sigma^2_\text{env}}{2\mu^2}
+  + O\!\left(\frac{\sigma^4_\text{env}}{\mu^4}\right)
+  + \text{signal terms}
+\]
+
+The leading term $\sigma^2_\text{env}/(2\mu^2)$ grows without bound as
+$\mu \to 0$, independent of sample size. This is the \emph{mismatch
+penalty}: it arises specifically because the two evaluations $r(\theta +
+\mu z)$ and $r(\theta - \mu z)$ use different rollout seeds, so their
+noise does not cancel in the difference.
+
+\section{The BOLT Solution}
+
+Boltzmann Targeted SFT (BOLT) in the matched-data setting shares the
+same rollout seed for both evaluations. Under matched randomness:
+\[
+  \tilde{g}_\text{BOLT} = \frac{r_s(\theta + \mu z) - r_s(\theta - \mu z)}{2\mu} \cdot z
+\]
+where both evaluations use rollout seed $s$. The noise now cancels:
+\[
+  r_s(\theta + \mu z) - r_s(\theta - \mu z)
+  = \nabla_\theta r(\theta)^\top (2\mu z) + O(\mu^3)
+\]
+with no leading noise term. The variance reduces to:
+\[
+  \mathrm{Var}\!\left(\tilde{g}_\text{BOLT}\right) = O(1)
+\]
+independent of $\mu$, eliminating the $1/\mu^2$ amplification entirely.
+
+\section{ZO-BOLT Algorithm}
+
+ZO-BOLT instantiates matched-data perturbation for LLM RL fine-tuning:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample a random direction $z$ in parameter space.
+  \item Fix a rollout seed $s$.
+  \item Evaluate the model under $\theta + \mu z$ with seed $s$ to
+    obtain reward $r^+$.
+  \item Evaluate the model under $\theta - \mu z$ with the same seed $s$
+    to obtain reward $r^-$.
+  \item Compute gradient estimate $\hat{g} = (r^+ - r^-)/(2\mu) \cdot z$.
+  \item Update: $\theta \leftarrow \theta - \eta \hat{g}$.
+\end{enumerate}
+
+The matched-seed constraint adds zero computational overhead---it
+requires only fixing the random seed before each rollout pair.
+
+\section{What the Guarantee Says}
+
+Theorem 1 (informal): For any ZO estimator in the mismatched-data
+setting with environment noise $\sigma^2_\text{env} > 0$, the gradient
+variance is at least $\sigma^2_\text{env}/(2\mu^2)$ for perturbation
+scale $\mu$. No mismatched estimator can circumvent this bound.
+
+Theorem 2 (informal): The ZO-BOLT matched-data estimator achieves
+$O(1)$ variance, independent of $\mu$. Crucially, this requires
+only that $r_s(\cdot)$ is deterministic given the seed, which holds
+for any pseudorandom rollout procedure.
+
+The bounds are non-asymptotic and hold for finite $d$ and $\mu > 0$.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Gradient variance (GSM8K):} ZO-BOLT reduces gradient
+    variance by $3.2\times$ over standard ZO RL at $\mu = 10^{-3}$,
+    and $5.1\times$ at $\mu = 10^{-4}$.
+  \item \textbf{Convergence (GSM8K):} ZO-BOLT reaches 70\% accuracy
+    with 40\% fewer forward passes than standard ZO RL.
+  \item \textbf{Convergence (HumanEval):} ZO-BOLT reaches 50\% Pass@1
+    with 35\% fewer forward passes.
+  \item \textbf{MATH:} ZO-BOLT final accuracy improves by 4.3\%
+    over standard ZO RL with the same forward-pass budget.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Effect of $\mu$ on ZO-BOLT:} Unlike standard ZO RL, ZO-BOLT
+performance is insensitive to $\mu$ across the range $10^{-4}$--$10^{-2}$,
+confirming that the mismatch penalty has been eliminated.
+
+\textbf{Seed granularity:} The paper evaluates fixing the seed per
+rollout pair (default) vs.\ per batch. Per-pair seeding gives lower
+variance, as expected from the theory.
+
+\textbf{Comparison to first-order RL:} ZO-BOLT is $12\times$ slower
+to converge than GRPO (a first-order RL method) on GSM8K, but uses
+$8\times$ less memory---a favorable trade-off when GPU memory is the
+bottleneck.
+
+\section*{Reference}
+
+Lianmin Chen, Junbin Qiu, Chenxing Wei, Yao Shu, Kun He.
+\textbf{The Cost of Mismatch: Noise Amplification in Zeroth-Order
+Reinforcement Learning.}
+arXiv:2611.03260. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.03260}
+
+\end{document}

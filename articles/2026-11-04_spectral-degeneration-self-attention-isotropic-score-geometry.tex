@@ -1,0 +1,228 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-04}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Transformer theory \textbullet{}
+  attention low-rank structure \textbullet{}
+  random matrix theory \textbullet{}
+  softmax spectral analysis}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Spectral Degeneration of Self-Attention}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Under Isotropic Score Geometry, Softmax Collapses the Attention
+  Spectrum; Causal Masking Grows Stable Rank as $O(\log L)$}\par\vspace{6pt}
+
+{\small\textbf{By} Mengda Li, Jianfeng Yao}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.02778 \textbullet{}
+  cs.LG / stat.ML \textbullet{} NeurIPS 2026 \textbullet{}
+  CUHK Shenzhen}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+An idealized spectral model of self-attention under isotropic score
+geometry reveals why attention matrices are approximately low-rank: the
+softmax nonlinearity amplifies dominant modes while collapsing the bulk
+of the spectrum to zero. For bidirectional attention, the stable rank
+stays bounded as sequence length grows; for causal attention, it grows
+logarithmically, implying that decoder-only models are intrinsically less
+compressible per sequence position than encoders.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Attention matrices are empirically low-rank, but the
+    theoretical reason for this degeneration is unknown.
+  \item[Why it matters:] Understanding why attention collapses informs
+    principled low-rank compression, regularization design, and the
+    choice between encoder and decoder architectures.
+  \item[Method:] Idealized Gaussian random matrix model for the score
+    matrix, combined with free probability theory to track how softmax
+    distorts the eigenspectrum.
+  \item[Result:] Softmax amplifies dominant eigenvalues while collapsing
+    the bulk; stable rank is $O(1)$ for bidirectional and $O(\log L)$ for
+    causal attention.
+  \item[Evidence:] Analytical derivations validated on pretrained GPT-2
+    and BERT attention heads and synthetic random attention matrices.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Empirical studies of trained Transformers consistently report that
+attention matrices are approximately low-rank: a small number of
+singular values carry most of the mass, while the remaining singular
+values are near zero. Methods such as Linformer, Nystromformer, and
+FlashAttention-low-rank exploit this empirically, but without
+theoretical justification for when and why it holds.
+
+Is low-rank structure a consequence of training dynamics, or is it
+intrinsic to the softmax attention computation? This paper answers the
+second question affirmatively: even without training, the softmax
+nonlinearity induces spectral degeneration in the attention matrix when
+the pre-softmax score matrix has isotropic geometry.
+
+\section{Why Existing Theory Falls Short}
+
+\textbf{Empirical studies} document low-rank structure but do not
+explain its origin; they attribute it to gradient dynamics without
+analysing the effect of the softmax function itself.
+
+\textbf{Linear attention theory} replaces softmax with a kernel
+approximation and analyzes the resulting linear map, but this
+fundamentally changes the operation and does not explain the behavior
+of softmax attention.
+
+\textbf{Rank-collapse results} from overparameterized network theory
+apply to weight matrices in MLP layers and do not transfer to the
+compositional query--key product structure of attention.
+
+\section{The Isotropic Score Model}
+
+Let $S \in \mathbb{R}^{L \times L}$ be the pre-softmax score matrix
+with $S_{ij} = q_i^\top k_j / \sqrt{d}$. The isotropic assumption
+models $S$ as a Wigner-type random matrix:
+\[
+  S = \frac{1}{\sqrt{L}} W + \lambda \mathbf{u}\mathbf{v}^\top
+\]
+where $W$ has i.i.d.\ entries with mean 0 and variance 1, $\lambda$ is
+the signal strength, and $\mathbf{u},\mathbf{v}$ represent a planted
+dominant mode. This models a ``generic'' attention head in which most
+query--key pairs are unrelated ($W$ term) but a few share a strong
+structural alignment ($\lambda$ term).
+
+\section{Main Theoretical Results}
+
+\textbf{Softmax Spectral Transformation.} Let
+$A = \mathrm{softmax}(S)$. Under the isotropic model, in the limit
+$L \to \infty$ with fixed $d$, the empirical spectral distribution of
+$A$ converges to a law concentrated near zero, with an isolated outlier
+eigenvalue at:
+\[
+  \lambda_1(A) \approx \frac{e^{\lambda/\sqrt{L}}}
+    {\mathbf{1}^\top e^{S\mathbf{v}} / L}
+\]
+while the bulk of the spectrum satisfies $\lambda_i(A) = O(1/L)$ for
+$i \geq 2$. The \textbf{stable rank} $\rho(A) = \|A\|_F^2 / \|A\|_2^2$
+therefore obeys:
+\[
+  \rho(A) = O(1) \quad \text{(bidirectional attention)}
+\]
+
+\textbf{Causal Attention.} The causal mask introduces a triangular
+structure in $S$: row $i$ can only attend to columns $j \leq i$. The
+row-normalization of softmax then has a gradient: earlier rows normalize
+over fewer tokens. The analysis shows that this asymmetry causes the
+stable rank to grow as:
+\[
+  \rho(A_{\text{causal}}) = O(\log L)
+\]
+
+\section{Proof Overview}
+
+The derivation proceeds in three steps:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Apply the semicircle law from random matrix theory to
+    characterize the eigenspectrum of $S$.
+  \item Use free probability calculus to track the distortion of the
+    spectral measure through the entrywise exponential
+    $\exp(S)$.
+  \item Show that the row-normalization step of softmax is approximated
+    by a rank-1 update to $\exp(S)$ in the high-dimensional limit, and
+    derive its effect on singular values.
+\end{enumerate}
+
+For causal attention, the proof additionally shows that the
+per-row normalization constants form a monotonically increasing sequence
+in the row index, leading to a non-uniform reweighting of singular
+vectors that grows the stable rank logarithmically.
+
+\section{What the Guarantee Says}
+
+The spectral collapse results are asymptotic ($L \to \infty$, fixed $d$)
+and require the isotropic geometry assumption, which may not hold for
+specialized attention heads in trained models. The paper validates that
+the predictions remain qualitatively accurate for finite $L$ (up to
+$L = 2048$) and for trained heads in GPT-2 and BERT, but provides no
+non-asymptotic concentration bounds. The results apply to the attention
+matrix $A$ itself, not to the final representations $AV$, which may
+have different rank properties depending on the value matrix $V$.
+
+\section{Empirical Validation}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Synthetic:} Stable rank under the isotropic model
+    matches analytical predictions at $L \in \{128, 512, 2048\}$.
+  \item \textbf{GPT-2 (causal):} Empirical stable rank grows as
+    $1.3 \log L + 0.7$ across heads, consistent with the $O(\log L)$
+    prediction.
+  \item \textbf{BERT (bidirectional):} Empirical stable rank stays in
+    the range $[1.8, 4.2]$ across heads and all $L$ tested, consistent
+    with the $O(1)$ bound.
+  \item \textbf{Head specialization:} The planted outlier $\lambda$
+    correctly predicts the magnitude of the dominant singular value
+    across heads with varying degrees of specialization.
+\end{itemize}
+
+\section{Implications for Practice}
+
+\textbf{Low-rank compression:} The $O(1)$ stable rank for bidirectional
+attention justifies using rank-$r$ approximations with $r$ independent
+of $L$. For causal models, rank should scale mildly with $L$.
+
+\textbf{Architecture choice:} Encoder models can achieve the same
+compression ratio regardless of context length. Decoder models become
+progressively harder to compress at long contexts.
+
+\textbf{Regularization:} Encouraging isotropic score geometry during
+training via spectral normalization of $Q$ and $K$ projections may
+stabilize the spectral structure and improve compressibility.
+
+\section*{Reference}
+
+Mengda Li, Jianfeng Yao.
+\textbf{Spectral Degeneration of Self-Attention under Isotropic Score
+Geometry.}
+arXiv:2611.02778. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.02778}
+
+\end{document}

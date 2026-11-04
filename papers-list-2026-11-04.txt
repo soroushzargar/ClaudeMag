@@ -1,0 +1,96 @@
+ML Papers List — 2026-11-04
+Generated for ClaudeMag
+
+1. Can Large Language Model Agents Learn by Watching Tutorial Videos?
+   Authors: Haoyu Zhao, Zafeirios Fountas, Jun Wang
+   Venue/ID: arXiv:2611.01460 — cs.LG / cs.AI / cs.CL / cs.CV (submitted 1 Nov 2026)
+   URL: https://arxiv.org/abs/2611.01460
+   Summary: LLM-based agents are typically trained or fine-tuned to acquire skills, but
+   weight updates are expensive and block continual learning at deployment. Tutorial
+   Agentic Learning (TAL) sidesteps this by converting tutorial videos into a structured
+   memory that a frozen LLM reads at inference time, requiring no parameter changes.
+   Videos are parsed into step-indexed, visually grounded procedural entries and stored
+   in a retrieval-augmented memory bank. At inference time, relevant entries are retrieved
+   and provided as in-context guidance. To evaluate this, the authors introduce VidLearn,
+   a multimodal QA benchmark built from 72 chess tutorial videos spanning 12 chess
+   openings. TAL performance scales with the number of tutorial videos consumed, suggesting
+   that the agent genuinely integrates new procedural knowledge rather than merely
+   retrieving surface-level text. The approach demonstrates that nonparametric continual
+   learning from instructional video content is a viable alternative to periodic fine-tuning.
+
+2. The Cost of Mismatch: Noise Amplification in Zeroth-Order Reinforcement Learning
+   Authors: Lianmin Chen, Junbin Qiu, Chenxing Wei, Yao Shu, Kun He
+   Venue/ID: arXiv:2611.03260 — cs.LG (NeurIPS 2026 Poster; submitted 2 Nov 2026)
+   URL: https://arxiv.org/abs/2611.03260
+   Summary: Zeroth-order (ZO) methods for reinforcement learning with verifiable rewards
+   estimate policy gradients by perturbing parameters and measuring reward differences,
+   avoiding backpropagation through the environment. This paper identifies a fundamental
+   noise amplification effect that plagues ZO RL in the mismatched-data setting: when
+   the two noisy function evaluations used to estimate a gradient are drawn from
+   different distributions (e.g., different rollout seeds), the gradient variance scales
+   as 1/mu^2 where mu is the perturbation scale, creating a floor that cannot be
+   reduced by simply shrinking mu. The authors contrast this with Boltzmann Targeted
+   SFT (BOLT), a matched-data method in which both evaluations share the same
+   randomness, which cancels the amplification term. They derive ZO-BOLT, an algorithm
+   that instantiates the matched-data principle for LLM fine-tuning with verifiable
+   rewards, and demonstrate empirically that ZO-BOLT achieves lower gradient variance
+   and faster convergence than standard ZO RL baselines across math and code tasks.
+   The analysis provides a principled explanation for why naive ZO RL for LLMs is
+   unstable, and suggests matched-data perturbation as a general design principle.
+
+3. Spectral Degeneration of Self-Attention under Isotropic Score Geometry
+   Authors: Mengda Li, Jianfeng Yao
+   Venue/ID: arXiv:2611.02778 — cs.LG / stat.ML (NeurIPS 2026; submitted 2 Nov 2026)
+   URL: https://arxiv.org/abs/2611.02778
+   Summary: Despite the empirical success of Transformers, the statistical properties
+   of attention matrices — and why attention heads tend to become low-rank in deep
+   models — are not well understood theoretically. This paper introduces an idealized
+   spectral model of the pre-softmax score matrix under an isotropic geometry assumption,
+   and derives how the softmax nonlinearity distorts the eigenspectrum. The analysis
+   shows that dominant modes (large singular values) survive and are amplified by
+   softmax, while the bulk of the spectrum collapses toward zero, explaining the
+   empirically observed low-rank structure of attention. A key distinction between
+   bidirectional and causal attention emerges: for bidirectional attention, the stable
+   rank stays bounded as sequence length grows, while for causal attention it grows
+   logarithmically, reflecting the asymmetric weighting that causal masking induces.
+   The paper provides code for replicating all figures. Implications include theoretical
+   justification for low-rank attention approximations and insights into why causal
+   models may require different regularization than bidirectional ones.
+
+4. Strategist: Designing Agentic Reasoning at Scale
+   Authors: Taiming Lu, Qi Xu, Zhigang Hua, Zhuang Liu
+   Venue/ID: arXiv:2611.03618 — cs.AI / cs.CL (NeurIPS 2026 Poster; submitted 2 Nov 2026)
+   URL: https://arxiv.org/abs/2611.03618
+   Summary: Most multi-agent systems use fixed pipeline templates or hand-crafted prompt
+   strategies, which limits generalization across tasks. Strategist is a meta-agent that
+   automatically designs inference strategies for new tasks by treating each strategy as
+   a reusable executable code blueprint. Given a task description and a small development
+   set, Strategist retrieves related blueprints from a growing library, proposes candidate
+   strategies as code, evaluates them on real samples to measure accuracy and cost, and
+   revises them iteratively. All valid candidates are added to the library, enabling
+   compositional reuse across tasks. Evaluated across 30 benchmarks spanning math,
+   coding, science, and commonsense reasoning, Strategist beats the strongest baseline
+   on 24 of 30 and achieves an average of 8.5 absolute percentage points higher accuracy
+   at 48% lower inference cost. Strategies discovered by Strategist also transfer to
+   model backends the meta-agent never optimized on, suggesting the blueprints capture
+   general structural insights about effective reasoning rather than model-specific
+   artifacts.
+
+5. ENGINE: Endogenous Variational MultiScale Optimization for Zeroth-Order LLM Fine-Tuning
+   Authors: Zhuoli Ouyang, Bowen Li, Chen Hao, Yejin Choi
+   Venue/ID: arXiv:2611.03293 — cs.LG (submitted 2 Nov 2026)
+   URL: https://arxiv.org/abs/2611.03293
+   Summary: Zeroth-order optimization enables LLM fine-tuning without backpropagation,
+   reducing memory requirements to that of inference. However, existing ZO methods
+   suffer from high variance and slow convergence because they sample perturbations in
+   the full parameter space or in a simple low-rank subspace, without accounting for
+   the curvature structure of the loss landscape. ENGINE (Endogenous variational
+   multiScale Optimization) addresses this by adapting the Variational MultiScale (VMS)
+   decomposition from computational mechanics, which separates the parameter space into
+   a coarse (low-rank) component and a fine-scale residual. ENGINE uses low-rank
+   perturbations to estimate the coarse gradient, then computes a closed-form subgrid
+   correction that reintroduces the unresolved full-space curvature into the coarse
+   update, achieving VMS-consistent gradient estimates at no additional parameter
+   memory. Across NLP fine-tuning benchmarks, ENGINE achieves up to a 2.61x speedup
+   in forward passes over prior ZO methods with zero additional peak memory overhead,
+   and consistently outperforms LOREN and other state-of-the-art ZO baselines.

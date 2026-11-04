@@ -1,0 +1,229 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-04}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  zeroth-order optimization \textbullet{}
+  memory-efficient fine-tuning \textbullet{}
+  variational multiscale methods \textbullet{}
+  LLM adaptation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  ENGINE: Variational MultiScale Zeroth-Order LLM Fine-Tuning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  A Closed-Form Subgrid Correction from Computational Mechanics Yields
+  2.61$\times$ Faster ZO Convergence at Zero Memory Overhead}\par\vspace{6pt}
+
+{\small\textbf{By} Zhuoli Ouyang, Bowen Li, Chen Hao, Yejin Choi}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.03293 \textbullet{}
+  cs.LG \textbullet{} Submitted 2 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+ENGINE applies the Variational MultiScale (VMS) decomposition from
+computational fluid mechanics to zeroth-order LLM fine-tuning. By
+decomposing perturbations into a low-rank coarse component and computing
+a closed-form subgrid correction that reintroduces unresolved curvature
+at no additional cost, ENGINE achieves a 2.61$\times$ speedup in forward
+passes over prior ZO methods with zero additional peak memory, and
+consistently outperforms state-of-the-art ZO baselines on NLP benchmarks.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Zeroth-order optimization for LLM fine-tuning is slow
+    to converge because low-rank perturbation subspaces miss curvature
+    from the complement space.
+  \item[Why it matters:] ZO fine-tuning is the only way to train LLMs
+    with RL rewards or in memory-limited settings without backpropagation;
+    improving its efficiency makes it practical.
+  \item[Method:] VMS decomposes the parameter space into a low-rank
+    coarse component (updated with 2 forward passes) and a fine-scale
+    complement; a closed-form subgrid correction reintroduces complement
+    curvature with no extra forward passes.
+  \item[Result:] 2.61$\times$ speedup in forward passes over LOREN;
+    zero additional peak memory overhead; consistent improvements on
+    SuperGLUE, MMLU, and instruction-following.
+  \item[Evidence:] GPT-J-6B on SuperGLUE, Llama-3-8B on MMLU, and
+    instruction-following on Alpaca Eval.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Zeroth-order (ZO) optimization enables fine-tuning LLMs without
+backpropagation, reducing memory from $O(\text{parameters})$ to
+$O(1)$ for the optimizer state. This matters in three settings: (1)
+fine-tuning on GPUs with insufficient VRAM for gradients, (2) fine-tuning
+through black-box API access where gradients are unavailable, and (3)
+fine-tuning with non-differentiable reward signals such as human
+feedback or unit-test pass rates.
+
+The main limitation is convergence speed: estimating gradients by
+measuring reward differences between perturbed parameters is noisy.
+Restricting perturbations to a low-rank subspace (as in MeZO and LOREN)
+reduces noise but introduces a systematic bias: curvature from the
+complement of the subspace is ignored, slowing convergence.
+
+ENGINE addresses this with an insight from computational mechanics:
+the unresolved fine-scale curvature can be reintroduced via a closed-form
+correction derived from the coarse (low-rank) gradient estimate, without
+any additional forward passes.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Full-space ZO (MeZO)} estimates gradients with random directions
+in the full parameter space. The variance is $O(d)$ where $d$ is the
+parameter count, making it impractically noisy for billion-scale models.
+
+\textbf{Low-rank ZO (LOREN)} restricts perturbations to a rank-$r$
+subspace. This reduces variance to $O(r)$ but discards curvature from
+the $d - r$ dimensional complement, introducing a systematic bias that
+slows convergence. With $r \ll d$, the complement curvature is large.
+
+\textbf{Increasing the rank $r$} reduces bias but increases memory and
+noise proportionally. There is no free way to access the complement
+curvature within the two-forward-pass budget.
+
+\section{Core Mechanism: Variational MultiScale Decomposition}
+
+The VMS framework decomposes the parameter space into a coarse
+subspace $\mathcal{U}$ (spanned by a low-rank basis
+$U \in \mathbb{R}^{d \times r}$) and its complement
+$\mathcal{U}^\perp$. Any perturbation $z$ decomposes as:
+\[
+  z = z_c + z_f, \quad z_c = UU^\top z,\quad z_f = (I - UU^\top) z
+\]
+
+ENGINE estimates the coarse gradient using the standard two-point
+ZO estimator restricted to $z_c$:
+\[
+  \hat{g}_c = \frac{\ell(\theta + \mu z_c) - \ell(\theta - \mu z_c)}{2\mu} \cdot z_c
+\]
+using 2 forward passes. The \textbf{subgrid correction}
+$\delta_f$ accounts for the fine-scale contribution:
+\[
+  \delta_f = (I - UU^\top) H_\text{diag}\, \hat{g}_c
+\]
+where $H_\text{diag}$ is a diagonal approximation of the Hessian
+maintained as an exponential moving average of squared gradient
+magnitudes. This term has zero additional forward-pass cost and $O(d)$
+memory, equal to the existing optimizer state.
+
+The final update is:
+\[
+  \theta \leftarrow \theta - \eta\bigl(\hat{g}_c + \alpha\, \delta_f\bigr)
+\]
+where $\alpha$ is a correction weighting hyperparameter.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Initialization:} Compute $U$ as the top-$r$ right singular
+vectors of a batch of initial ZO gradient estimates. Maintain
+$H_\text{diag}$ as an exponential moving average of $\hat{g}_c^2$.
+
+\textbf{Per-step update:}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample $z_c \sim \mathcal{N}(0, UU^\top)$ (a low-rank direction).
+  \item Evaluate $\ell(\theta \pm \mu z_c)$ with 2 forward passes.
+  \item Compute $\hat{g}_c$ and subgrid correction $\delta_f$.
+  \item Update $\theta$ using $\hat{g}_c + \alpha\,\delta_f$.
+  \item Update $H_\text{diag}$ with the new squared gradient components.
+\end{enumerate}
+
+\textbf{Periodic basis refresh:} Every $K = 200$ steps, recompute $U$
+from recent gradient history via a lightweight SVD of a $d \times K$
+matrix of gradient directions.
+
+\section{What the Guarantee Says}
+
+Proposition 1 (informal): The expected bias of the ENGINE gradient
+estimate is strictly lower than that of LOREN with the same rank $r$,
+provided $\alpha > 0$ and $H_\text{diag}$ approximates the diagonal
+Hessian. No exact convergence rate is derived, but the proposition
+bounds the bias reduction as a function of the quality of the diagonal
+Hessian approximation.
+
+The practical speed-up guarantee is empirical, not asymptotic. No
+formal convergence rate is provided in the paper.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{SuperGLUE (GPT-J-6B):} ENGINE matches or exceeds
+    full-fine-tuning accuracy on 7 of 8 tasks; achieves the same
+    accuracy as LOREN with \textbf{2.61$\times$ fewer forward passes}.
+  \item \textbf{MMLU (Llama-3-8B):} ENGINE achieves 72.3\%
+    5-shot accuracy, vs.\ 69.1\% for LOREN and 70.8\% for MeZO at the
+    same forward-pass budget.
+  \item \textbf{Alpaca Eval:} ENGINE win-rate vs.\ LOREN is 61.4\%,
+    confirming quality improvements in open-ended instruction following.
+  \item \textbf{Memory:} Peak memory overhead of ENGINE vs.\ MeZO is
+    0\%---the diagonal Hessian state fits within the existing optimizer
+    state memory.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without subgrid correction ($\alpha = 0$):} Performance equals
+LOREN, confirming that the speedup is entirely due to the correction.
+
+\textbf{Rank $r$ sensitivity:} ENGINE with $r = 32$ outperforms LOREN
+with $r = 128$ on SuperGLUE, demonstrating that the correction
+compensates for a fourfold reduction in rank.
+
+\textbf{Hessian approximation quality:} Using a richer block-diagonal
+Hessian estimate improves convergence by 7\% but requires 1.3$\times$
+more memory. The diagonal approximation provides most of the benefit.
+
+\textbf{Basis refresh interval $K$:} Performance is robust to $K$ in
+the range 100--500, suggesting that the low-rank basis does not need
+to be updated frequently.
+
+\section*{Reference}
+
+Zhuoli Ouyang, Bowen Li, Chen Hao, Yejin Choi.
+\textbf{ENGINE: Endogenous Variational MultiScale Optimization for
+Zeroth-Order LLM Fine-Tuning.}
+arXiv:2611.03293. 2026.
+\url{https://arxiv.org/abs/2611.03293}
+
+\end{document}

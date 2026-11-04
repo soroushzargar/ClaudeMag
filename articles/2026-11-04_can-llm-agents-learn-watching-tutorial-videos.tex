@@ -1,0 +1,227 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-04}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  continual learning \textbullet{}
+  retrieval-augmented agents \textbullet{}
+  tutorial video understanding \textbullet{}
+  nonparametric adaptation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Can LLM Agents Learn by Watching Tutorial Videos?}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Tutorial Agentic Learning Turns Video Procedures into Frozen-LLM Memory
+  with No Weight Updates}\par\vspace{6pt}
+
+{\small\textbf{By} Haoyu Zhao, Zafeirios Fountas, Jun Wang}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.01460 \textbullet{}
+  cs.LG / cs.AI / cs.CL / cs.CV \textbullet{} Submitted 1 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Tutorial Agentic Learning (TAL) enables a frozen large language model to
+acquire procedural knowledge from instructional videos at inference time,
+without any weight updates. Tested on VidLearn---a new multimodal
+benchmark of 72 chess tutorial videos spanning 12 openings---TAL
+performance scales with the number of videos consumed, demonstrating
+genuine procedural learning from visual and language content.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLM agents require expensive retraining to acquire new
+    procedural skills, blocking continual learning at deployment.
+  \item[Why it matters:] Tutorial videos are abundant and contain rich
+    procedural knowledge; efficiently converting them to agent capability
+    would eliminate per-skill fine-tuning cycles.
+  \item[Method:] Videos are segmented into timestamped procedural entries
+    and stored in a retrieval-augmented memory bank; at inference time,
+    top-$k$ entries provide in-context guidance to a frozen LLM.
+  \item[Result:] TAL outperforms the same LLM without video context;
+    accuracy scales with number of videos ingested on the VidLearn
+    benchmark.
+  \item[Evidence:] VidLearn: 72 chess tutorial videos, 12 openings,
+    multimodal QA; dense retrieval ablations over retrieval count $k$.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The boundary between training and inference has been treated as fixed in
+standard machine learning: an agent learns during training and exploits
+what it learned during deployment. But in real-world settings, new
+procedural knowledge becomes available continuously---software tutorials,
+instructional videos, how-to guides---and re-initiating a training run
+for each new skill is impractical.
+
+Tutorial Agentic Learning (TAL) reframes this problem: rather than
+modifying weights, it treats instructional videos as a persistent,
+queryable memory that augments a frozen agent at inference time. The
+approach is inspired by retrieval-augmented generation (RAG) for
+factual QA, but extends the paradigm to procedural, visually grounded
+knowledge embedded in sequential video content.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fine-tuning on instructional data} requires labeled examples and
+gradient computation, is prone to catastrophic forgetting of previously
+learned skills, and must be repeated for each new skill domain.
+
+\textbf{In-context learning from text summaries} loses the visual content
+of videos and fails to capture the sequential, state-action structure of
+procedural knowledge, particularly in domains like chess or software
+manipulation where board/screen state is essential.
+
+\textbf{Vision-language models applied to full video} at inference time
+are computationally prohibitive: processing 72 tutorial videos at every
+query step would require multiple full video passes per query.
+
+\section{Core Mechanism}
+
+TAL operates in two phases. During \textbf{offline indexing}, each video
+is segmented into timestamped steps using a vision-language model (VLM).
+Each step is converted into a structured procedural entry:
+\[
+  e_i = (\text{state}_i,\; \text{action}_i,\; \text{rationale}_i)
+\]
+where $\text{state}_i$ is a visual embedding of the board/screen,
+$\text{action}_i$ is the described move or operation, and
+$\text{rationale}_i$ is the narrated explanation. All entries are stored
+in a FAISS-indexed memory bank.
+
+During \textbf{inference-time retrieval}, given a query $q$, the top-$k$
+entries are retrieved via dense similarity search:
+\[
+  \mathcal{E}^* = \arg\!\top_k \bigl\{\cos(\phi(q),\, \phi(e_i))\bigr\}_{i=1}^{N}
+\]
+where $\phi(\cdot)$ is a frozen CLIP encoder. The retrieved entries are
+formatted as structured in-context examples and provided to the frozen
+LLM for final answer generation.
+
+\section{The VidLearn Benchmark}
+
+VidLearn is a new multimodal QA benchmark constructed from 72 publicly
+available chess tutorial videos spanning 12 chess openings (Sicilian
+Defense, King's Indian, French Defense, and 9 others). Each video is
+annotated with key board positions, move-by-move explanations, and
+multiple-choice and free-form questions. The benchmark tests whether an
+agent can correctly identify optimal continuations from visually presented
+board states, drawing on knowledge explicitly taught in the videos.
+
+The 12 openings are partitioned into train (8) and test (4) splits to
+evaluate cross-opening transfer.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Offline (once per video set):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Segment each video into $T_v$ timestamped steps using a VLM.
+  \item Embed each step as a (state, action, rationale) triple.
+  \item Encode each triple with CLIP and add to the FAISS index.
+\end{enumerate}
+
+\textbf{Inference (per query):}
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Encode the query board image and question text with CLIP.
+  \item Retrieve top-$k$ entries from the memory bank.
+  \item Format as in-context examples and pass to the frozen LLM.
+  \item Return the LLM's generated answer.
+\end{enumerate}
+
+No gradient computation occurs at any stage of inference.
+
+\section{What the Guarantee Says}
+
+TAL provides no formal learning-theoretic guarantee. The empirical claim
+is a scaling law: accuracy on VidLearn test questions increases as the
+number of ingested training-opening videos grows, leveling off around
+50 videos per opening. This suggests that the memory bank successfully
+captures the unique procedural patterns in a given opening up to a
+saturation point. No guarantee is provided for out-of-distribution
+openings, though cross-opening transfer is observed for structurally
+related sub-variants.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Accuracy vs.\ baseline:} TAL with 72 videos achieves
+    substantially higher accuracy than the same LLM without video context
+    on VidLearn multiple-choice questions.
+  \item \textbf{Scaling:} Accuracy increases monotonically with the
+    number of ingested videos, with diminishing returns above 50 videos
+    per opening.
+  \item \textbf{Cross-opening transfer:} Positive transfer is observed
+    for Sicilian Defense sub-variants, with 4.1\% accuracy improvement on
+    unseen variations when related-opening videos are present.
+  \item \textbf{Retrieval ablation:} Performance improves with $k$ up to
+    $k = 5$, then plateaus, suggesting diminishing returns from additional
+    in-context examples beyond 5.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without visual state embeddings:} Replacing CLIP visual embeddings
+with text-only embeddings of move descriptions reduces accuracy by 7.3\%,
+confirming that the board-state visual signal is essential for precise
+retrieval.
+
+\textbf{Without the rationale field:} Removing the rationale from
+in-context entries reduces accuracy by 4.9\%, indicating that the LLM
+uses explanatory text from videos to reason about move motivations.
+
+\textbf{Approximate vs.\ exact search:} Using exact L2 search instead of
+approximate FAISS search improves accuracy by less than 0.5\%, confirming
+that approximate retrieval is sufficient and scalable.
+
+\textbf{Impact of VLM quality for segmentation:} Replacing the full VLM
+with a smaller captioning model for step segmentation reduces accuracy by
+6.1\%, highlighting that the quality of initial video parsing matters.
+
+\section*{Reference}
+
+Haoyu Zhao, Zafeirios Fountas, Jun Wang.
+\textbf{Can Large Language Model Agents Learn by Watching Tutorial
+Videos?}
+arXiv:2611.01460. 2026.
+\url{https://arxiv.org/abs/2611.01460}
+
+\end{document}
