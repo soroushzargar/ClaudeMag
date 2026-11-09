@@ -64,7 +64,6 @@ h1 {
   font-size: 9pt;
   font-weight: bold;
   color: #b41e1e;
-  text-transform: uppercase;
   margin-bottom: 1pt;
 }
 .section-rule {
@@ -156,7 +155,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-rule"></div>
       <div class="section-body"><p>Let m&nbsp;=&nbsp;16 draft trajectories be given. For trajectory &tau;<sub>i</sub>, the prefix
     up to step a<sub>i</sub>&minus;1 is <em>p<sub>i</sub></em> and resampled continuations are drawn from:</p>
-    <code class="eq">&ctilde;c&sup_i&sup_j ~ p_&theta;(&middot; | x, p_i),  j = 1, &hellip;, k</code>
+    <code class="eq">c&#x0303;<sub>ij</sub> &sim; p<sub>&theta;</sub>(&middot; | x, p<sub>i</sub>),&nbsp; j = 1, &hellip;, k</code>
     <p>The expected token count is <span class="im">E[tokens] = m&middot;L_prefix + &alpha;&middot;k&middot;L_suffix</span>,
     where &alpha; is the fraction of trajectories flagged and L<sub>prefix</sub>, L<sub>suffix</sub> are mean
     prefix and suffix lengths. When errors cluster early, L<sub>prefix</sub> is small and savings are largest.</p></div>
