@@ -40,6 +40,16 @@ You are an expert LaTeX document compiler and PDF generation specialist. Your so
    - The `.tex` source file must also be written into `./articles/` before compilation.
    - After confirming the PDF was produced, delete the `.aux`, `.log`, and `.out` files — keep only `.tex` and `.pdf`.
 
+## LaTeX Is Mandatory — No Fallback Renderers
+
+The PDF **must** be produced by `pdflatex` from the populated `news.tex` source. Never render the article through HTML/Chromium/Playwright, ReportLab, pandoc-to-HTML, or any other substitute — those break the template (running header overlapping the title, wrong fonts, one-column layout, extra pages). The 2026-10-28, 2026-11-04 and 2026-11-09 editions were broken exactly this way because `pdflatex` was missing in the cloud container.
+
+If `pdflatex` is not on the PATH, install it first (Debian/Ubuntu):
+```
+apt-get update && apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended lmodern cm-super
+```
+If it still cannot be installed, stop and report the failure — do not produce a PDF by other means. After compiling, sanity-check with `pdfinfo <file>.pdf`: the Producer must be `pdfTeX`.
+
 ## Workflow Steps
 
 1. Read the report content (passed directly or from a file)
