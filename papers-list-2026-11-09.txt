@@ -1,0 +1,70 @@
+ML Papers List — 2026-11-09
+Generated for ClaudeMag
+
+1. StepBack: Step-Level Error-Localized Resampling for Efficient Test-Time Reasoning
+   Authors: Yang Ouyang, Jung-Eun Kim
+   Venue/ID: arXiv:2611.08403 — cs.AI / cs.LG (NeurIPS 2026; submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08403
+   Summary: Self-consistency (SC) generates many full reasoning trajectories and takes a
+   majority vote, but it is expensive because every chain runs to completion regardless
+   of where the error occurred. StepBack identifies the likely first-error step in a
+   small number of draft trajectories using lightweight signals (negative log-likelihood
+   threshold 0.1 and a process reward model threshold 0.05), then resamples only from
+   that step onward and collects answers via majority vote. Using 16 drafts and 2
+   samples per step, StepBack matches SC's accuracy across seven mathematical reasoning
+   and multi-hop QA benchmarks while reducing token usage by up to 41.26%. It is
+   compatible with adaptive methods such as Adaptive Consistency for further gains.
+
+2. SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery and Optimization
+   Authors: Qile Jiang, George Em Karniadakis
+   Venue/ID: arXiv:2611.08483 — cs.AI / cs.NE (submitted 6 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08483
+   Summary: LLM-guided evolutionary search is accurate but slow because each round
+   requires lengthy textual reasoning. SwarmEvolve sidesteps this by running 10 swarms
+   of 45 latent agents per round; agents share information by passing KV caches rather
+   than natural language, and each agent reasons for 40 latent steps without decoding
+   to text. On 21 mathematical-discovery and scientific-computing problems, SwarmEvolve
+   evaluates 5–13× more candidate programs per hour than OpenEvolve, ShinkaEvolve, and
+   CodeEvolve, reaching equivalent solution quality in a median of 3–8 minutes versus
+   60 minutes for competing frameworks.
+
+3. StrataFlux: Memory-Hierarchy-Native Low-Bit LLM Inference
+   Authors: Jake Hyun, Ziyu Zhao, Jae-sun Seo, Mohamed S. Abdelfattah
+   Venue/ID: arXiv:2611.08363 — cs.LG / cs.DC (submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08363
+   Summary: Aggressive weight and KV-cache quantization (2–4-bit weights, 2–3-bit KV)
+   dramatically reduces memory but hurts accuracy. StrataFlux recovers this accuracy
+   by drawing additional precision from host RAM and SSDs in a stratified,
+   memory-hierarchy-aware scheme, keeping the GPU footprint unchanged. On 2-bit
+   Llama-3.1-8B-Instruct, WikiText-2 perplexity drops from 9.46 to 8.40 at ~95%
+   base throughput. On 2-bit Qwen3-8B, AIME 2024/2025 accuracy rises from 11.0% to
+   47.1%. At 128K context, 3-bit weights with 2-bit KV cache match vLLM 4-bit AWQ
+   with 8-bit KV in perplexity and speed at half the GPU memory.
+
+4. RM-VLM: From Natural-Language Task Descriptions to Vision-Grounded Reward Machines
+   Authors: Roko Parac, Christos Ziakas, Leo Ardon
+   Venue/ID: arXiv:2611.08308 — cs.AI (submitted 6 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08308
+   Summary: Most VLM-based reward methods assume Markovian tasks, but many real
+   tasks require credit that depends on the full history of observations. RM-VLM
+   bridges natural-language task descriptions and non-Markovian reinforcement learning
+   by having an LLM construct a reward machine (finite automaton over propositions)
+   from the task description, while a VLM serves as the grounding labelling function
+   mapping image observations to propositions. A VLM-based value estimator provides
+   dense reward by scoring progress toward each reward-machine transition. Evaluated
+   on grid-world navigation, robotic manipulation, and 3D object collection tasks,
+   RM-VLM consistently outperforms existing VLM-based reward methods on task success.
+
+5. MedGraph: Maintaining Patient State with Graph Memory for Long-Term Medical Dialogue
+   Authors: Donghua Zhang, Zizheng Wang, Ze Dong, Yiding Feng, Siyu Qian
+   Venue/ID: arXiv:2611.08433 — cs.CL / cs.AI (submitted 6 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08433
+   Summary: Clinical conversations spanning multiple visits fail when memory systems
+   produce outdated state, mix facts from different patients, or omit safety-critical
+   information. MedGraph addresses this with a three-layer memory: raw dialogues (L1),
+   a clinical fact graph with typed entities and relations (L2), and a patient-profile
+   safety block permanently prepended to every query (L3). Type-specific clinical
+   update rules distinguish genuine state changes from repeated observations, preventing
+   the graph from accumulating stale facts. On MedMemoryBench, MedGraph achieves the
+   highest overall accuracy with both GPT and Qwen backbones, 10.5 and 10.4 points
+   above the strongest of five baselines.

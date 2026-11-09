@@ -1,0 +1,249 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  evolutionary optimization \textbullet{}
+  latent agents \textbullet{}
+  program synthesis \textbullet{}
+  scientific computing}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery
+  and Optimization}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Agents That Reason in Activation Space Rather Than Text
+  Evaluate 5--13$\times$ More Programs Per Hour on Mathematical
+  and Scientific Discovery}\par\vspace{6pt}
+
+{\small\textbf{By} Qile Jiang, George Em Karniadakis}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.08483 \textbullet{}
+  cs.AI / cs.NE \textbullet{} Brown University}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+LLM-guided evolutionary search is accurate but slow because each
+candidate requires a full chain-of-thought forward pass. SwarmEvolve
+replaces text-decoding agents with latent agents that share KV caches
+and reason in activation space, evaluating 5--13$\times$ more programs
+per hour than state-of-the-art frameworks and reaching equivalent
+solution quality in 3--8 minutes versus 60 minutes for competing systems.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LLM-guided evolutionary search is accurate but
+    too slow for large-scale discovery; each round requires full
+    chain-of-thought for every candidate.
+  \item[Why it matters:] Scientific computing and mathematical
+    discovery require evaluating hundreds of program variants per
+    experiment; throughput is a hard bottleneck.
+  \item[Method:] 10 swarms of 45 latent agents share KV caches and
+    reason for 40 latent steps without decoding to text; a lightweight
+    decoding head maps top agent states to program tokens.
+  \item[Result:] 5--13$\times$ more programs per hour; solution quality
+    reached in 3--8 min vs.\ 60 min for text-based frameworks.
+  \item[Evidence:] 21 problems spanning symbolic math and PDE solver
+    kernel optimization; baselines: OpenEvolve, ShinkaEvolve, CodeEvolve.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Program evolution with LLMs (OpenEvolve, FunSearch, ShinkaEvolve) has
+produced surprising discoveries in combinatorics and numerical computing
+by using LLMs as intelligent mutation operators: given a population of
+programs and their fitness scores, the LLM proposes new variants that
+improve on the best candidates. The approach works because LLMs encode
+prior knowledge about program structure, algorithm design, and
+mathematical transformations that random mutation cannot access.
+
+The fundamental bottleneck is throughput. Generating a new program
+candidate with chain-of-thought reasoning costs one full LLM forward
+pass with a long context window. At 450 tokens per second on typical
+hardware, a 1,000-token chain-of-thought allows only 27 candidates per
+minute per GPU. Scientific computing problems may need thousands of
+candidates before a significant improvement is found.
+
+SwarmEvolve attacks this bottleneck by eliminating the decoding step
+from most of the computation. Agents in SwarmEvolve do not produce
+natural language --- they produce latent representations and hand them
+to a compact decoding head. The decoding head is cheap, while the
+latent reasoning is parallelized across 450 agents per round.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Text-based evolutionary LLM frameworks} (OpenEvolve, CodeEvolve)
+generate each candidate as a full text completion. This is flexible but
+slow: each candidate occupies the full generation path of the LLM.
+
+\textbf{Parallel sampling with temperature} can explore multiple
+candidates simultaneously, but each sample is independent and cannot
+condition on what other concurrent samples are producing, limiting
+diversity within a batch.
+
+\textbf{Speculative decoding} speeds up text generation but does not
+reduce the number of distinct candidates that can be evaluated per unit
+time, since it optimizes throughput on a single sequence.
+
+\textbf{Smaller surrogate models} are faster but lack the reasoning
+quality of large LLMs, leading to lower-quality proposals and slower
+convergence in solution quality.
+
+\section{Core Mechanism: Latent Agents with KV Sharing}
+
+Each agent is a frozen LLM conditioned on a shared prefix KV cache
+covering the problem description and global best solution. The agent
+then runs 40 autoregressive steps \emph{without} applying the
+unembedding matrix: no token is produced, and no text is decoded.
+Instead, the final hidden state $\mathbf{h}_i \in \mathbb{R}^d$
+encodes the agent's ``proposal'' in activation space.
+
+Agents in the same swarm share a common prefix KV cache $\mathcal{K}$,
+which eliminates redundant computation for the shared context and
+implicitly exposes each agent to the best solution found so far.
+Agents have different random seeds (different initial noise vectors
+appended to the shared prefix), inducing diversity within the swarm.
+
+A lightweight decoding head $D_\phi: \mathbb{R}^d \to \mathcal{V}^L$
+maps the hidden states of the top-$r$ agents (by cosine similarity to
+the fitness-weighted centroid of the swarm) to program token sequences
+of length at most $L = 200$ tokens.
+
+\section{Technical Formulation}
+
+Let $\mathcal{S} = \{S_1, \ldots, S_K\}$ denote $K = 10$ swarms, each
+containing $N = 45$ agents. The shared prefix for swarm $S_k$ is:
+\[
+  \mathcal{K}_k = \text{KVCache}\bigl([\text{problem}, \,
+    \mathbf{x}^*_k]\bigr),
+\]
+where $\mathbf{x}^*_k$ is the globally best program found in rounds
+$1, \ldots, t-1$ of swarm $k$.
+
+Each agent $a_{k,i}$ produces a hidden state:
+\[
+  \mathbf{h}_{k,i} = f_\theta\bigl(\mathbf{z}_{k,i},
+    \mathcal{K}_k\bigr) \in \mathbb{R}^d,
+\]
+where $\mathbf{z}_{k,i} \sim \mathcal{N}(0, \sigma^2 I)$ is the
+agent-specific noise vector and $f_\theta$ runs 40 latent steps.
+
+The swarm centroid weighted by fitness is:
+\[
+  \bar{\mathbf{h}}_k = \frac{\sum_{i=1}^N w_i \mathbf{h}_{k,i}}
+    {\sum_{i=1}^N w_i}, \quad
+  w_i = \text{softmax}(F_{k,i} / T),
+\]
+where $F_{k,i}$ is the previous-round fitness of agent $a_{k,i}$ and
+$T$ is a temperature parameter. The top-$r = 5$ agents (by cosine
+similarity to $\bar{\mathbf{h}}_k$) are decoded by $D_\phi$.
+
+\section{Learning or Inference Procedure}
+
+$D_\phi$ is a 2-layer MLP trained offline on (hidden-state, program)
+pairs extracted from text-based evolutionary runs. At inference time,
+$D_\phi$ is frozen; SwarmEvolve requires no online training.
+
+The evolutionary loop per round:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Update all $K$ prefix caches with current best solutions.
+  \item Run all $K \times N = 450$ agents in parallel (each 40 latent
+    steps) on a single A100 node.
+  \item Select top-$r$ agents per swarm using the fitness-weighted
+    cosine similarity score.
+  \item Decode selected agents' hidden states to programs via $D_\phi$.
+  \item Execute decoded programs in a sandboxed environment.
+  \item Update global best solutions for each swarm.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No formal convergence guarantee is provided. The empirical claim is
+throughput superiority on 21 specific problems. The best-known
+solutions to 11 of the 21 problems (symbolic math subset) have formal
+certificates; SwarmEvolve recovers certified-correct solutions for 9 of
+these 11 within the allocated time budget of 2 GPU-hours.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Throughput:} 5--13$\times$ more programs per hour than
+    all three baselines on all 21 problems.
+  \item \textbf{Time-to-solution:} Median 3--8 minutes to reach the
+    quality of the best competing solution; baselines require 60 minutes
+    on the same hardware.
+  \item \textbf{Solution quality:} Highest average score across 21
+    problems; wins 17 of 21 head-to-head comparisons vs.\ the best
+    single baseline per problem.
+  \item \textbf{Diversity:} The 10-swarm configuration produces
+    1.9$\times$ more distinct program families per hour than a
+    450-agent single-swarm variant, confirming the value of swarm
+    isolation for population diversity.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Latent steps:} 40 latent steps is near-optimal; 20 steps
+reduces quality by 4.3 average points; 80 steps shows no improvement
+while doubling per-round time.
+
+\textbf{Swarm count:} 10 swarms outperform 5 swarms by 2.7 average
+points and 1 swarm by 7.1 points, confirming that swarm diversity is
+the main quality driver.
+
+\textbf{KV sharing:} Removing the shared prefix KV cache (agents start
+from scratch each round) reduces throughput by 2.3$\times$ and quality
+by 3.2 points, since agents lose access to the current best solution.
+
+\textbf{Decoding head quality:} Replacing $D_\phi$ with a linear probe
+reduces program validity (fraction of programs that compile and run)
+from 94\% to 71\%, confirming the need for a non-linear decoder.
+
+\section*{Reference}
+
+Qile Jiang, George Em Karniadakis.
+\textbf{SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery
+and Optimization.}
+arXiv:2611.08483.
+\url{https://arxiv.org/abs/2611.08483}
+
+\end{document}

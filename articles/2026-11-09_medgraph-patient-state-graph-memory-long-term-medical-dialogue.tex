@@ -1,0 +1,274 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  medical AI \textbullet{}
+  graph memory \textbullet{}
+  clinical dialogue \textbullet{}
+  patient state tracking}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  MedGraph: Maintaining Patient State with Graph Memory
+  for Long-Term Medical Dialogue}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Three-Layer Hierarchical Graph Memory Eliminates Outdated State,
+  Cross-Patient Contamination, and Missing Safety Facts, Gaining
+  10.5 Points on MedMemoryBench}\par\vspace{6pt}
+
+{\small\textbf{By} Donghua Zhang, Zizheng Wang, Ze Dong, Yiding Feng,
+  Siyu Qian}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.08433 \textbullet{}
+  cs.CL / cs.AI \textbullet{} submitted 6 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Medical dialogue assistants fail in longitudinal settings because
+flat memory systems accumulate outdated states, mix facts across
+patients, and silently drop safety information. MedGraph introduces
+a three-layer hierarchical graph memory that makes clinical state
+transitions explicit and unconditionally prepends safety facts to
+every query. On MedMemoryBench it exceeds the strongest of five
+baselines by 10.4--10.5 percentage points with both GPT and Qwen
+backbones.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Flat memory systems for clinical dialogue produce
+    outdated state, cross-patient contamination, and silently missed
+    safety facts across multi-visit conversations.
+  \item[Why it matters:] LLMs used as clinical assistants in
+    longitudinal care must maintain accurate, up-to-date patient
+    state; errors can cause harmful medication or diagnosis decisions.
+  \item[Method:] Three-layer memory: raw transcripts (L1), a typed
+    clinical fact graph with temporal validity tags (L2), and a
+    patient profile unconditionally attached to every query (L3).
+  \item[Result:] 10.4--10.5 pp above the strongest of five baselines
+    on MedMemoryBench with GPT and Qwen backbones.
+  \item[Evidence:] MedMemoryBench (multi-visit clinical dialogues);
+    baselines: flat vector, sliding window, RAG, Zep, MemoryOS.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language models deployed as clinical dialogue assistants need
+to maintain accurate knowledge of a patient's medical state across
+many visits over weeks or months. Existing memory approaches --- flat
+vector stores, sliding-window context, retrieval-augmented generation
+--- treat memory as a bag of text fragments. This fails in three
+recurring ways identified by the authors through systematic error
+analysis of five baseline systems on longitudinal medical dialogues:
+
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Outdated state:} A resolved symptom is reported as
+    currently active because an older transcript fragment scores
+    higher in retrieval than the later discharge note.
+  \item \textbf{Cross-patient contamination:} Facts from a different
+    patient's earlier session pollute the current patient's context
+    when embedding similarity overrides patient identity.
+  \item \textbf{Missing safety facts:} A known allergy or
+    contraindication is not retrieved because it was not in the
+    top-$k$ most similar fragments for the current query.
+\end{enumerate}
+
+MedGraph introduces structure that makes all three failures impossible
+by design: typed temporal graph updates prevent outdated state; strict
+per-patient graph isolation prevents contamination; and mandatory
+safety-block attachment prevents silent omission.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Flat vector memory} embeds all clinical utterances and
+retrieves the top-$k$ most similar. It does not distinguish whether
+a fact is currently active or resolved, and similarity can produce
+facts from other patients if patients share medical vocabulary.
+
+\textbf{Sliding-window context} keeps the most recent $n$ tokens.
+Long-term facts (a years-old allergy, a chronic condition diagnosed
+at first visit) fall out of the window and are lost.
+
+\textbf{Retrieval-augmented generation (RAG)} retrieves relevant
+documents at query time. It improves recall of historical facts but
+cannot distinguish the current clinical state from historical states
+when multiple conflicting observations exist in the corpus.
+
+\textbf{Zep (entity memory)} maintains entity states but uses
+flat entity records without typed temporal transitions; it conflates
+active and resolved states.
+
+\textbf{MemoryOS} provides structured memory with hierarchical
+layers but does not specialize for clinical entity types or enforce
+mandatory safety-fact prepending.
+
+\section{Core Mechanism: Three-Layer Memory}
+
+\textbf{Layer 1 --- Raw dialogues.}
+Full session transcripts are stored verbatim, enabling exact
+retrieval of clinical reasoning chains and direct-quotation evidence
+when needed. This layer is searched by traditional BM25 retrieval
+for specific historical passages.
+
+\textbf{Layer 2 --- Clinical fact graph.}
+A typed knowledge graph over entities (symptoms, diagnoses,
+medications, lab results, procedures) with typed relations
+(has-symptom, prescribed, diagnosed-with, resolved, contraindicated-with).
+Each entity node carries a temporal validity tag: \textit{active},
+\textit{resolved}, or \textit{historical}. Graph construction and
+update are performed by a clinical NLP extraction pipeline applied to
+each new session.
+
+\textbf{Layer 3 --- Patient profile (safety block).}
+A compact structured record per patient containing: recorded allergies,
+contraindications, chronic conditions, emergency contacts, and
+medication alerts. This block is \emph{unconditionally prepended} to
+every query context, bypassing the retrieval mechanism entirely.
+No fact in this block can be missed because retrieval does not decide
+whether it is included.
+
+\textbf{Graph isolation.} Each patient has a fully separate graph
+instance and a separate patient profile. Cross-patient contamination
+is architecturally impossible.
+
+\section{Technical Formulation}
+
+Let $\mathcal{G}_p = (V_p, E_p)$ be the clinical fact graph for
+patient $p$, where each node $v \in V_p$ is a clinical entity with
+attributes $(\text{type}, \text{value}, \text{validity})$ and each
+edge $e = (v_i, v_j, r)$ is a typed relation.
+
+When a new session transcript $D_t$ arrives for patient $p$, the
+extraction pipeline produces a set of entity mentions
+$\hat{V}_t$ and relation mentions $\hat{E}_t$. The update procedure
+applies type-specific rules:
+\begin{align*}
+  &\text{if } v \in \hat{V}_t \text{ and } v \notin V_p:
+    \quad \text{add } v \text{ with validity} = \textit{active},\\
+  &\text{if } v \in \hat{V}_t \text{ and } v \in V_p
+    \text{ and ``resolved'' signal:}
+    \quad \text{set validity} \to \textit{resolved},\\
+  &\text{if } v \in \hat{V}_t \text{ and } v \in V_p
+    \text{ and no state change:}
+    \quad \text{update timestamp only}.
+\end{align*}
+
+The ``resolved'' signal is detected by a small classifier trained on
+clinical resolution phrases (``symptom resolved'', ``discontinued'',
+``normal finding'', etc.).
+
+At query time, the context assembled for the LLM backbone is:
+\[
+  \mathcal{C} = \underbrace{\text{Profile}_p}_{\text{L3, mandatory}}
+    \oplus \underbrace{\text{Graph}_p^{\text{active}}}_{\text{L2, active facts}}
+    \oplus \underbrace{\text{RAG}(\mathcal{D}, q)}_{\text{L1, retrieved}},
+\]
+where $\text{Graph}_p^{\text{active}}$ is the subgraph of currently
+active entities serialized as structured text, and
+$\text{RAG}(\mathcal{D}, q)$ is BM25-retrieved transcript fragments
+relevant to query $q$.
+
+\section{Learning or Inference Procedure}
+
+MedGraph uses no end-to-end learning. Its components are:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item A clinical NER/RE pipeline (pre-trained, fine-tuned on MIMIC-IV
+    notes) for entity and relation extraction.
+  \item A resolution-signal classifier (a small BERT-based model
+    fine-tuned on clinical resolution annotation).
+  \item An arbitrary LLM backbone (tested with GPT-4o-mini and
+    Qwen2.5-72B) for the final answer generation.
+\end{itemize}
+The NLP pipeline and classifier are frozen at inference time.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is claimed. The empirical claim is superior
+clinical accuracy across all five baselines on MedMemoryBench with
+both LLM backbones. The error analysis identifies three failure modes
+and shows that MedGraph's design eliminates each by construction;
+the reduction in those specific error types is verified per-category.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Overall accuracy (GPT-4o-mini):} MedGraph
+    $+10.5$ pp above best baseline (Zep).
+  \item \textbf{Overall accuracy (Qwen2.5-72B):} MedGraph
+    $+10.4$ pp above best baseline.
+  \item \textbf{Outdated-state errors:} Reduced by 68\% relative
+    to Zep, confirming typed temporal update effectiveness.
+  \item \textbf{Safety-fact recall:} 100\% safety-fact recall
+    (by mandatory prepending), vs.\ 73--82\% for retrieval-based
+    baselines.
+  \item \textbf{Cross-patient contamination rate:} 0\% (by graph
+    isolation), vs.\ 3--7\% for vector-memory baselines.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without mandatory safety block:} Dropping the unconditional
+prepend and relying on retrieval for safety facts reduces safety-fact
+recall from 100\% to 79\%, confirming that retrieval alone is
+insufficient.
+
+\textbf{Without typed temporal updates:} Using simple entity overwrite
+(new mention always replaces old) increases outdated-state errors by
+3.2$\times$, as resolved symptoms return when re-mentioned in a summary
+context.
+
+\textbf{Without graph isolation:} Merging all patients into a single
+graph increases cross-patient contamination to 4.1\%, confirming that
+per-patient isolation is necessary.
+
+\textbf{L1 retrieval necessity:} Removing L1 (raw transcript retrieval)
+reduces overall accuracy by 4.3 pp, showing that verbatim historical
+passages provide useful evidence beyond what the structured graph captures.
+
+\section*{Reference}
+
+Donghua Zhang, Zizheng Wang, Ze Dong, Yiding Feng, Siyu Qian.
+\textbf{MedGraph: Maintaining Patient State with Graph Memory for
+Long-Term Medical Dialogue.}
+arXiv:2611.08433.
+\url{https://arxiv.org/abs/2611.08433}
+
+\end{document}

@@ -1,0 +1,257 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  test-time reasoning \textbullet{}
+  self-consistency \textbullet{}
+  error localization \textbullet{}
+  token efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  StepBack: Step-Level Error-Localized Resampling for Efficient Test-Time Reasoning}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Localizing the First Error Step and Resampling Only Its Continuation
+  Cuts Token Usage by Up to 41\% at No Accuracy Cost}\par\vspace{6pt}
+
+{\small\textbf{By} Yang Ouyang, Jung-Eun Kim}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.08403 \textbullet{}
+  cs.AI / cs.LG \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Self-consistency generates many full chain-of-thought trajectories and
+takes a majority vote, but every chain runs to completion regardless of
+where the error occurs. StepBack localizes the most likely first error
+using lightweight signals and resamples only from that step onward,
+matching self-consistency accuracy on seven benchmarks while reducing
+token use by up to 41.26\%.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Self-consistency is expensive because every reasoning
+    trajectory runs to completion, even when an error occurs early.
+  \item[Why it matters:] Test-time compute budgets are a primary cost
+    driver for deployed LLM reasoning; a method that preserves accuracy
+    at lower token cost directly reduces inference cost.
+  \item[Method:] Localize the first likely error in draft trajectories
+    using NLL and PRM signals, then resample only the erroneous step and
+    its continuation, finishing with majority voting.
+  \item[Result:] Matches SC accuracy on 7 benchmarks; cuts token usage
+    by up to 41.26\%.
+  \item[Evidence:] GSM8K, MATH, AIME, MultiArith, HotpotQA,
+    2WikiMultiHopQA, MuSiQue; Llama-3.1-8B-Instruct backbone.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Chain-of-thought reasoning substantially improves LLM accuracy by
+externalizing intermediate steps. Self-consistency (SC) amplifies this
+further: by sampling many independent trajectories and taking a majority
+vote, SC cancels out reasoning errors that occur in different places on
+different runs. The cost is linear in the number of trajectories --- a
+budget of 32 trajectories means 32$\times$ the tokens of a single
+greedy answer.
+
+The key observation of StepBack is that this cost model is wasteful.
+Errors in a chain-of-thought trajectory are not uniformly distributed
+across steps. They tend to cluster in the early-to-middle portion of a
+chain, and once an error is made, subsequent steps correctly propagate
+it to a wrong final answer. Regenerating the entire trajectory from
+scratch discards all the correct prefix steps.
+
+StepBack changes the unit of resampling from \emph{full trajectory} to
+\emph{erroneous step and its continuation}. By retaining the correct
+prefix, it recovers exactly the token saving wasted on correct steps
+in SC.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Self-consistency} (Wang et al., 2022) achieves its accuracy
+benefit by diversity of reasoning paths, not by quality filtering. It
+treats every trajectory uniformly and cannot distinguish high-quality
+from low-quality prefixes.
+
+\textbf{Best-of-N} and verifier-guided methods re-rank complete
+trajectories after generation. They still generate all $N$ full chains
+and then select the best; the selection step does not reduce the
+generation cost.
+
+\textbf{Speculative decoding} accelerates token generation but does not
+reduce the \emph{number} of tokens in the reasoning chain, only the
+wall-clock time. It is orthogonal to StepBack.
+
+\textbf{Adaptive Consistency} reduces the number of full trajectories
+by stopping early when the answer distribution is sufficiently peaked.
+StepBack and Adaptive Consistency are orthogonal: StepBack shortens
+each trajectory, while Adaptive Consistency reduces the trajectory
+count. The two compose.
+
+\section{Core Mechanism}
+
+Given a draft set of $m$ trajectories, StepBack splits each trajectory
+$\tau_i$ into atomic steps $\{s_i^1, s_i^2, \ldots, s_i^T\}$ using the
+model's natural delimiter tokens (newline, period, or explicit step
+markers).
+
+For each step $s_i^t$, two signals are computed:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{NLL signal:} The mean negative log-likelihood of tokens
+    in $s_i^t$ under the model, $\text{NLL}(s_i^t)$.
+  \item \textbf{PRM signal:} The process reward model score
+    $\text{PRM}(s_i^t \mid s_i^{<t})$, estimating the probability that
+    all steps up to and including $s_i^t$ are correct.
+\end{enumerate}
+
+The anchor step $s_i^{a_i}$ is the earliest step satisfying:
+\[
+  \text{NLL}(s_i^{a_i}) > \tau_{\text{NLL}}
+  \;\;\text{or}\;\;
+  \text{PRM}(s_i^{a_i} \mid s_i^{<a_i}) < \tau_{\text{PRM}},
+\]
+with $\tau_{\text{NLL}} = 0.1$ and $\tau_{\text{PRM}} = 0.05$. If no
+step is flagged, the trajectory is accepted as-is.
+
+For each flagged trajectory, $k = 2$ fresh continuations are sampled
+from the anchor step onward, keeping the prefix $s_i^{<a_i}$ fixed.
+The final answers from all trajectories (original and resampled) are
+pooled and the plurality answer is returned.
+
+\section{Technical Formulation}
+
+Let $\mathcal{T} = \{\tau_1, \ldots, \tau_m\}$ be the initial set of
+$m = 16$ draft trajectories. For trajectory $\tau_i$, the prefix up to
+step $a_i - 1$ is $p_i = s_i^1 \cdots s_i^{a_i - 1}$ and the original
+continuation is $c_i = s_i^{a_i} \cdots s_i^T$.
+
+Resampled continuations are drawn from the conditional distribution:
+\[
+  \tilde{c}_i^j \sim p_\theta(\cdot \mid x, p_i),
+  \quad j = 1, \ldots, k,
+\]
+where $x$ is the input question and $p_\theta$ is the LLM. The full
+answer set for majority voting is:
+\[
+  A = \{\text{ans}(\tau_i) : \tau_i \text{ not flagged}\}
+    \cup \{\text{ans}(p_i \oplus \tilde{c}_i^j) :
+           \tau_i \text{ flagged},\, j=1,\ldots,k\}.
+\]
+The returned answer is $\arg\max_{a} \sum_{a' \in A} \mathbf{1}[a' = a]$.
+
+The expected token count per input is:
+\[
+  \mathbb{E}[\text{tokens}] = m \cdot \bar{L}_{\text{prefix}}
+    + \alpha \cdot k \cdot \bar{L}_{\text{suffix}},
+\]
+where $\alpha$ is the fraction of trajectories flagged and
+$\bar{L}_{\text{prefix}}, \bar{L}_{\text{suffix}}$ are mean prefix and
+suffix lengths. When errors cluster early ($\bar{L}_{\text{prefix}}$
+small), the saving is largest.
+
+\section{Learning or Inference Procedure}
+
+StepBack is a pure inference-time method; no model parameters are
+modified. The required inputs are:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item A base LLM for draft generation and resampling.
+  \item A process reward model (PRM) trained to score individual
+    reasoning steps.
+  \item Two scalar thresholds $\tau_{\text{NLL}}$ and
+    $\tau_{\text{PRM}}$, tuned on a small validation split.
+\end{itemize}
+The PRM used in experiments is a Llama-3.1-8B model fine-tuned on
+step-level correctness labels from the PRM800K dataset.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is claimed. The empirical claim is: on the seven
+benchmarks tested, StepBack's accuracy is not statistically significantly
+different from SC at the same sampling budget of $m = 32$ effective
+trajectories. The token-reduction claim (up to 41.26\%) is an empirical
+upper bound observed on the MATH benchmark; the reduction is smaller on
+benchmarks where errors occur later in trajectories.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Accuracy:} Statistically indistinguishable from SC on
+    all 7 benchmarks (95\% confidence intervals overlap in all cases).
+  \item \textbf{Token reduction:} 20--41\% fewer tokens than SC across
+    benchmarks; largest on MATH (41.26\%) and 2WikiMultiHopQA (38.1\%).
+  \item \textbf{Composition with Adaptive Consistency:} StepBack +
+    Adaptive Consistency achieves $>41\%$ token reduction at equal or
+    slightly higher accuracy than either method alone.
+  \item \textbf{Threshold sensitivity:} Grid search over
+    $\tau_{\text{NLL}} \in \{0.05, 0.1, 0.2\}$ and
+    $\tau_{\text{PRM}} \in \{0.02, 0.05, 0.1\}$ shows accuracy within
+    1\% of the reported configuration across the full grid.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{NLL-only vs.\ PRM-only vs.\ combined:} NLL alone reduces tokens
+by 28\%; PRM alone by 31\%; combined by 37\% on average. The two
+signals flag different steps on roughly 20\% of trajectories,
+confirming complementarity.
+
+\textbf{Resampling $k$:} $k = 1$ achieves 90\% of the token savings
+at a 1--2\% accuracy drop; $k = 3$ shows no further accuracy gain over
+$k = 2$ while increasing cost.
+
+\textbf{Step granularity:} Fine-grained steps (sentence level) outperform
+coarse steps (paragraph level) by 1.3\% average accuracy; the localized
+error is more precisely identified at finer granularity.
+
+\textbf{PRM quality:} Replacing the trained PRM with a zero-shot LLM
+self-evaluation of step correctness reduces accuracy by 2.1\% and token
+savings by 8\%, confirming the importance of a dedicated PRM.
+
+\section*{Reference}
+
+Yang Ouyang, Jung-Eun Kim.
+\textbf{StepBack: Step-Level Error-Localized Resampling for Efficient
+Test-Time Reasoning.}
+arXiv:2611.08403. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.08403}
+
+\end{document}

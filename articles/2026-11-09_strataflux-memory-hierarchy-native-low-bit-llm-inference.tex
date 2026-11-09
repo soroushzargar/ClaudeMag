@@ -1,0 +1,245 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-09}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  LLM inference \textbullet{}
+  quantization \textbullet{}
+  memory hierarchy \textbullet{}
+  KV cache}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  StrataFlux: Memory-Hierarchy-Native Low-Bit LLM Inference}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Using Host DRAM and NVMe SSD as Precision Strata Recovers Near-Full
+  Accuracy at 2-Bit Weight Quantization Without Extra GPU Memory}\par\vspace{6pt}
+
+{\small\textbf{By} Jake Hyun, Ziyu Zhao, Jae-sun Seo, Mohamed S.\ Abdelfattah}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.08363 \textbullet{}
+  cs.LG / cs.DC \textbullet{} submitted 5 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+StrataFlux recovers accuracy lost to 2--4-bit quantization by treating
+the full memory hierarchy --- GPU HBM, host DRAM, and NVMe SSD --- as
+a stratified precision resource. On 2-bit Llama-3.1-8B-Instruct,
+WikiText-2 perplexity drops from 9.46 to 8.40 at 95\% base throughput;
+on 2-bit Qwen3-8B, AIME 2024/2025 accuracy rises from 11.0\% to 47.1\%
+with no additional GPU memory.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] 2-bit quantization drastically reduces GPU memory
+    but collapses accuracy; existing mixed-precision fixes keep all
+    higher-precision weights on-GPU, negating the memory benefit.
+  \item[Why it matters:] Enabling 2-bit inference at acceptable accuracy
+    would halve peak GPU memory for many deployments, making 70B+
+    models accessible on single-GPU servers.
+  \item[Method:] Stratified sensitivity profiling assigns weight layers
+    to GPU HBM (2-bit), DRAM (4-bit), or NVMe SSD (8-bit); a prefetch
+    scheduler hides tier-B/C transfer latency behind GPU compute.
+  \item[Result:] 2-bit Llama-3.1-8B perplexity 8.40 (vs.\ 9.46
+    baseline); 2-bit Qwen3-8B AIME accuracy 47.1\% (vs.\ 11.0\%).
+  \item[Evidence:] WikiText-2, AIME 2024/2025, 128K long-context;
+    compared against 2-bit RTN, GPTQ, AWQ; RTX 5090.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large language model inference is bounded by memory bandwidth, not
+compute. Weights must be loaded from GPU memory on every forward pass,
+and peak GPU memory sets the maximum model size that fits on a single
+device. Quantization reduces both: 2-bit weights need 16$\times$ less
+memory than FP32 and consume less bandwidth per layer.
+
+The problem is accuracy. At 2 bits, the quantization error per weight
+is large enough to damage the model's reasoning ability, particularly
+on tasks that require precise recall of numerical facts or long
+multi-step chains. Prior solutions (GPTQ, AWQ, SpQR) identify sensitive
+weights and store them at higher precision \emph{on the GPU}, but this
+cancels the memory benefit for the sensitive fraction.
+
+StrataFlux reframes the question: the GPU is not the only memory in a
+modern server. Host DRAM is 8--32$\times$ larger and 5--10$\times$
+slower; NVMe SSD is 10--100$\times$ larger still. The sensitive weights
+that need 4- or 8-bit precision can live in DRAM or SSD and be streamed
+to GPU only when needed for a specific layer, overlapped with the GPU
+computation on the previous layer.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Uniform quantization} (RTN, 2-bit) is fast and memory-efficient
+but loses too much accuracy in sensitive layers, especially attention
+projections and early embedding layers.
+
+\textbf{Mixed-precision on-GPU} (GPTQ, AWQ, SpQR) keeps sensitive
+weights at 4--8 bits on the GPU. This recovers accuracy but requires
+extra GPU memory proportional to the number of sensitive parameters,
+partially defeating the purpose of quantization.
+
+\textbf{CPU offloading} (FlexGen, DejaVu) moves entire layers to CPU
+for latency-insensitive serving but introduces large latency spikes when
+layers are paged back in, making throughput unpredictable.
+
+StrataFlux differs from CPU offloading in two ways: (1) it offloads
+only the \emph{higher-precision copies} of sensitive layers, not the
+full layer; the base 2-bit copy always stays on GPU for fast path; and
+(2) a prefetch scheduler computes the access pattern ahead of time and
+hides DMA transfers behind GPU computation.
+
+\section{Core Mechanism: Three-Tier Precision}
+
+\textbf{Stratum A (GPU HBM):} The base quantized weights of all layers
+at the target bit-width (2--4 bits). Always resident; used for fast-path
+inference.
+
+\textbf{Stratum B (host DRAM):} 4-bit copies of the top-$k$\% most
+sensitive layers, identified by calibration. Paged in one block ahead
+of the layer it corrects.
+
+\textbf{Stratum C (NVMe SSD):} 8-bit copies of an extremely sensitive
+subset (typically the first and last 2 transformer blocks, plus any
+layer where calibration error exceeds a threshold). Paged in
+asynchronously via direct DMA.
+
+For a layer assigned to stratum B or C, the forward pass combines:
+\[
+  \mathbf{y} = W_{\text{base}} \mathbf{x}
+    + \Delta W_{\text{tier}} \mathbf{x},
+\]
+where $W_{\text{base}}$ is the 2-bit on-GPU weight and
+$\Delta W_{\text{tier}} = W_{\text{tier}} - W_{\text{base}}$ is the
+correction loaded from DRAM or SSD. This residual form ensures that
+if the DMA transfer has not completed (e.g., SSD latency spike), the
+base path produces an approximate result instead of blocking.
+
+\section{Technical Formulation}
+
+Sensitivity of layer $l$ is estimated by the Fisher trace:
+\[
+  S_l = \mathrm{tr}\bigl(\mathbf{H}_l\bigr)
+    \approx \frac{1}{|C|} \sum_{x \in C}
+    \bigl\|W_l x - \hat{W}_l x\bigr\|_2^2,
+\]
+where $C$ is a calibration corpus, $W_l$ is the full-precision weight,
+and $\hat{W}_l$ is its 2-bit quantized version. Layers are ranked by
+$S_l$ and assigned to strata by two thresholds $\theta_B$ and
+$\theta_C$:
+\begin{align*}
+  l \in \text{Stratum A} &\;\text{if}\; S_l \le \theta_B,\\
+  l \in \text{Stratum B} &\;\text{if}\; \theta_B < S_l \le \theta_C,\\
+  l \in \text{Stratum C} &\;\text{if}\; S_l > \theta_C.
+\end{align*}
+
+Thresholds $\theta_B$ and $\theta_C$ are set by a memory budget
+constraint: the DRAM and SSD footprints are fixed by the available
+hardware, and layers are sorted by $S_l$ until the budget is consumed.
+
+\section{Learning or Inference Procedure}
+
+StrataFlux requires no fine-tuning; it modifies only the inference
+memory layout and access pattern. The workflow is:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run calibration pass on 128 calibration sequences to compute
+    $S_l$ for all layers.
+  \item Assign layers to strata based on thresholds.
+  \item Quantize and place stratum-B copies in DRAM, stratum-C in SSD.
+  \item At inference time, the prefetch scheduler issues DMA requests
+    for the next 3 stratum-B layers and 1 stratum-C layer ahead of
+    execution, overlapping transfers with GPU computation.
+\end{enumerate}
+
+\section{What the Guarantee Says}
+
+No theoretical accuracy bound is provided. The empirical claim is
+Pareto-dominance over existing mixed-precision methods on the two
+primary benchmarks: StrataFlux achieves lower perplexity at lower GPU
+memory than any configuration of GPTQ or AWQ tested. No latency bound
+under SSD-latency spikes is given; the base path ensures correctness
+but not accuracy.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Perplexity:} 2-bit Llama-3.1-8B-Instruct WikiText-2
+    PPL $8.40$ (StrataFlux) vs.\ $9.46$ (2-bit RTN base); 95\% base
+    throughput on RTX 5090.
+  \item \textbf{Reasoning:} 2-bit Qwen3-8B AIME 2024/2025 accuracy
+    $47.1\%$ (StrataFlux) vs.\ $11.0\%$ (2-bit RTN); GPU memory
+    unchanged.
+  \item \textbf{Long-context:} 3-bit weights + 2-bit KV cache at 128K
+    context matches vLLM 4-bit AWQ + 8-bit KV perplexity and speed
+    at half the GPU memory.
+  \item \textbf{Throughput:} Prefetch scheduler achieves 95\% of base
+    2-bit throughput by hiding DRAM latency; SSD accesses visible only
+    when DRAM budget is exhausted.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Stratum-C necessity:} Removing stratum C (SSD tier) and
+assigning all stratum-C layers to stratum B (DRAM at 4-bit) increases
+DRAM footprint by 18\% at no accuracy change, confirming that the
+SSD tier covers only a small but critical fraction of sensitive layers.
+
+\textbf{Residual form:} Replacing the residual correction
+$\Delta W_{\text{tier}}$ with a full replacement (always load
+$W_{\text{tier}}$ on this path) reduces throughput by 12\% because
+the base 2-bit GPU path is always bypassed, even when DMA is on time.
+
+\textbf{Calibration size:} 32 calibration sequences achieve 94\% of the
+sensitivity ordering quality of 512 sequences; 128 sequences reach 99\%.
+
+\textbf{Model size:} Relative perplexity improvement is larger for
+8B-class models (1.1 PPL points) than for 70B-class models (0.4 PPL
+points), reflecting that smaller models are more sensitive to 2-bit
+quantization and benefit more from stratum correction.
+
+\section*{Reference}
+
+Jake Hyun, Ziyu Zhao, Jae-sun Seo, Mohamed S.\ Abdelfattah.
+\textbf{StrataFlux: Memory-Hierarchy-Native Low-Bit LLM Inference.}
+arXiv:2611.08363.
+\url{https://arxiv.org/abs/2611.08363}
+
+\end{document}
