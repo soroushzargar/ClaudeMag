@@ -9,18 +9,19 @@ body {
   font-size: 9.5pt;
   color: #111;
   background: white;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 18mm 15mm 18mm;
 }
 .header {
+  position: fixed;
+  top: 0.5cm;
+  left: 0;
+  right: 0;
+  padding: 0 1.8cm 3pt 1.8cm;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.8pt solid #333;
-  padding: 3pt 0 3pt 0;
-  margin-bottom: 10pt;
   font-size: 8.5pt;
+  background: white;
 }
 .header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
 .header .center { font-style: italic; }
@@ -51,6 +52,7 @@ h1 {
   padding: 6pt;
   margin-bottom: 10pt;
   font-size: 8.5pt;
+  break-inside: avoid;
 }
 .ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
 .ag-row { margin-bottom: 2pt; line-height: 1.4; }
@@ -98,6 +100,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <span class="center"><em>Machine Learning Research Digest</em></span>
   <span class="right">2026-11-09</span>
 </div>
+<div class="columns">
 <div class="keywords"><strong>Keywords:</strong> test-time reasoning &bull; self-consistency &bull; error localization &bull; token efficiency</div>
 <h1>StepBack: Step-Level Error-Localized Resampling for Efficient Test-Time Reasoning</h1>
 <div class="subtitle">Localizing the First Error Step and Resampling Only Its Continuation Cuts Token Usage by Up to 41% at No Accuracy Cost</div>
@@ -113,7 +116,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <div class="ag-title">At a Glance</div>
   <div class="ag-row"><span class="ag-label">Problem:</span> Self-consistency is expensive because every reasoning trajectory runs to completion, even when an error occurs early.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> Test-time compute budgets are a primary cost driver for deployed LLM reasoning; a method that preserves accuracy at lower token cost directly reduces inference cost.</div><div class="ag-row"><span class="ag-label">Method:</span> Localize the first likely error in draft trajectories using NLL and PRM signals, then resample only the erroneous step and its continuation, finishing with majority voting.</div><div class="ag-row"><span class="ag-label">Result:</span> Matches SC accuracy on 7 benchmarks; cuts token usage by up to 41.26%.</div><div class="ag-row"><span class="ag-label">Evidence:</span> GSM8K, MATH, AIME, MultiArith, HotpotQA, 2WikiMultiHopQA, MuSiQue; Llama-3.1-8B-Instruct backbone.</div>
 </div>
-<div class="columns">
+
     <div class="section">
       <div class="section-header ">The Big Picture</div>
       <div class="section-rule"></div>
@@ -197,6 +200,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-header ref-header">Reference</div>
       <div class="section-rule"></div>
       <div class="section-body"><p>Yang Ouyang, Jung-Eun Kim. <strong>StepBack: Step-Level Error-Localized Resampling for Efficient Test-Time Reasoning.</strong> arXiv:2611.08403. NeurIPS 2026. <a href="https://arxiv.org/abs/2611.08403">arxiv.org/abs/2611.08403</a></p></div>
-    </div></div>
+    </div>
+</div>
 </body>
 </html>

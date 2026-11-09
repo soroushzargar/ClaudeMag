@@ -9,18 +9,19 @@ body {
   font-size: 9.5pt;
   color: #111;
   background: white;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 18mm 15mm 18mm;
 }
 .header {
+  position: fixed;
+  top: 0.5cm;
+  left: 0;
+  right: 0;
+  padding: 0 1.8cm 3pt 1.8cm;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.8pt solid #333;
-  padding: 3pt 0 3pt 0;
-  margin-bottom: 10pt;
   font-size: 8.5pt;
+  background: white;
 }
 .header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
 .header .center { font-style: italic; }
@@ -51,6 +52,7 @@ h1 {
   padding: 6pt;
   margin-bottom: 10pt;
   font-size: 8.5pt;
+  break-inside: avoid;
 }
 .ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
 .ag-row { margin-bottom: 2pt; line-height: 1.4; }
@@ -98,6 +100,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <span class="center"><em>Machine Learning Research Digest</em></span>
   <span class="right">2026-11-09</span>
 </div>
+<div class="columns">
 <div class="keywords"><strong>Keywords:</strong> medical AI &bull; graph memory &bull; clinical dialogue &bull; patient state tracking</div>
 <h1>MedGraph: Maintaining Patient State with Graph Memory for Long-Term Medical Dialogue</h1>
 <div class="subtitle">Three-Layer Hierarchical Graph Memory Eliminates Outdated State, Cross-Patient Contamination, and Missing Safety Facts, Gaining 10.5 Points on MedMemoryBench</div>
@@ -114,7 +117,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <div class="ag-title">At a Glance</div>
   <div class="ag-row"><span class="ag-label">Problem:</span> Flat memory systems for clinical dialogue produce outdated state, cross-patient contamination, and silently missed safety facts across multi-visit conversations.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> LLMs used as clinical assistants in longitudinal care must maintain accurate, up-to-date patient state; errors can cause harmful medication or diagnosis decisions.</div><div class="ag-row"><span class="ag-label">Method:</span> Three-layer memory: raw transcripts (L1), a typed clinical fact graph with temporal validity tags (L2), and a patient profile unconditionally attached to every query (L3).</div><div class="ag-row"><span class="ag-label">Result:</span> 10.4&ndash;10.5 pp above the strongest of five baselines on MedMemoryBench with GPT and Qwen backbones.</div><div class="ag-row"><span class="ag-label">Evidence:</span> MedMemoryBench (multi-visit clinical dialogues); baselines: flat vector, sliding window, RAG, Zep, MemoryOS.</div>
 </div>
-<div class="columns">
+
     <div class="section">
       <div class="section-header ">The Big Picture</div>
       <div class="section-rule"></div>
@@ -183,6 +186,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-header ref-header">Reference</div>
       <div class="section-rule"></div>
       <div class="section-body"><p>Donghua Zhang, Zizheng Wang, Ze Dong, Yiding Feng, Siyu Qian. <strong>MedGraph: Maintaining Patient State with Graph Memory for Long-Term Medical Dialogue.</strong> arXiv:2611.08433. <a href="https://arxiv.org/abs/2611.08433">arxiv.org/abs/2611.08433</a></p></div>
-    </div></div>
+    </div>
+</div>
 </body>
 </html>

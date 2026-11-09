@@ -9,18 +9,19 @@ body {
   font-size: 9.5pt;
   color: #111;
   background: white;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 18mm 15mm 18mm;
 }
 .header {
+  position: fixed;
+  top: 0.5cm;
+  left: 0;
+  right: 0;
+  padding: 0 1.8cm 3pt 1.8cm;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.8pt solid #333;
-  padding: 3pt 0 3pt 0;
-  margin-bottom: 10pt;
   font-size: 8.5pt;
+  background: white;
 }
 .header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
 .header .center { font-style: italic; }
@@ -51,6 +52,7 @@ h1 {
   padding: 6pt;
   margin-bottom: 10pt;
   font-size: 8.5pt;
+  break-inside: avoid;
 }
 .ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
 .ag-row { margin-bottom: 2pt; line-height: 1.4; }
@@ -98,6 +100,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <span class="center"><em>Machine Learning Research Digest</em></span>
   <span class="right">2026-11-09</span>
 </div>
+<div class="columns">
 <div class="keywords"><strong>Keywords:</strong> reinforcement learning &bull; reward machines &bull; vision-language models &bull; non-Markovian tasks</div>
 <h1>RM-VLM: From Natural-Language Task Descriptions to Vision-Grounded Reward Machines</h1>
 <div class="subtitle">An LLM Builds the Finite Automaton; a VLM Grounds Its Propositions; the Agent Earns Credit for History-Dependent Task Progress</div>
@@ -113,7 +116,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <div class="ag-title">At a Glance</div>
   <div class="ag-row"><span class="ag-label">Problem:</span> VLM reward methods assume Markovian tasks; real tasks often require ordered sub-goals whose credit depends on history.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> Without history-aware reward, RL agents fail to distinguish correct-order completions from incorrect-order ones and cannot reliably learn ordered multi-step tasks.</div><div class="ag-row"><span class="ag-label">Method:</span> LLM decomposes task description into propositions and builds a reward machine (finite automaton); VLM grounds propositions in image observations; VLM value estimator provides dense shaping.</div><div class="ag-row"><span class="ag-label">Result:</span> Consistently higher task success than all baselines across three task domains.</div><div class="ag-row"><span class="ag-label">Evidence:</span> Grid-world navigation, robotic manipulation sequence, 3D object collection; baselines: VLM-RM, CLIP-reward, TAMER+VLM.</div>
 </div>
-<div class="columns">
+
     <div class="section">
       <div class="section-header ">The Big Picture</div>
       <div class="section-rule"></div>
@@ -181,6 +184,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-header ref-header">Reference</div>
       <div class="section-rule"></div>
       <div class="section-body"><p>Roko Parac, Christos Ziakas, Leo Ardon. <strong>RM-VLM: From Natural-Language Task Descriptions to Vision-Grounded Reward Machines.</strong> arXiv:2611.08308. <a href="https://arxiv.org/abs/2611.08308">arxiv.org/abs/2611.08308</a></p></div>
-    </div></div>
+    </div>
+</div>
 </body>
 </html>

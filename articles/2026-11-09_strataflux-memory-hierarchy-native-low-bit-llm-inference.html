@@ -9,18 +9,19 @@ body {
   font-size: 9.5pt;
   color: #111;
   background: white;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 18mm 15mm 18mm;
 }
 .header {
+  position: fixed;
+  top: 0.5cm;
+  left: 0;
+  right: 0;
+  padding: 0 1.8cm 3pt 1.8cm;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.8pt solid #333;
-  padding: 3pt 0 3pt 0;
-  margin-bottom: 10pt;
   font-size: 8.5pt;
+  background: white;
 }
 .header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
 .header .center { font-style: italic; }
@@ -51,6 +52,7 @@ h1 {
   padding: 6pt;
   margin-bottom: 10pt;
   font-size: 8.5pt;
+  break-inside: avoid;
 }
 .ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
 .ag-row { margin-bottom: 2pt; line-height: 1.4; }
@@ -98,6 +100,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <span class="center"><em>Machine Learning Research Digest</em></span>
   <span class="right">2026-11-09</span>
 </div>
+<div class="columns">
 <div class="keywords"><strong>Keywords:</strong> LLM inference &bull; quantization &bull; memory hierarchy &bull; KV cache</div>
 <h1>StrataFlux: Memory-Hierarchy-Native Low-Bit LLM Inference</h1>
 <div class="subtitle">Using Host DRAM and NVMe SSD as Precision Strata Recovers Near-Full Accuracy at 2-Bit Weight Quantization Without Extra GPU Memory</div>
@@ -113,7 +116,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <div class="ag-title">At a Glance</div>
   <div class="ag-row"><span class="ag-label">Problem:</span> 2-bit quantization reduces GPU memory but collapses accuracy; existing mixed-precision fixes keep all higher-precision weights on-GPU, negating the memory benefit.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> Enabling 2-bit inference at acceptable accuracy would halve peak GPU memory for many deployments, making 70B+ models accessible on single-GPU servers.</div><div class="ag-row"><span class="ag-label">Method:</span> Stratified sensitivity profiling assigns weight layers to GPU HBM (2-bit), DRAM (4-bit), or NVMe SSD (8-bit); a prefetch scheduler hides tier-B/C transfer latency behind GPU compute.</div><div class="ag-row"><span class="ag-label">Result:</span> 2-bit Llama-3.1-8B perplexity 8.40 (vs. 9.46 baseline); 2-bit Qwen3-8B AIME accuracy 47.1% (vs. 11.0%).</div><div class="ag-row"><span class="ag-label">Evidence:</span> WikiText-2, AIME 2024/2025, 128K long-context; compared against 2-bit RTN, GPTQ, AWQ; RTX 5090.</div>
 </div>
-<div class="columns">
+
     <div class="section">
       <div class="section-header ">The Big Picture</div>
       <div class="section-rule"></div>
@@ -181,6 +184,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-header ref-header">Reference</div>
       <div class="section-rule"></div>
       <div class="section-body"><p>Jake Hyun, Ziyu Zhao, Jae-sun Seo, Mohamed S. Abdelfattah. <strong>StrataFlux: Memory-Hierarchy-Native Low-Bit LLM Inference.</strong> arXiv:2611.08363. <a href="https://arxiv.org/abs/2611.08363">arxiv.org/abs/2611.08363</a></p></div>
-    </div></div>
+    </div>
+</div>
 </body>
 </html>

@@ -9,18 +9,19 @@ body {
   font-size: 9.5pt;
   color: #111;
   background: white;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 18mm 15mm 18mm;
 }
 .header {
+  position: fixed;
+  top: 0.5cm;
+  left: 0;
+  right: 0;
+  padding: 0 1.8cm 3pt 1.8cm;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.8pt solid #333;
-  padding: 3pt 0 3pt 0;
-  margin-bottom: 10pt;
   font-size: 8.5pt;
+  background: white;
 }
 .header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
 .header .center { font-style: italic; }
@@ -51,6 +52,7 @@ h1 {
   padding: 6pt;
   margin-bottom: 10pt;
   font-size: 8.5pt;
+  break-inside: avoid;
 }
 .ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
 .ag-row { margin-bottom: 2pt; line-height: 1.4; }
@@ -98,6 +100,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <span class="center"><em>Machine Learning Research Digest</em></span>
   <span class="right">2026-11-09</span>
 </div>
+<div class="columns">
 <div class="keywords"><strong>Keywords:</strong> evolutionary optimization &bull; latent agents &bull; program synthesis &bull; scientific computing</div>
 <h1>SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery and Optimization</h1>
 <div class="subtitle">Agents That Reason in Activation Space Rather Than Text Evaluate 5–13× More Programs Per Hour on Mathematical and Scientific Discovery</div>
@@ -113,7 +116,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
   <div class="ag-title">At a Glance</div>
   <div class="ag-row"><span class="ag-label">Problem:</span> LLM-guided evolutionary search is accurate but too slow for large-scale discovery; each round requires full chain-of-thought for every candidate.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> Scientific computing and mathematical discovery require evaluating hundreds of program variants per experiment; throughput is a hard bottleneck.</div><div class="ag-row"><span class="ag-label">Method:</span> 10 swarms of 45 latent agents share KV caches and reason for 40 latent steps without decoding to text; a lightweight decoding head maps top agent states to program tokens.</div><div class="ag-row"><span class="ag-label">Result:</span> 5–13× more programs per hour; solution quality reached in 3–8 min vs. 60 min for text-based frameworks.</div><div class="ag-row"><span class="ag-label">Evidence:</span> 21 problems spanning symbolic math and PDE solver kernel optimization; baselines: OpenEvolve, ShinkaEvolve, CodeEvolve.</div>
 </div>
-<div class="columns">
+
     <div class="section">
       <div class="section-header ">The Big Picture</div>
       <div class="section-rule"></div>
@@ -194,6 +197,7 @@ td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
       <div class="section-header ref-header">Reference</div>
       <div class="section-rule"></div>
       <div class="section-body"><p>Qile Jiang, George Em Karniadakis. <strong>SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery and Optimization.</strong> arXiv:2611.08483. <a href="https://arxiv.org/abs/2611.08483">arxiv.org/abs/2611.08483</a></p></div>
-    </div></div>
+    </div>
+</div>
 </body>
 </html>
