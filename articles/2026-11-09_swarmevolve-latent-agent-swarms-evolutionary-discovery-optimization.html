@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: 9.5pt;
+  color: #111;
+  background: white;
+  width: 210mm;
+  min-height: 297mm;
+  padding: 18mm 18mm 15mm 18mm;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.8pt solid #333;
+  padding: 3pt 0 3pt 0;
+  margin-bottom: 10pt;
+  font-size: 8.5pt;
+}
+.header .left { font-variant: small-caps; font-weight: bold; font-size: 9pt; }
+.header .center { font-style: italic; }
+.keywords {
+  font-size: 8pt;
+  color: #646464;
+  margin-bottom: 4pt;
+}
+h1 {
+  font-size: 20pt;
+  font-weight: bold;
+  line-height: 1.1;
+  margin-bottom: 4pt;
+}
+.subtitle {
+  font-size: 11pt;
+  font-style: italic;
+  margin-bottom: 6pt;
+  line-height: 1.25;
+}
+.byline { font-size: 8.5pt; margin-bottom: 2pt; }
+.dateline { font-size: 8pt; color: #646464; margin-bottom: 2pt; }
+.title-rule { border: none; border-top: 0.6pt solid #b41e1e; margin: 2pt 0 6pt 0; }
+.lead { font-size: 9.5pt; margin-bottom: 8pt; line-height: 1.4; }
+.ataglance {
+  background: #f5f5f5;
+  border: 1pt solid #b41e1e;
+  padding: 6pt;
+  margin-bottom: 10pt;
+  font-size: 8.5pt;
+}
+.ag-title { font-weight: bold; font-size: 8pt; text-transform: uppercase; margin-bottom: 4pt; }
+.ag-row { margin-bottom: 2pt; line-height: 1.4; }
+.ag-label { font-weight: bold; }
+.columns {
+  column-count: 2;
+  column-gap: 0.6cm;
+}
+.section { margin-bottom: 7pt; break-inside: avoid; }
+.section-header {
+  font-size: 9pt;
+  font-weight: bold;
+  color: #b41e1e;
+  text-transform: uppercase;
+  margin-bottom: 1pt;
+}
+.section-rule {
+  border: none;
+  border-top: 0.4pt solid #b41e1e;
+  margin-bottom: 3pt;
+}
+.section-body { line-height: 1.4; }
+.section-body p { margin-bottom: 3pt; }
+.section-body ul, .section-body ol { margin-left: 14pt; margin-bottom: 3pt; }
+.section-body li { margin-bottom: 2pt; }
+.eq {
+  font-family: 'Courier New', monospace;
+  font-size: 8pt;
+  background: #fafafa;
+  padding: 2pt 6pt;
+  margin: 3pt 0;
+  text-align: center;
+  display: block;
+}
+.im { font-family: 'Courier New', monospace; font-size: 8pt; }
+a { color: #b41e1e; text-decoration: none; }
+.ref-header { font-variant: normal; }
+table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 4pt 0; }
+th { font-weight: bold; border-bottom: 1pt solid #333; padding: 2pt 4pt; }
+td { padding: 1pt 4pt; border-bottom: 0.4pt solid #ccc; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="left">Claude Mag</span>
+  <span class="center"><em>Machine Learning Research Digest</em></span>
+  <span class="right">2026-11-09</span>
+</div>
+<div class="keywords"><strong>Keywords:</strong> evolutionary optimization &bull; latent agents &bull; program synthesis &bull; scientific computing</div>
+<h1>SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery and Optimization</h1>
+<div class="subtitle">Agents That Reason in Activation Space Rather Than Text Evaluate 5–13× More Programs Per Hour on Mathematical and Scientific Discovery</div>
+<div class="byline"><strong>By</strong> Qile Jiang, George Em Karniadakis</div>
+<div class="dateline">arXiv:2611.08483 &bull; cs.AI / cs.NE &bull; Brown University</div>
+<hr class="title-rule">
+<div class="lead">LLM-guided evolutionary search is accurate but slow because each candidate requires
+   a full chain-of-thought forward pass. SwarmEvolve replaces text-decoding agents with
+   latent agents that share KV caches and reason in activation space, evaluating
+   5&ndash;13&times; more programs per hour than state-of-the-art frameworks and reaching
+   equivalent solution quality in 3&ndash;8 minutes versus 60 minutes for competing systems.</div>
+<div class="ataglance">
+  <div class="ag-title">At a Glance</div>
+  <div class="ag-row"><span class="ag-label">Problem:</span> LLM-guided evolutionary search is accurate but too slow for large-scale discovery; each round requires full chain-of-thought for every candidate.</div><div class="ag-row"><span class="ag-label">Why it matters:</span> Scientific computing and mathematical discovery require evaluating hundreds of program variants per experiment; throughput is a hard bottleneck.</div><div class="ag-row"><span class="ag-label">Method:</span> 10 swarms of 45 latent agents share KV caches and reason for 40 latent steps without decoding to text; a lightweight decoding head maps top agent states to program tokens.</div><div class="ag-row"><span class="ag-label">Result:</span> 5–13× more programs per hour; solution quality reached in 3–8 min vs. 60 min for text-based frameworks.</div><div class="ag-row"><span class="ag-label">Evidence:</span> 21 problems spanning symbolic math and PDE solver kernel optimization; baselines: OpenEvolve, ShinkaEvolve, CodeEvolve.</div>
+</div>
+<div class="columns">
+    <div class="section">
+      <div class="section-header ">The Big Picture</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>Program evolution with LLMs (OpenEvolve, FunSearch, ShinkaEvolve) has produced surprising
+    discoveries in combinatorics and numerical computing by using LLMs as intelligent mutation operators.
+    The approach works because LLMs encode prior knowledge about program structure, algorithm design,
+    and mathematical transformations that random mutation cannot access.</p>
+    <p>The fundamental bottleneck is throughput. Generating a new program candidate with chain-of-thought
+    reasoning costs one full LLM forward pass with a long context window. At 450 tokens per second on
+    typical hardware, a 1,000-token chain-of-thought allows only 27 candidates per minute per GPU.
+    SwarmEvolve attacks this bottleneck by eliminating the decoding step from most of the computation.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Why Existing Approaches Fall Short</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p><strong>Text-based frameworks</strong> (OpenEvolve, CodeEvolve) generate each candidate as a full text completion&mdash;flexible but slow.
+    <strong>Parallel sampling with temperature</strong> can explore multiple candidates simultaneously but each sample is independent
+    and cannot condition on what other concurrent samples produce.
+    <strong>Smaller surrogate models</strong> are faster but lack reasoning quality, leading to lower-quality proposals and slower convergence.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Core Mechanism: Latent Agents with KV Sharing</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>Each agent is a frozen LLM conditioned on a shared prefix KV cache covering the problem
+    description and global best solution. The agent then runs 40 autoregressive steps
+    <em>without</em> applying the unembedding matrix: no token is produced. Instead, the final
+    hidden state <span class="im">h<sub>i</sub> &isin; &Ropf;<sup>d</sup></span> encodes the
+    agent&rsquo;s proposal in activation space.</p>
+    <p>Agents in the same swarm share a common prefix KV cache, eliminating redundant computation.
+    Different random seed vectors (appended to the shared prefix) induce diversity within the swarm.
+    A lightweight decoding head maps the top-<em>r</em> agents&rsquo; hidden states to program token sequences.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Technical Formulation</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>Let K&nbsp;=&nbsp;10 swarms each containing N&nbsp;=&nbsp;45 agents. The shared prefix for swarm k is:</p>
+    <code class="eq">K_k = KVCache([problem, x*_k])</code>
+    <p>where x*<sub>k</sub> is the globally best program found so far. Each agent produces:</p>
+    <code class="eq">h_{k,i} = f_&theta;(z_{k,i}, K_k) &isin; &Ropf;^d</code>
+    <p>The fitness-weighted swarm centroid is <span class="im">h&#772;_k = &sum;w_i h_{k,i} / &sum;w_i</span> with weights
+    <span class="im">w_i = softmax(F_{k,i}/T)</span>. The top-r&nbsp;=&nbsp;5 agents by cosine similarity to the centroid are decoded.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Learning or Inference Procedure</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>The decoding head D<sub>&phi;</sub> is a 2-layer MLP trained offline on (hidden-state, program) pairs
+    extracted from text-based evolutionary runs. At inference time D<sub>&phi;</sub> is frozen; SwarmEvolve
+    requires no online training. The evolutionary loop per round: (1)&nbsp;Update all K prefix caches;
+    (2)&nbsp;Run all 450 agents in parallel (40 latent steps); (3)&nbsp;Select top-r agents per swarm;
+    (4)&nbsp;Decode to programs via D<sub>&phi;</sub>; (5)&nbsp;Execute and score; (6)&nbsp;Update global bests.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">What the Guarantee Says</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>No formal convergence guarantee is provided. The empirical claim is throughput superiority on 21 specific
+    problems. Best-known solutions to 11 of the 21 problems (symbolic math subset) have formal certificates;
+    SwarmEvolve recovers certified-correct solutions for 9 of these 11 within the 2 GPU-hour budget.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Experimental Findings</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><ul>
+    <li><strong>Throughput:</strong> 5–13× more programs per hour than all three baselines.</li>
+    <li><strong>Time-to-solution:</strong> Median 3–8 minutes vs. 60 minutes on the same hardware.</li>
+    <li><strong>Quality:</strong> Highest average score across 21 problems; wins 17 of 21 head-to-head.</li>
+    <li><strong>Diversity:</strong> 10-swarm config produces 1.9× more distinct program families per hour than a 450-agent single-swarm variant.</li>
+    </ul></div>
+    </div>
+    <div class="section">
+      <div class="section-header ">Ablations and Interpretation</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p><strong>Latent steps:</strong> 40 is near-optimal; 20 steps reduces quality by 4.3 points; 80 shows no improvement.
+    <strong>Swarm count:</strong> 10 swarms outperform 5 by 2.7 points and 1 swarm by 7.1 points.
+    <strong>KV sharing:</strong> Removing the shared prefix cache reduces throughput 2.3× and quality 3.2 points.
+    <strong>Decoding head:</strong> Replacing D<sub>&phi;</sub> with a linear probe reduces program validity from 94% to 71%.</p></div>
+    </div>
+    <div class="section">
+      <div class="section-header ref-header">Reference</div>
+      <div class="section-rule"></div>
+      <div class="section-body"><p>Qile Jiang, George Em Karniadakis. <strong>SwarmEvolve: Latent Agent Swarms for Evolutionary Discovery and Optimization.</strong> arXiv:2611.08483. <a href="https://arxiv.org/abs/2611.08483">arxiv.org/abs/2611.08483</a></p></div>
+    </div></div>
+</body>
+</html>
