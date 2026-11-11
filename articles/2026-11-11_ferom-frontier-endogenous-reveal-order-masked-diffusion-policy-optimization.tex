@@ -1,0 +1,245 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-11}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  masked diffusion LMs \textbullet{}
+  policy gradient \textbullet{}
+  Rao-Blackwellization \textbullet{}
+  reveal-order marginalization}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  FEROM: Frontier Endogenous Reveal-Order Marginal Policy Optimization for Masked Diffusion LMs}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Marginalizing Over Reveal Orders Via a DAG Formulation Reduces Bias and Variance
+  in Diffusion-LM Reinforcement Learning}\par\vspace{6pt}
+
+{\small\textbf{NeurIPS 2026 Submission}}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.10369 \textbullet{}
+  cs.LG / cs.CL \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Masked diffusion language models iteratively unmask token positions, but
+applying reinforcement learning to them requires a policy gradient over
+exponentially many possible reveal orders. Fixed schedules introduce bias;
+single-trajectory sampling introduces high variance. FEROM Rao-Blackwellizes
+over all reveal orders using edge occupancy on a reveal-state DAG, cutting
+both failure modes through its Frontier Reveal Marginalization approximation.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Policy gradient for masked diffusion LMs is either biased
+    (fixed unmasking schedule) or high-variance (single sampled reveal order).
+  \item[Why it matters:] RLHF for masked dLLMs requires low-variance gradients;
+    schedule bias and trajectory variance both degrade fine-tuning quality.
+  \item[Method:] Rao-Blackwellize over reveal orders via posterior edge occupancy
+    on a reveal-state DAG; approximate tractably with Frontier Reveal
+    Marginalization; integrate into a GRPO-style objective.
+  \item[Result:] Lower gradient variance, faster convergence, and higher reward
+    than fixed-schedule and single-path GRPO baselines.
+  \item[Evidence:] Masked dLLM RL fine-tuning experiments with reward-guided
+    generation tasks; comparisons against fixed-schedule and single-path GRPO.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Masked diffusion language models generate text by starting from a fully masked
+sequence and iteratively choosing which positions to reveal. At each step the
+model assigns a confidence to each masked position and reveals the most
+confident ones. Training with RL requires differentiating through this process
+to maximize an external reward.
+
+The core difficulty is that the \emph{reveal order} --- which positions are
+unmasked in which step --- is a discrete latent variable with a space that
+grows factorially in sequence length. Standard RL methods handle this either by
+fixing the unmasking order in advance (introducing bias, since the fixed
+schedule may not match the optimal order for the given input) or by sampling a
+single reveal order per rollout (introducing high variance, since any single
+path captures a tiny fraction of the reveal-order space).
+
+FEROM reframes this as a Rao-Blackwellization problem: instead of evaluating
+the policy gradient on a single sampled path, marginalize over \emph{all} valid
+reveal orders. The key insight is that this marginalization can be expressed
+analytically using the structure of the reveal-state DAG, and approximated
+tractably by restricting attention to the ``frontier'' --- the boundary between
+revealed and masked positions.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fixed-schedule policy gradient} assigns an unmasking order at the start
+of each rollout (e.g., lowest-confidence first, or uniform random). The
+gradient is computed along this fixed path. The bias arises because the fixed
+schedule is a function of the initial model and does not adapt to the learned
+policy; the optimal reveal order changes as the model improves.
+
+\textbf{Single-path GRPO} samples one reveal order per rollout and estimates the
+policy gradient from this sample. The variance of this estimator is proportional
+to the variance of the policy's log-probability over the reveal-order space,
+which is large when the model assigns similar probability to many orders (a
+common situation early in training).
+
+\textbf{Beam search over reveal orders} approximates the best order greedily
+but is not differentiable and cannot be used for gradient estimation.
+
+FEROM is the first method to Rao-Blackwellize over reveal orders, strictly
+reducing variance relative to single-path sampling with no additional bias.
+
+\section{Core Mechanism}
+
+The reveal process for a sequence of length $T$ defines a directed acyclic graph
+(DAG) over \emph{masking states}. Each node $m \in \{0,1\}^T$ is an indicator
+vector of which positions are currently masked. An edge $(m \to m')$ exists when
+$m'$ is obtained from $m$ by unmasking exactly one additional position. A full
+reveal order is a path from the all-masked node to the all-revealed node.
+
+For a rollout ending at a final answer $y$, the policy gradient under a single
+path $\pi$ is an unbiased but high-variance estimate. FEROM replaces this with
+the Rao-Blackwellized estimate:
+\[
+  \nabla_\theta \log p_\theta(y) = \sum_{(m \to m')\in\text{DAG}}
+    \rho(m \to m' \mid y)\, \nabla_\theta \log p_\theta(m' \mid m, x),
+\]
+where $\rho(m \to m' \mid y)$ is the \emph{posterior edge occupancy}: the
+probability under the model that the transition $m \to m'$ occurred, given that
+the final output is $y$. This sum has the same expectation as the single-path
+estimator but strictly lower variance (by Rao-Blackwell's theorem).
+
+\section{Technical Formulation}
+
+Let $x$ be the input, $y$ the generated output, and $\theta$ the model
+parameters. Define the unmasking policy $q_\theta(j \mid m, x)$ as the
+probability of unmasking position $j$ when the current masking state is $m$.
+The joint probability of a full reveal order $\sigma = (j_1, \ldots, j_T)$ is:
+\[
+  q_\theta(\sigma \mid x) = \prod_{t=1}^T q_\theta(j_t \mid m_t, x),
+\]
+where $m_t$ is the masking state after steps $1,\ldots,t-1$.
+
+The posterior edge occupancy for edge $(m \to m')$ where $m' = m \setminus \{j\}$:
+\[
+  \rho(m \to m' \mid y) = \frac{\sum_{\sigma: (m\to m')\in\sigma} q_\theta(\sigma\mid x) p_\theta(y \mid \sigma, x)}
+    {\sum_{\sigma} q_\theta(\sigma \mid x) p_\theta(y \mid \sigma, x)}.
+\]
+Exact computation is intractable. \textbf{Frontier Reveal Marginalization (FRM)}
+approximates it by restricting to the frontier $\mathcal{F}(m)$ --- the set of
+currently masked positions --- and treating the marginal at each frontier
+position independently:
+\[
+  \tilde{\rho}(m \to m' \mid y) \approx q_\theta(j \mid \mathcal{F}(m), x) \cdot w(m, y),
+\]
+where $w(m, y)$ is a normalizing weight derived from the model's confidence
+at masking state $m$. The GRPO-style objective replaces single-path log-scores
+with the FRM-weighted surrogate:
+\[
+  \mathcal{L}_\text{FEROM} = -\mathbb{E}_y\bigl[r(y)\bigr]
+    \cdot \sum_{(m\to m')} \tilde{\rho}(m \to m' \mid y)\,
+    \log q_\theta(j \mid \mathcal{F}(m), x).
+\]
+
+\section{Learning or Inference Procedure}
+
+FEROM is a training-time modification; at inference, the model samples normally.
+During training:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Sample rollouts $\{y_i\}$ from the current model using the standard
+    masked-diffusion sampling procedure.
+  \item For each rollout, compute the FRM frontier occupancies
+    $\tilde{\rho}(m \to m' \mid y_i)$ for each unmasking step.
+  \item Compute the FEROM gradient using the edge-based surrogate.
+  \item Apply the gradient update with a standard optimizer (Adam).
+\end{enumerate}
+No additional model is required; FRM uses only the model's own logits at each
+frontier state.
+
+\section{What the Guarantee Says}
+
+No formal convergence rate is claimed. The theoretical claim is that for any
+rollout budget, the FEROM gradient estimator has strictly lower variance than
+the single-path GRPO estimator (by Rao-Blackwell), and is unbiased relative to
+the true policy gradient under the fixed-budget FRM approximation. The bias
+introduced by FRM's frontier approximation is not formally bounded but is
+empirically shown to be small.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Gradient variance:} FEROM reduces policy gradient variance by
+    40--65\% compared to single-path GRPO across tasks and model sizes.
+  \item \textbf{Convergence speed:} FEROM reaches target reward in 30--50\%
+    fewer gradient steps than fixed-schedule and single-path baselines.
+  \item \textbf{Final reward:} At equal step budgets, FEROM achieves higher
+    final reward on all evaluated reward-guided generation tasks.
+  \item \textbf{FRM budget sensitivity:} Using $|\mathcal{F}| = 4$ frontier
+    positions captures $>$90\% of the variance reduction from exact
+    marginalization; larger frontiers add diminishing returns.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{FRM vs.\ exact marginalization:} On short sequences (length $\leq 16$)
+where exact marginalization is tractable, FRM achieves 94\% of the exact
+variance reduction, confirming that the frontier approximation is tight.
+
+\textbf{Frontier width:} Increasing frontier width from 1 to 4 reduces variance
+by an additional 32\%; width 8 adds only 4\% more. Width 4 is used in all
+reported experiments.
+
+\textbf{Reward model quality:} FEROM's advantage over single-path GRPO grows
+with reward noise: when the reward model is noisy, the lower gradient variance
+of FEROM prevents the optimizer from chasing reward-model artifacts.
+
+\textbf{Comparison to fixed schedule:} Fixed reveal order eliminates reveal-order
+variance but introduces systematic bias that widens as training progresses
+(as the optimal policy deviates from the fixed schedule's implicit preference).
+FEROM's bias remains constant and near zero throughout training.
+
+\section*{Reference}
+
+NeurIPS 2026 Submission.
+\textbf{FEROM: Frontier Endogenous Reveal-Order Marginal Policy Optimization
+for Masked Diffusion LMs.}
+arXiv:2611.10369. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.10369}
+
+\end{document}

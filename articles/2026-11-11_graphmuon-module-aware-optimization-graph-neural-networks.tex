@@ -1,0 +1,247 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-11}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  graph neural networks \textbullet{}
+  Muon optimizer \textbullet{}
+  second-order methods \textbullet{}
+  graph-aware preconditioning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Module-Aware Optimization for Graph Neural Networks}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  GraphMuon Adapts the Muon Optimizer to Graph-Propagated Input Covariance,
+  Achieving 2.13--7.38$\times$ Wall-Clock Speedups Over AdamW}\par\vspace{6pt}
+
+{\small\textbf{By} Guy Hadad, Haggai Roitman, Moshe Eliasof, Bracha Shapira}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.08379 \textbullet{}
+  cs.LG / cs.AI \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+The Muon optimizer orthogonalizes gradient matrices to precondition updates,
+but its implicit geometry ignores graph propagation, which systematically
+distorts layer-input covariance in GNNs. GraphMuon corrects this by
+orthogonalizing in the graph-propagated input metric, cutting
+time-to-target by up to 7.38$\times$ over AdamW on 15 benchmark
+configurations.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Muon's matrix update assumes isotropic input covariance, but
+    graph propagation distorts covariance, amplifying updates and destabilizing
+    GNN training.
+  \item[Why it matters:] GNNs are increasingly used for large-scale scientific
+    and industrial graph tasks; faster, stable optimization directly reduces
+    training cost.
+  \item[Method:] Replace Muon's Euclidean metric with the graph-propagated input
+    covariance; orthogonalize and normalize step sizes in this graph-aware metric.
+  \item[Result:] 2.13--7.38$\times$ wall-clock speedup over AdamW on 13/15
+    dataset-architecture configs; vanilla Muon diverges on 4/15.
+  \item[Evidence:] 15 configurations across node classification, inductive graph
+    classification, and graph regression benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The Muon optimizer has emerged as a competitive alternative to AdamW for
+large neural network training. Its core mechanism is matrix orthogonalization:
+rather than scaling the gradient element-wise (as Adam does), Muon computes the
+polar decomposition of the gradient matrix and uses the orthogonal factor as the
+update. This is equivalent to preconditioned gradient descent with preconditioner
+$(GG^T)^{-1/2}$, and it implicitly implements a form of second-order optimization
+using only the gradient's own geometry.
+
+Muon was developed and evaluated on transformer architectures, where the input
+to each linear layer has approximately isotropic covariance (thanks to layer
+normalization before attention and MLP blocks). This isotropy is critical: it
+ensures that orthogonalizing the gradient matrix produces an update whose
+magnitude is well-calibrated relative to the effect on the layer's output.
+
+Graph neural networks break this assumption. In a GNN layer, the input to each
+linear transformation is the aggregated neighborhood feature $H = \tilde{A}X$,
+where $\tilde{A}$ is the normalized adjacency operator. Graph propagation
+concentrates variance in directions corresponding to low-frequency graph
+components (smooth node features) and suppresses high-frequency directions.
+Applying Muon's Euclidean orthogonalization to the gradient of $WH^T$ ignores
+this distortion, causing the update to be under-calibrated in smooth directions
+and over-calibrated in rough directions --- destabilizing training in poorly
+conditioned graphs.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{AdamW} applies element-wise adaptive scaling, which is permutation-
+invariant and does not exploit the matrix structure of weight gradients.
+It is robust but slow to converge on tasks where curvature is anisotropic
+along structured directions.
+
+\textbf{Vanilla Muon} captures matrix structure but uses a Euclidean metric
+that is mismatched to graph-propagated inputs. On graphs with high spectral
+anisotropy (e.g., large homophilic graphs with strong community structure),
+the covariance of $H$ is far from isotropic, and Muon's updates amplify
+variance along over-represented directions, causing divergence.
+
+\textbf{SOAP and Shampoo} are full Kronecker-factored second-order methods that
+in principle handle anisotropic curvature, but their cost per step is cubic in
+the layer dimension, making them impractical for large GNN layers.
+
+GraphMuon achieves the efficiency of Muon (one Newton-Schulz iteration per
+step, $O(d^2)$ cost) while correcting for the GNN-specific covariance structure.
+
+\section{Core Mechanism}
+
+For a GNN layer with propagated input $H = \tilde{A}X \in \mathbb{R}^{n \times d}$
+and weight matrix $W \in \mathbb{R}^{d' \times d}$, the layer output is $Z = HW^T$.
+The gradient of the loss with respect to $W$ is:
+\[
+  G = \frac{\partial \mathcal{L}}{\partial W} = \left(\frac{\partial \mathcal{L}}{\partial Z}\right)^T H.
+\]
+The empirical input covariance is $\Sigma = H^T H / n \in \mathbb{R}^{d\times d}$.
+
+Muon computes the polar factorization $G = UP$ (with $U$ orthogonal and $P$
+positive semi-definite) and uses $U$ as the update. This is the orthogonalization
+in the standard Frobenius metric $\langle A, B \rangle_F = \text{tr}(A^T B)$.
+
+GraphMuon instead orthogonalizes in the $\Sigma$-weighted metric:
+\[
+  \langle A, B \rangle_\Sigma = \text{tr}(A \Sigma B^T).
+\]
+The $\Sigma$-orthogonal factor of $G$ is obtained by computing the polar
+factorization of $G\Sigma^{1/2}$:
+\[
+  G\Sigma^{1/2} = \hat{U}\hat{P}, \quad
+  U_\Sigma = \hat{U}\Sigma^{-1/2},
+\]
+where $\hat{U}$ is orthogonal and $\hat{P}$ is PSD. The step-size normalization
+replaces the spectral-norm factor used in Muon with:
+\[
+  \eta_\Sigma = \frac{\eta}{\|U_\Sigma H^T\|_F},
+\]
+ensuring the effective learning rate measures actual change in layer output.
+
+\section{Technical Formulation}
+
+Let $\Sigma_t$ be an exponential moving average of the input covariance:
+\[
+  \Sigma_t = \beta \Sigma_{t-1} + (1-\beta)\, \frac{H_t^T H_t}{n_t},
+\]
+with $\beta = 0.95$. The GraphMuon update at step $t$ is:
+\[
+  W_{t+1} = W_t - \eta_\Sigma\, U_{\Sigma_t},
+\]
+where $U_{\Sigma_t}$ is computed via two Newton-Schulz iterations applied to
+$G_t \Sigma_t^{1/2}$:
+\[
+  B_0 = G_t \Sigma_t^{1/2},\quad
+  B_{k+1} = \tfrac{3}{2}B_k - \tfrac{1}{2}B_k B_k^T B_k,\quad
+  U_{\Sigma_t} = B_2 \Sigma_t^{-1/2}.
+\]
+The $\Sigma_t^{1/2}$ and $\Sigma_t^{-1/2}$ factors are computed via eigendecomposition
+once per update, sharing the cost across all gradient steps in a mini-batch.
+Per-step overhead over vanilla Muon is dominated by the matrix square roots
+and is bounded by $O(d^3 / n_\text{steps})$ amortized.
+
+\section{Learning or Inference Procedure}
+
+GraphMuon is a drop-in replacement for AdamW or Muon in any GNN training
+pipeline. Required inputs are:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item Gradient matrices $G_t$ for each GNN weight matrix, computed by
+    standard backpropagation.
+  \item Propagated activations $H_t$ for each layer, cached from the
+    forward pass.
+  \item An EMA coefficient $\beta$ (default 0.95) and two Newton-Schulz
+    iterations (sufficient for convergence at standard scales).
+\end{itemize}
+No separate profiling or warm-up phase is required; the EMA initializes from the
+first mini-batch and stabilizes within a few hundred steps.
+
+\section{What the Guarantee Says}
+
+No formal convergence rate is derived. The empirical claim is: on 13 of 15
+evaluated dataset-architecture configurations, GraphMuon reaches a fixed
+performance target faster (in wall-clock time) than AdamW. On the remaining 2,
+it is within 5\% of AdamW's time-to-target. Vanilla Muon fails to converge on
+4 of the 15 configurations; GraphMuon converges on all 15.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Time-to-target:} 2.13--7.38$\times$ faster than AdamW
+    (13/15 configs); speedups are largest on dense homophilic graphs.
+  \item \textbf{Peak accuracy:} Marginally higher than AdamW in 9/15 configs;
+    never more than 0.3\% lower in any configuration.
+  \item \textbf{Vanilla Muon failures:} Muon diverges on 4/15 configs
+    (ogbn-arxiv with GraphSAGE, ZINC with GNN+, and 2 TUDatasets); GraphMuon
+    converges on all.
+  \item \textbf{Overhead:} Per-step overhead over AdamW is 8--12\% in
+    wall-clock time; the speedup from fewer steps more than compensates.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{EMA vs.\ online covariance:} Using a fresh covariance estimate per step
+achieves the same quality but at 2.3$\times$ the per-step cost; EMA captures
+the same effective geometry at lower cost.
+
+\textbf{Newton-Schulz iterations:} One iteration is insufficient for high spectral
+ratio $\Sigma$; two iterations yield near-exact $\Sigma$-orthogonalization
+in all evaluated cases.
+
+\textbf{Step-size normalization:} Replacing the output-space normalization
+with the standard Muon spectral-norm normalization degrades time-to-target by
+18\% on average, confirming the importance of measuring step size in output space.
+
+\textbf{Covariance estimation noise:} On sparse graphs (fewer than 100 nodes
+per batch), the EMA estimate is noisy; adding a 5\% identity regularizer
+to $\Sigma_t$ recovers the full speedup without hurting peak accuracy.
+
+\section*{Reference}
+
+Guy Hadad, Haggai Roitman, Moshe Eliasof, Bracha Shapira.
+\textbf{Module-Aware Optimization for Graph Neural Networks.}
+arXiv:2611.08379. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.08379}
+
+\end{document}

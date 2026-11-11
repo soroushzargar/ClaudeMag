@@ -1,0 +1,243 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-11}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  bilevel reinforcement learning \textbullet{}
+  inverse RL \textbullet{}
+  hypergradient \textbullet{}
+  black-box optimization}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Reward-Estimated Hypergradient for Bilevel Reinforcement Learning
+  with Black-Box Follower}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Inverse RL with Bias Cancellation and Eigenvalue Truncation Unlocks
+  Bilevel RL Without Access to the Follower's Reward}\par\vspace{6pt}
+
+{\small\textbf{NeurIPS 2026 Submission}}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.11998 \textbullet{}
+  cs.LG / cs.AI \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Bilevel RL requires the leader to differentiate through the follower's
+best-response, which presupposes access to the follower's reward.
+RE-HG uses inverse RL to estimate this reward, then cancels reward-shaping
+bias via dynamic diversity and suppresses Hessian explosions via eigenvalue
+truncation, achieving hypergradient estimates aligned at 0.91 cosine similarity
+with a white-box oracle.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Bilevel RL hypergradient estimation requires the follower's
+    reward, but in real settings the follower's reward is hidden.
+  \item[Why it matters:] Mechanism design, incentive alignment, and multi-agent
+    learning all involve a leader optimizing against an unknown follower reward.
+  \item[Method:] Estimate the follower's reward via IRL; cancel reward-shaping
+    bias by aggregating across diverse dynamics; truncate Hessian eigenvalues
+    to prevent norm explosions.
+  \item[Result:] Hypergradient cosine similarity 0.91 vs.\ oracle; outperforms
+    oracle on sharp reward landscapes (oracle gets stuck in local minima).
+  \item[Evidence:] Navigation, manipulation, and mechanism design benchmarks with
+    white-box oracle comparison.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Bilevel reinforcement learning models a hierarchical game: a leader sets
+parameters $\theta_L$ (a mechanism, an incentive structure, or a training
+curriculum), and a follower best-responds with policy $\pi_F^*(\theta_L)$
+that maximizes their own reward $R_F$. The leader's objective $V_L(\theta_L,
+\pi_F^*(\theta_L))$ depends on the follower's response, so optimizing $\theta_L$
+requires the hypergradient --- the gradient of $V_L$ with respect to $\theta_L$
+accounting for how changes in $\theta_L$ change $\pi_F^*$.
+
+Computing the hypergradient involves differentiating through the follower's
+best-response optimality condition, which in the RL setting requires the
+follower's reward $R_F$ (to compute the value-function Hessian). In the
+white-box setting, $R_F$ is known; in the black-box setting, only follower
+trajectories $\{(s_t, a_t, r_t^L)\}$ are observable (where $r_t^L$ is the
+leader's reward, not the follower's).
+
+Real-world applications are predominantly black-box: a government setting tax
+policy against firms whose profit functions are private; an online platform
+designing recommendation rewards against users whose true preferences are latent;
+a trainer in human-in-the-loop learning whose annotation reward is not
+directly observed. RE-HG is the first bilevel RL method to handle the
+black-box setting with rigorous bias correction.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{White-box bilevel RL} (Yang et al.\ 2024, Thoma et al.\ 2024) requires
+$R_F$ explicitly. In the absence of $R_F$, the follower's value-function Hessian
+cannot be computed.
+
+\textbf{Naive IRL + hypergradient:} Using an IRL-estimated $\hat{R}_F$ in place
+of $R_F$ introduces reward-shaping bias. Any function of the form
+$\hat{R}_F + \gamma\Phi(s') - \Phi(s)$ fits the follower's trajectories equally
+well for any potential $\Phi$, yet the resulting hypergradients are different.
+The gradient estimate is biased by an amount proportional to $\nabla_{\theta_L}\Phi$,
+which can be large.
+
+\textbf{Model-free bilevel RL} avoids IRL but requires differentiating through
+the follower's policy directly, which is only feasible when the follower's policy
+is a differentiable network under the leader's control.
+
+\section{Core Mechanism}
+
+RE-HG's three-component correction addresses the three failure modes of naive
+bilevel RL with an estimated reward:
+
+\textbf{(1) Inverse RL reward estimation.} MaxEnt IRL with function approximation
+recovers $\hat{R}_F^\phi \approx R_F$ from follower trajectories. Because
+trajectories are collected under varying $\theta_L$ throughout training, the IRL
+estimate is updated online and tracks changes in $\pi_F^*(\theta_L)$.
+
+\textbf{(2) Bias cancellation via dynamic diversity.} The reward-shaping
+ambiguity contributes a term $\nabla_{\theta_L} \Phi$ to the hypergradient.
+RE-HG collects follower trajectories under $K$ diverse environmental dynamics
+$\mathcal{D}_1, \ldots, \mathcal{D}_K$ (achieved by varying initial states and
+transition perturbations) and averages the resulting IRL rewards:
+\[
+  \bar{R}_F = \frac{1}{K}\sum_{k=1}^K \hat{R}_F^k.
+\]
+Under mild conditions, the shaping term satisfies $\sum_k \nabla_{\theta_L} \Phi^k
+\approx 0$ when the dynamics are sufficiently diverse, while the true reward
+signal $R_F$ appears consistently across all $k$.
+
+\textbf{(3) Eigenvalue truncation.} The hypergradient involves a matrix inverse
+$(H_F)^{-1}$ where $H_F = \nabla^2_{\pi_F} V_F$ is the follower's value-function
+Hessian. Near optimum, some eigenvalues of $H_F$ can be near zero, causing
+$(H_F)^{-1}$ to blow up. RE-HG replaces $(H_F)^{-1}$ with $(H_F + \epsilon I)^{-1}$
+where $\epsilon$ is a small positive constant chosen to bound the inverse norm.
+
+\section{Technical Formulation}
+
+The leader's hypergradient is:
+\[
+  \nabla_{\theta_L} V_L = \partial_{\theta_L} V_L
+    - \underbrace{\left(\frac{d\pi_F^*}{d\theta_L}\right)^T}_{\text{implicit gradient}}
+      \nabla_{\pi_F} V_L,
+\]
+where the implicit gradient is obtained by the implicit function theorem:
+\[
+  \frac{d\pi_F^*}{d\theta_L} = -\bigl(\nabla^2_{\pi_F} V_F(\pi_F^*,\theta_L)\bigr)^{-1}
+    \nabla_{\pi_F, \theta_L}^2 V_F(\pi_F^*, \theta_L).
+\]
+RE-HG substitutes $\hat{R}_F = \bar{R}_F$ for $R_F$ in computing $V_F$, and
+replaces the Hessian inverse with its truncated version:
+\[
+  \hat{H}_F^{-1} = \bigl(H_F(\hat{R}_F) + \epsilon I\bigr)^{-1},
+\]
+where $H_F(\hat{R}_F)$ is the value-function Hessian under the estimated reward.
+The resulting RE-HG hypergradient estimate is:
+\[
+  \widehat{\nabla}_{\theta_L} V_L = \partial_{\theta_L} V_L
+    - \bigl(\hat{H}_F^{-1} \nabla^2_{\pi_F,\theta_L} V_F(\hat{R}_F)\bigr)^T
+      \nabla_{\pi_F} V_L.
+\]
+
+\section{Learning or Inference Procedure}
+
+RE-HG alternates between:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Follower simulation:} Roll out follower trajectories under
+    $K=5$ diverse dynamics for the current $\theta_L$; update $\hat{R}_F$.
+  \item \textbf{Hypergradient estimation:} Compute RE-HG using the averaged
+    estimated reward and truncated Hessian.
+  \item \textbf{Leader update:} Apply gradient ascent on $V_L$ using the RE-HG
+    estimate.
+\end{enumerate}
+No additional models are required beyond the follower policy, the leader policy,
+and a reward function approximator for IRL.
+
+\section{What the Guarantee Says}
+
+Theorem (informal): Under the assumption that follower trajectories from $K$
+sufficiently diverse dynamics are collected, the RE-HG gradient estimate
+converges to the true hypergradient as $K \to \infty$, with bias decreasing as
+$O(1/K)$ times the shaping gradient's magnitude. The truncation error from
+eigenvalue clipping is bounded by $\epsilon \cdot \|H_F^{-1}\|^2 \|\nabla^2_{\pi_F,\theta_L} V_F\|$.
+No formal sample complexity bound is provided.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Gradient alignment:} Mean cosine similarity to white-box oracle
+    is 0.91 across tasks; naive IRL baseline achieves 0.63.
+  \item \textbf{Smooth landscapes:} Final $V_L$ is statistically indistinguishable
+    from oracle on 4/5 evaluated smooth-landscape tasks.
+  \item \textbf{Sharp landscapes:} RE-HG outperforms oracle by 8\% on average
+    due to implicit Hessian regularization that prevents the oracle from getting
+    stuck in saddle points.
+  \item \textbf{Dynamics diversity $K$:} $K=3$ recovers 85\% of the bias
+    cancellation; $K=5$ achieves 97\%; $K=10$ adds negligible improvement.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Without bias cancellation:} Gradient cosine similarity drops from 0.91
+to 0.74; on 2/5 tasks the leader converges to the wrong equilibrium.
+
+\textbf{Without eigenvalue truncation:} Training is unstable in 3/5 tasks
+(Hessian norm exceeds $10^4$); with truncation ($\epsilon = 10^{-3}$), all 5 tasks
+converge stably.
+
+\textbf{IRL architecture choice:} MaxEnt IRL with a 2-layer MLP reward function
+suffices; a 4-layer network improves alignment by $<$1\%; a linear reward function
+loses 15\% alignment.
+
+\textbf{Dynamic diversity design:} Initial-state randomization contributes more
+to bias cancellation than transition perturbation; combining both achieves better
+cancellation than either alone.
+
+\section*{Reference}
+
+NeurIPS 2026 Submission.
+\textbf{Reward-Estimated Hypergradient for Bilevel Reinforcement Learning
+with Black-Box Follower.}
+arXiv:2611.11998. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.11998}
+
+\end{document}

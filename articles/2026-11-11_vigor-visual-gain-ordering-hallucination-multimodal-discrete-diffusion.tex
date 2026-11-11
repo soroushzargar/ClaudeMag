@@ -1,0 +1,237 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-11}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  multimodal diffusion LMs \textbullet{}
+  hallucination \textbullet{}
+  visual grounding \textbullet{}
+  training-free inference}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  VIGOR: Visual Gain Ordering for Hallucination Mitigation in Multimodal
+  Discrete Diffusion Language Models}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  Reordering Unmasking by Counterfactual Visual Evidence Consistently Reduces
+  Hallucination Without Any Fine-Tuning}\par\vspace{6pt}
+
+{\small\textbf{NeurIPS 2026 Submission}}\par\vspace{2pt}
+
+{\small\color{keywordgray}arXiv:2611.05066 \textbullet{}
+  cs.CV / cs.CL \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Multimodal discrete diffusion LMs hallucinate because language priors dominate
+unmasking confidence, causing tokens to be committed before visual evidence
+can influence them. VIGOR reorders unmasking by visual gain --- the difference
+in confidence between normal and visually-ablated inference passes --- ensuring
+image-grounded tokens are committed first. Applied to LLaDA-V and Lumina-DiMOO,
+it consistently reduces hallucination with no training required.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Hallucination in multimodal dLLMs stems partly from premature
+    commitment: positions are unmasked by language-prior confidence before
+    visual evidence is fully integrated.
+  \item[Why it matters:] Multimodal dLLMs are emerging alternatives to
+    autoregressive VLMs; their hallucination problem must be solved for
+    practical deployment.
+  \item[Method:] At each denoising step, compare confidence under normal and
+    visually-ablated passes; unmask in order of visual gain (the difference).
+  \item[Result:] Consistent hallucination reduction and improved multimodal
+    reasoning on both LLaDA-V and Lumina-DiMOO, across all evaluated benchmarks.
+  \item[Evidence:] POPE, MMHal-Bench, NocCaps, and standard VQA benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Discrete diffusion language models generate text by iterative masked-token
+prediction: starting from a fully masked sequence, the model at each step
+selects the positions it is most confident about and reveals them. When paired
+with a vision encoder, these models become multimodal discrete diffusion LMs
+(multimodal dLLMs) capable of generating text descriptions conditioned on
+images.
+
+Autoregressive VLMs have a well-studied hallucination problem: they generate
+plausible-sounding but factually incorrect descriptions of images by over-relying
+on language priors. The same problem affects multimodal dLLMs, but with an
+additional structural cause specific to their generation process. In an
+autoregressive model, every token is generated after all preceding tokens have
+been committed, so the full left-context is always available. In a masked dLLM,
+the unmasking order is flexible: positions can be committed in any sequence.
+The model currently commits positions in order of raw confidence --- but
+high-confidence positions are often those that fit well in the sentence based on
+language priors alone, independent of the image.
+
+VIGOR identifies this as the \emph{premature commitment problem}: by committing
+language-prior-driven positions first, the model forecloses visual evidence
+before it can influence downstream positions. VIGOR's solution is to change the
+commitment order so that visually-grounded positions are committed first,
+providing a visual anchor for subsequent language-driven completions.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Raw confidence ordering} (the standard strategy in masked dLLMs) uses
+the model's output probability for the most likely token at each masked position.
+This conflates language-prior confidence and visual confidence, unmasking
+high-language-prior positions first regardless of their visual grounding.
+
+\textbf{Contrastive decoding methods} for autoregressive VLMs (e.g., VCD, ICD)
+subtract language-only scores from image-conditioned scores at the token level,
+but they were designed for the per-token generation step in autoregressive models
+and do not transfer cleanly to the unmasking-order decision in dLLMs.
+
+\textbf{Training-based approaches} (RL fine-tuning with grounding rewards,
+reinforcement from visual feedback) can reduce hallucination but require
+additional training data and compute, and do not apply to deployed frozen models.
+
+VIGOR is the first method to apply contrastive visual reasoning to the
+\emph{commitment order decision} in masked dLLMs, enabling training-free
+hallucination mitigation specific to the dLLM generation structure.
+
+\section{Core Mechanism}
+
+At denoising step $t$, let $m_t$ be the current masking state, $I$ the image,
+and $T$ the text context (prompt and already-revealed tokens). For each masked
+position $j \in m_t$, VIGOR computes:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item \textbf{Normal confidence:} $P(j \mid I, T) = \max_v p_\theta(v \mid I, T, m_t, j)$,
+    the top-1 token probability at position $j$ in the image-conditioned pass.
+  \item \textbf{Ablated confidence:} $P(j \mid \emptyset, T) = \max_v p_\theta(v \mid \emptyset, T, m_t, j)$,
+    the same probability with the image replaced by a null embedding.
+  \item \textbf{Visual gain:} $\text{VG}(j) = P(j \mid I, T) - P(j \mid \emptyset, T)$.
+\end{enumerate}
+VIGOR selects the top-$k$ positions by visual gain to unmask at step $t$,
+rather than the top-$k$ by raw confidence. The null image embedding is a fixed
+zero vector in visual token space.
+
+\section{Technical Formulation}
+
+Let $\hat{y}_j = \arg\max_v p_\theta(v \mid I, T, m_t, j)$ be the most likely
+token at position $j$ under the image-conditioned model. The visual gain is:
+\[
+  \text{VG}(j) = p_\theta(\hat{y}_j \mid I, T, m_t, j)
+              - p_\theta(\hat{y}_j \mid \emptyset, T, m_t, j).
+\]
+Positions with $\text{VG}(j) > 0$ have their most likely token more supported
+by the image than by language priors alone. Positions with $\text{VG}(j) \approx 0$
+are indifferent to the image; positions with $\text{VG}(j) < 0$ are actively
+in conflict with the image (language prior predicts something different from
+what the image supports).
+
+The unmasking set at step $t$ is:
+\[
+  \mathcal{U}_t = \arg\text{top-}k_{j \in m_t}\, \text{VG}(j).
+\]
+The token values assigned to revealed positions are taken from the
+image-conditioned pass: $y_j = \hat{y}_j$ for $j \in \mathcal{U}_t$.
+The number of positions revealed per step $k$ follows the same schedule as
+the base model's standard denoising procedure.
+
+\section{Learning or Inference Procedure}
+
+VIGOR is a pure inference-time method. Required inputs:
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item A pretrained multimodal dLLM (LLaDA-V, Lumina-DiMOO, or any masked-
+    diffusion VLM with accessible token logits).
+  \item A null image embedding (zero vector in visual token space; a learned
+    null token is also valid and was tested without significant difference).
+  \item Two forward passes per denoising step (normal and ablated).
+\end{itemize}
+The added cost is one extra forward pass per step. For a standard denoising
+procedure with $T_d = 10$ steps, VIGOR adds 10 forward passes over baseline,
+roughly doubling inference cost.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is claimed. The empirical claim is: on all evaluated
+hallucination benchmarks, VIGOR reduces hallucination rates compared to raw-
+confidence unmasking ordering. The claim is that visual gain is a better proxy
+for visual grounding than raw confidence, and this better proxy translates to
+fewer committed hallucinations.
+
+\section{Experimental Findings}
+
+\begin{itemize}[itemsep=2pt,parsep=0pt]
+  \item \textbf{POPE:} VIGOR reduces object-level hallucination rate by
+    8--14\% (absolute) on both LLaDA-V and Lumina-DiMOO; largest gains on
+    adversarial POPE splits.
+  \item \textbf{MMHal-Bench:} Hallucination score improves by 0.4--0.7 points
+    (on a 0--4 scale) on both backbones.
+  \item \textbf{NocCaps:} CIDEr score improves by 3--5 points; caption
+    specificity (image-grounded details) increases measurably.
+  \item \textbf{Standard VQA:} Performance is unchanged ($\pm 0.5\%$),
+    confirming the reordering does not hurt non-hallucination-sensitive tasks.
+  \item \textbf{Inference cost:} Roughly $2\times$ baseline; latency is
+    acceptable for batch inference applications.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\textbf{Null image type:} Zero vector vs.\ learned null token vs.\ Gaussian noise
+all produce similar visual gain scores; zero vector is used for simplicity.
+
+\textbf{Top-$k$ selection vs.\ threshold:} Using $\text{VG}(j) > 0$ as a threshold
+(rather than a fixed-$k$ selection) gives slightly lower performance because it
+occasionally unmasks too few or too many positions per step; fixed-$k$ matching
+the base model's schedule is preferred.
+
+\textbf{Position of VIGOR in the denoising schedule:} Applying VIGOR only in the
+first half of denoising steps captures 80\% of the hallucination reduction at
+half the extra cost, confirming that early commitment decisions are the most
+consequential.
+
+\textbf{Comparison with token-level contrastive decoding:} Applying VCD-style
+contrastive decoding to the token values (not the commitment order) in masked
+dLLMs gives smaller gains than VIGOR, confirming that the commitment-order
+effect is the primary mechanism.
+
+\section*{Reference}
+
+NeurIPS 2026 Submission.
+\textbf{VIGOR: Visual Gain Ordering for Hallucination Mitigation in Multimodal
+Discrete Diffusion Language Models.}
+arXiv:2611.05066. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.05066}
+
+\end{document}

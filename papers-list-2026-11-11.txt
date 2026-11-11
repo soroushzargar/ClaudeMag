@@ -1,0 +1,72 @@
+ML Papers List — 2026-11-11
+Generated for ClaudeMag
+
+1. FEROM: Frontier Endogenous Reveal-Order Marginal Policy Optimization for Masked Diffusion LMs
+   Authors: NeurIPS 2026 Submission (anonymous)
+   Venue/ID: arXiv:2611.10369 — cs.LG / cs.CL (NeurIPS 2026; submitted 7 Nov 2026)
+   URL: https://arxiv.org/abs/2611.10369
+   Summary: Standard policy gradient methods for masked diffusion language models either fix the
+   unmasking schedule (introducing bias) or sample a single trajectory (introducing high variance).
+   FEROM treats the reveal order as a latent variable and derives a Rao-Blackwellized
+   policy-gradient identity over all possible unmasking sequences, expressing the estimator as
+   posterior edge occupancy on a reveal-state directed acyclic graph. A tractable budgeted
+   approximation called Frontier Reveal Marginalization (FRM) is integrated into a GRPO-style
+   objective, replacing single-path log-scores with a locally marginalized, edge-based surrogate
+   that jointly reduces bias and variance in diffusion-LM reinforcement learning.
+
+2. Module-Aware Optimization for Graph Neural Networks (GraphMuon)
+   Authors: Guy Hadad, Haggai Roitman, Moshe Eliasof, Bracha Shapira
+   Venue/ID: arXiv:2611.08379 — cs.LG / cs.AI (NeurIPS 2026; submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08379
+   Summary: The Muon optimizer orthogonalizes gradient matrices via Newton-Schulz iterations but
+   ignores that GNN layer inputs are graph-propagated, amplifying updates and destabilizing
+   training. GraphMuon adapts Muon's matrix update to the covariance structure of
+   graph-propagated layer representations by orthogonalizing in a metric defined by those
+   propagated inputs and normalizing step sizes by the update's induced effect on layer
+   representations. Across 15 dataset-architecture configurations covering node classification,
+   inductive graph classification, and graph regression, GraphMuon achieves 2.13-7.38x speedups
+   in wall-clock time-to-target over AdamW (13 out of 15 configurations) while maintaining
+   competitive or superior predictive performance.
+
+3. VIGOR: Visual Gain Ordering for Hallucination Mitigation in Multimodal Discrete Diffusion Language Models
+   Authors: NeurIPS 2026 Submission (anonymous)
+   Venue/ID: arXiv:2611.05066 — cs.CV / cs.CL (NeurIPS 2026; submitted 3 Nov 2026)
+   URL: https://arxiv.org/abs/2611.05066
+   Summary: Hallucination in multimodal discrete diffusion LMs (such as LLaDA-V and Lumina-DiMOO)
+   stems not only from token prediction errors but also from premature commitment: some masked
+   positions are unmasked too early because language priors dominate confidence scores while visual
+   evidence is underutilized. VIGOR is a training-free, plug-and-play inference strategy that
+   reorders masked positions by their counterfactual visual evidence: at each denoising step it
+   computes a visual gain score by comparing confidence under the original image-conditioned pass
+   with confidence under a visual-ablation pass, and prioritizes positions whose predictions are
+   more strongly supported by the image. VIGOR consistently reduces hallucination and improves
+   multimodal reasoning performance across benchmarks on both evaluated backbones.
+
+4. Reward-Estimated Hypergradient for Bilevel Reinforcement Learning with Black-Box Follower
+   Authors: NeurIPS 2026 Submission (anonymous)
+   Venue/ID: arXiv:2611.11998 — cs.LG / cs.AI (NeurIPS 2026; submitted 9 Nov 2026)
+   URL: https://arxiv.org/abs/2611.11998
+   Summary: Bilevel reinforcement learning with a white-box follower computes hypergradients from
+   the follower's known reward, but many real applications involve a black-box follower whose
+   reward is unknown. RE-HG addresses this by using inverse reinforcement learning to estimate
+   the follower's reward from observed trajectories, then computing the leader hypergradient from
+   the estimate. Because naive IRL introduces reward-shaping bias and numerical instability from
+   ill-conditioned Hessians, RE-HG adds a bias-cancellation mechanism that aggregates information
+   across diverse environmental dynamics, plus eigenvalue truncation to suppress hypergradient
+   norm explosions. RE-HG produces gradient estimates aligned with a white-box oracle and
+   outperforms the oracle on sharp reward landscapes where it gets stuck in local minima.
+
+5. Scaling Laws for SAE Training Data
+   Authors: Nikita Koriagin, Nikita Balagansky, Daniil Gavrilov (T-Tech)
+   Venue/ID: NeurIPS 2026 Poster #148634 (also at ICML 2026)
+   URL: https://neurips.cc/virtual/2026/poster/148634
+   Summary: Sparse autoencoder (SAE) training is typically bottlenecked by the amount of model
+   activations that must be stored. The authors show that SAE quality depends on the number of
+   unique activations in the training buffer rather than on whether every training token is fresh,
+   and they fit a data-constrained scaling law describing a short diversity-limited regime
+   followed by a plateau where replay of the existing buffer preserves both reconstruction
+   quality and interpretability. Applying the resulting buffer-sizing rule reduces activation
+   storage by 8-64x with negligible quality loss. Results are validated across Llama-3.1 and
+   Qwen3 models, early/middle/late layers, BatchTopK/TopK/JumpReLU SAE architectures, and
+   downstream metrics including feature absorption, automated interpretability, and sparse
+   probing.

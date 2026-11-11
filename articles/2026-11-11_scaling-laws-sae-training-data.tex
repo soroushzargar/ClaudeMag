@@ -1,0 +1,250 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-11}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  sparse autoencoders \textbullet{}
+  mechanistic interpretability \textbullet{}
+  scaling laws \textbullet{}
+  activation buffer}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright
+  Scaling Laws for SAE Training Data}\par\vspace{4pt}
+
+{\large\itshape\raggedright
+  SAE Quality Depends on Buffer Diversity, Not Fresh Tokens: 8--64$\times$
+  Storage Reduction with Negligible Quality Loss}\par\vspace{6pt}
+
+{\small\textbf{By} Nikita Koriagin, Nikita Balagansky, Daniil Gavrilov
+  (T-Tech)}\par\vspace{2pt}
+
+{\small\color{keywordgray}NeurIPS 2026 Poster \#148634 \textbullet{}
+  also ICML 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Training large sparse autoencoders is bottlenecked by activation storage.
+The authors show that SAE quality depends on the number of unique activations
+in the buffer --- not on whether each training step uses fresh tokens. After
+a short diversity-limited regime, replay of a fixed buffer is as good as
+continuous fresh-data collection, cutting storage requirements by 8--64$\times$
+with negligible quality loss across two model families, three layers,
+three SAE architectures, and four evaluation metrics.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] SAE training requires storing billions of LLM activations;
+    the activation buffer dominates I/O cost and disk usage.
+  \item[Why it matters:] SAEs are a leading interpretability tool; reducing their
+    training cost unlocks larger-scale and more accessible interpretability
+    research.
+  \item[Method:] Fit a data-constrained scaling law; identify the unique-activation
+    threshold $n^*$; collect $n^*$ diverse activations once, then replay.
+  \item[Result:] 8--64$\times$ reduction in activation storage; $<1\%$ quality
+    loss on reconstruction and interpretability metrics.
+  \item[Evidence:] Llama-3.1-8B and Qwen3-7B; early/middle/late layers;
+    BatchTopK, TopK, JumpReLU SAEs; 50M--10B token budgets.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Sparse autoencoders (SAEs) have become the workhorse of mechanistic
+interpretability: trained on the residual stream activations of a frozen LLM,
+they decompose those activations into sparse linear combinations of learned
+features, each of which often corresponds to an interpretable concept.
+
+Training a high-quality SAE requires millions to billions of activation examples.
+Generating these activations requires running the LLM forward on a large text
+corpus, which produces enormous data volumes: a single residual stream layer of
+Llama-3.1-8B at fp16 precision generates 16 KB per token, so 1B tokens require
+16 TB of storage. This activation bottleneck is a major practical obstacle to
+large-scale SAE research, particularly for researchers without datacenter-scale
+storage infrastructure.
+
+The standard recipe --- generate fresh activations for every training step from
+a streaming corpus --- implicitly assumes that data novelty is the scarce
+resource. The central finding of this paper is that this assumption is wrong for
+SAEs: the scarce resource is \emph{activation diversity} (coverage of the
+activation distribution), not novelty (seeing each activation only once).
+Once the buffer achieves adequate coverage, additional unique activations provide
+negligible benefit, and the buffer can be replayed indefinitely.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Streaming activation generation} (the standard recipe) generates fresh
+activations from a streaming corpus for every training step. It never repeats
+any activation, maximizing novelty. It is correct but expensive: it ties
+training speed to LLM inference throughput and requires either online inference
+or offline storage at full token budget.
+
+\textbf{Fixed small buffers without principled sizing} have been used in practice
+(e.g., the OpenAI SAE release uses a buffer of 400K activations) but without a
+principled criterion for the right buffer size. Too small a buffer leads to
+mode collapse; too large is unnecessarily costly.
+
+\textbf{Curriculum-based data selection} has been studied for LLM training but
+not for SAEs, whose training objective (sparse reconstruction) has very different
+data-efficiency properties from next-token prediction.
+
+This paper is the first to characterize the data-efficiency of SAE training
+formally, through the lens of a data-constrained scaling law, and to derive the
+optimal buffer-sizing strategy from first principles.
+
+\section{Core Mechanism}
+
+The key observation is that two SAE training runs with equal numbers of
+\emph{unique} activations but different levels of repetition (one streaming,
+one with replay) produce SAEs of comparable quality. This decouples the training
+budget (number of gradient steps) from the data budget (number of unique
+activations).
+
+The unique-activation count $n_\text{unique}$ is the number of distinct
+activation vectors that the SAE has seen at least once during training. The
+authors find empirically that SAE quality $\mathcal{L}$ is well described by:
+\[
+  \mathcal{L}(n_\text{unique}) = \mathcal{L}_\infty + C \cdot n_\text{unique}^{-\alpha},
+\]
+where $\mathcal{L}_\infty$ is the asymptotic quality, $C > 0$ is a scaling
+constant, and $\alpha > 0$ is the data-scaling exponent. This power law holds
+across model families, layer positions, SAE architectures, and evaluation metrics.
+
+\section{Technical Formulation}
+
+SAE training minimizes:
+\[
+  \mathcal{L}_\text{SAE}(W_e, W_d, b) =
+    \mathbb{E}_x \bigl[ \|x - W_d\,\text{TopK}(W_e x + b)\|_2^2
+    + \lambda \|\text{TopK}(W_e x + b)\|_1 \bigr],
+\]
+where $x \in \mathbb{R}^d$ is an activation vector, $W_e \in \mathbb{R}^{m\times d}$
+is the encoder, $W_d \in \mathbb{R}^{d\times m}$ is the decoder, and
+$\text{TopK}$ selects the $k$ largest pre-activations and zeros the rest.
+
+The \textbf{data-constrained scaling law} is fit by:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Train multiple SAEs with the same gradient-step budget $T$ but varying
+    buffer sizes $n_1 < n_2 < \cdots < n_B$.
+  \item Measure final quality $\mathcal{L}_i$ for each run.
+  \item Fit the three parameters $(\mathcal{L}_\infty, C, \alpha)$ via
+    non-linear least squares.
+\end{enumerate}
+The optimal buffer size $n^*$ is defined as the smallest $n_\text{unique}$ such
+that $\mathcal{L}(n^*) \leq \mathcal{L}_\infty + \delta$ for a chosen tolerance
+$\delta$ (e.g., 1\% above $\mathcal{L}_\infty$). The budget-optimal training
+strategy then collects $n^*$ unique activations once and replays them uniformly
+at random for the remaining $T - n^*$ gradient steps.
+
+\section{Learning or Inference Procedure}
+
+The practical buffer-sizing workflow is:
+\begin{enumerate}[itemsep=2pt,parsep=0pt]
+  \item Run a small calibration sweep: train 5--10 SAEs with varying buffer sizes
+    at 1\% of the full training budget.
+  \item Fit the scaling law to the calibration sweep results.
+  \item Identify $n^*$ from the fitted law.
+  \item Collect $n^*$ activations from the LLM (a one-time cost); store this
+    buffer on disk.
+  \item Train the full SAE by replaying activations sampled uniformly from the
+    buffer.
+\end{enumerate}
+The calibration sweep adds 10\% overhead relative to a single training run;
+this is recovered in full by the reduced storage and I/O cost.
+
+\section{What the Guarantee Says}
+
+No formal convergence or approximation bound is derived. The empirical claim is:
+across all evaluated settings (Llama-3.1-8B, Qwen3-7B; layers 4, 16, 28;
+BatchTopK/TopK/JumpReLU; reconstruction loss, dead-neuron fraction, feature
+absorption, automated interpretability), training with the optimal-buffer-size
+replay strategy degrades quality by less than 1\% relative to the streaming
+baseline at a storage reduction of 8--64$\times$.
+
+\section{Experimental Findings}
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lcc}
+\toprule
+Setting & Storage reduction & Quality loss \\
+\midrule
+Llama-3.1 layer 4 & 64$\times$ & $<$0.5\% \\
+Llama-3.1 layer 16 & 32$\times$ & $<$0.3\% \\
+Llama-3.1 layer 28 & 16$\times$ & $<$0.4\% \\
+Qwen3 all layers & 8--32$\times$ & $<$1\% \\
+Automated interp. & 16$\times$ & $<$2\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The largest storage reductions occur in early layers, where activations are more
+stereotyped and coverage is achieved with fewer unique examples. Late layers,
+where activations carry more semantic diversity, require more unique examples
+but still admit substantial savings. The automated interpretability score is
+the most variable metric but still achieves 16$\times$ reduction within tolerance.
+
+\section{Ablations and Interpretation}
+
+\textbf{Scaling law fit quality:} The power-law form fits observed data with
+$R^2 > 0.98$ in all 18 evaluated settings (3 layers $\times$ 3 architectures
+$\times$ 2 models), confirming the law is not an artifact of a particular setup.
+
+\textbf{Scaling exponent $\alpha$:} Values range from 0.3 (early layers, Llama-3.1)
+to 0.7 (late layers, Qwen3). Higher $\alpha$ means quality improves more steeply
+with $n_\text{unique}$; these settings benefit less from replay.
+
+\textbf{Uniform vs.\ prioritized replay:} Replaying activations proportional to
+their reconstruction loss (prioritizing hard examples) improves quality by
+$<$0.2\% over uniform replay at the cost of maintaining priority weights;
+uniform replay is recommended for simplicity.
+
+\textbf{Generalization to new domains:} A SAE trained with a Wikipedia-only buffer
+and then deployed on code activations degrades by 8--12\%; this confirms the
+unique-activation hypothesis is domain-specific and buffer diversity must match
+the deployment distribution.
+
+\section*{Reference}
+
+Nikita Koriagin, Nikita Balagansky, Daniil Gavrilov.
+\textbf{Scaling Laws for SAE Training Data.}
+NeurIPS 2026 Poster \#148634.
+\url{https://neurips.cc/virtual/2026/poster/148634}
+
+\end{document}
