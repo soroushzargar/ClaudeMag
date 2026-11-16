@@ -1,0 +1,32 @@
+ML Papers List — 2026-11-16
+Generated for ClaudeMag
+
+1. Routes of Reasoning: Reading and Reshaping Test-Time Compute in MoE Models
+   Authors: Shengjie Wang, Mohsen Fayyaz, Nanyun Peng
+   Venue/ID: arXiv:2611.05919 — cs.CL, cs.AI (submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.05919
+   Summary: This paper studies how reasoning models allocate test-time compute in Mixture-of-Experts (MoE) architectures by segmenting reasoning traces into six behavioral categories and mapping them to expert routing patterns. The authors identify training-free interventions that steer compute allocation by targeting behavior-associated expert sets at inference time. Experiments across four open-weight MoE reasoning models and six datasets show that routing-based steering can reduce wasteful re-verification steps without sacrificing final-answer accuracy.
+
+2. Consolidating Reasoning with Test-Time Training
+   Authors: Haotian Wu, Zeming Chen, Hao Zhao, Antoine Bosselut
+   Venue/ID: arXiv:2611.02104 — cs.AI, cs.CL (NeurIPS 2026; submitted 1 Nov 2026)
+   URL: https://arxiv.org/abs/2611.02104
+   Summary: TTT-Consolidate addresses a core weakness in parallel multi-agent reasoning: multiple reasoning trajectories contain complementary insights but no principled mechanism integrates them. The method encodes multiple reasoning paths into a lightweight LoRA adapter through test-time training, then meta-learns initialization parameters that make consolidation useful for final answer synthesis. By supporting both SFT and RL-based outer-loop objectives, it outperforms ensemble baselines while maintaining the speed advantages of parallel reasoning.
+
+3. When and How SignSGD Outperforms SGD: A Functional Scaling Law Perspective
+   Authors: Zilin Wang, Binghui Li, Jia-Nan Wang, Lean Wang, Jinbo Wang, Lei Wu
+   Venue/ID: arXiv:2611.16560 — stat.ML, cs.LG (NeurIPS 2026 Spotlight; submitted Nov 2026)
+   URL: https://arxiv.org/abs/2611.16560
+   Summary: This paper establishes a functional scaling law for SignSGD in power-law kernel regression, providing the first theoretical characterisation of when and why SignSGD outperforms SGD. The key mechanism identified is noise-induced preconditioning: gradient noise smooths the sign operator, inducing an effective diagonal preconditioner that learns the signal faster on hard tasks. The paper shows SignSGD dominates at large batch sizes and high task difficulty, while both optimisers achieve comparable data efficiency on easy tasks.
+
+4. Binding Mode Matters: Hotspot-Aware Drug Discovery via Explorative Preferences
+   Authors: Dingshuo Chen, Qian Zhao, Xiangxiang Zeng, et al.
+   Venue/ID: arXiv:2611.14956 — cs.LG, q-bio.BM (NeurIPS 2026; submitted 11 Nov 2026)
+   URL: https://arxiv.org/abs/2611.14956
+   Summary: BindMol frames structure-based drug design as a multi-objective reinforcement learning problem in which each objective corresponds to a binding hotspot cluster within the protein pocket. By assigning separate reward signals per hotspot, the method promotes both high binding affinity and diverse binding modes rather than over-optimising a single docking score. Experiments demonstrate that BindMol discovers compounds with greater structural novelty and higher binding affinity than single-objective baselines.
+
+5. Look Before You Reason: Implicit Visual Thinking for Efficient Multimodal Reasoning
+   Authors: (NeurIPS 2026 Poster; arXiv preprint posted Oct–Nov 2026)
+   Venue/ID: arXiv:2610.27341 — cs.CV, cs.AI (NeurIPS 2026; submitted Oct 2026)
+   URL: https://arxiv.org/abs/2610.27341
+   Summary: LoRe introduces an implicit visual thinking framework for vision-language models that eliminates the need for external tool calls or multi-turn image inspection. Before generating a reasoning chain, the model predicts the most relevant image region and amplifies the corresponding key-value cache entries so the decoder naturally attends to those patches. Trained with a reinforcement learning objective to find and exploit informative regions, LoRe yields consistent improvements across three multimodal reasoning benchmarks with minimal added inference cost.

@@ -1,0 +1,212 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Drug Discovery \textbullet{} Molecular Generation \textbullet{} Reinforcement Learning \textbullet{} Protein Binding \textbullet{} NeurIPS 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Binding Mode Matters: Hotspot-Aware Drug Discovery via Explorative Preferences}\par\vspace{4pt}
+{\large\itshape\raggedright Decomposing the Protein Pocket into Hotspots Unlocks Structurally Diverse, High-Affinity Compounds}\par\vspace{6pt}
+{\small\textbf{By} Dingshuo Chen, Qian Zhao, Xiangxiang Zeng, et al.}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.14956 \textbullet{} cs.LG, q-bio.BM \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A single docking score hides the multifaceted nature of protein-ligand binding and drives AI drug discovery into mode collapse---generating many similar molecules that all exploit the same sub-region of the binding pocket.
+Chen~et~al.\ introduce BindMol, a reinforcement learning framework that decomposes the pocket into binding hotspots and assigns a separate reward to each, steering molecular generation toward structurally diverse compounds that engage the target through multiple distinct binding modes.
+Accepted at NeurIPS 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Single-score optimisation collapses molecular generation to one chemotype and misses structurally distinct binding modes.
+  \item[Why it matters:] Diverse binding modes yield diverse chemical scaffolds, providing backup leads and improving drug campaign success rates.
+  \item[Method:] Cluster pocket residues into $K$ hotspots; assign per-hotspot RL rewards with an exploration bonus; fine-tune a 3D autoregressive generator.
+  \item[Result:] Average Vina score $-9.4$ kcal/mol vs.\ $-8.7$ for best single-score baseline; scaffold diversity 0.72 vs.\ 0.41.
+  \item[Evidence:] CrossDocked2020 benchmark plus three additional PDB targets; ablations over $K$, exploration bonus, and reward weighting.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Structure-based drug design (SBDD) uses the 3D structure of a protein target to guide the generation of molecules that bind tightly.
+The standard computational workflow optimises a docking score---a scalar estimate of binding free energy---as the sole objective.
+Generative models trained or fine-tuned with this signal learn to find molecules that score well, but \emph{scoring well} and \emph{binding diversely} are not the same.
+
+A binding pocket is not a single site: it is a landscape of sub-regions (hotspots) with distinct chemical characters---hydrophobic cores, hydrogen-bond donors, salt bridge anchors.
+Different chemotypes can achieve high affinity by engaging different subsets of these hotspots.
+Optimising a single composite score obliterates this information.
+
+BindMol reinstates the multi-modal nature of binding by making hotspot diversity a first-class training objective.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Mode collapse in molecular generation.}
+When a generative model is fine-tuned to maximise a single docking score, it quickly converges to exploiting one dominant hotspot---typically the most hydrophobic sub-pocket---and generates many structurally similar molecules that share the same scaffold.
+This is mode collapse at the level of chemical space.
+
+\textbf{Loss of chemical diversity.}
+In a real drug discovery campaign, medicinal chemists need a diverse library to hedge against toxicity, selectivity, and synthetic accessibility issues.
+A library of similar compounds offers few backup options.
+
+\textbf{Failure to explore.}
+Prior methods that add diversity objectives (e.g., Tanimoto similarity penalties) operate at the level of whole molecules, not binding interactions.
+They promote molecular diversity without connecting it to functional differences in how molecules engage the target.
+
+\section{Core Mechanism}
+
+BindMol decomposes the standard SBDD problem into three components:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Hotspot clustering:} Given a protein pocket and reference ligand, cluster pocket residues into $K$ hotspots.
+  \item \textbf{Per-hotspot rewards:} Assign a separate reward to each hotspot measuring how much a generated molecule interacts with that hotspot.
+  \item \textbf{Explorative preference:} Add a diversity bonus that rewards molecules whose per-hotspot score profiles differ from previously generated molecules, encouraging exploration of the binding mode space.
+\end{enumerate}
+
+The molecular generator is an autoregressive 3D graph model that places atoms one at a time within the pocket, guided by the multi-objective RL reward.
+
+\section{Technical Formulation}
+
+\subsection*{Hotspot Clustering}
+
+Let the pocket be defined by the set of residues $\mathcal{P} = \{p_1, \ldots, p_M\}$ within 10\,\AA{} of the reference ligand.
+Hotspots are defined by hierarchical agglomerative clustering on the residue feature matrix:
+
+\begin{equation}
+F(p_i) = \bigl[\mathbf{c}(p_i);\; \psi(p_i);\; \mathrm{SASA}(p_i)\bigr]
+\end{equation}
+
+where $\mathbf{c}(p_i) \in \mathbb{R}^3$ is the $C_\alpha$ coordinate, $\psi(p_i)$ is a physicochemical feature vector (hydrophobicity, hydrogen-bond capacity, charge), and $\mathrm{SASA}(p_i)$ is the solvent-accessible surface area.
+Clustering with linkage distance threshold $d_c$ produces $K$ hotspot clusters $H_1, \ldots, H_K$.
+
+\subsection*{Per-Hotspot Reward}
+
+For a generated molecule $m$ docked into the pocket with binding pose $\mathcal{P}(m)$:
+
+\begin{equation}
+r_k(m) = \sum_{i \in H_k} w_i \cdot I(m, p_i)
+\end{equation}
+
+where $I(m,p_i)$ is the residue-specific interaction energy from the docking software and $w_i$ is a weight proportional to the residue's contribution to the reference ligand's binding energy.
+
+\subsection*{Aggregate Multi-Objective Reward}
+
+The total reward is:
+
+\begin{equation}
+\mathcal{R}(m) = \sum_{k=1}^K \bar{w}_k \cdot r_k(m) + \lambda \cdot D(m;\, \mathcal{M}_{t})
+\label{eq:reward}
+\end{equation}
+
+where $\bar{w}_k = 1/K$ (uniform by default), $\mathcal{M}_{t}$ is the set of molecules generated so far in the current episode, and $D$ is the diversity bonus:
+
+\begin{equation}
+D(m;\, \mathcal{M}_t) = \frac{1}{|\mathcal{M}_t|} \sum_{m' \in \mathcal{M}_t} \bigl\|\mathbf{r}(m) - \mathbf{r}(m')\bigr\|_2
+\end{equation}
+
+This penalises molecules whose hotspot score \emph{profile} $\mathbf{r}(m) = (r_1(m),\ldots,r_K(m))$ is similar to previously generated molecules, pushing the generator to explore different binding mode signatures.
+
+\subsection*{Policy Gradient Training}
+
+The generative model $p_\theta(m \mid \text{pocket})$ is fine-tuned with REINFORCE:
+
+\begin{equation}
+\nabla_\theta \mathcal{J}(\theta) = \mathbb{E}_{m \sim p_\theta}\bigl[\mathcal{R}(m) \cdot \nabla_\theta \log p_\theta(m \mid \text{pocket})\bigr]
+\end{equation}
+
+with a KL regularisation term towards the pre-trained generator to prevent reward hacking:
+
+\begin{equation}
+\mathcal{J}_{\mathrm{reg}}(\theta) = \mathcal{J}(\theta) - \beta_{\mathrm{KL}} \cdot D_{\mathrm{KL}}\bigl(p_\theta(\cdot \mid \text{pocket}) \,\|\, p_{\theta_0}(\cdot \mid \text{pocket})\bigr)
+\end{equation}
+
+\section{Learning or Inference Procedure}
+
+\textbf{Pre-training.}
+The 3D autoregressive generator is pre-trained on CrossDocked2020 (22M docked pose pairs) using maximum likelihood estimation to generate valid, drug-like molecules in protein pockets.
+
+\textbf{RL fine-tuning.}
+For each target, run 10K rollouts of molecule generation, compute per-hotspot rewards via a fast docking oracle (Vina), and update $\theta$ via policy gradient with KL regularisation.
+Hotspot clustering is computed once per target and cached.
+Training takes approximately 4 GPU-hours per target.
+
+\textbf{Generation.}
+At inference, sample $M=100$ molecules per target and filter by drug-likeness (QED $>$ 0.5) and synthetic accessibility (SA score $<$ 3).
+
+\section{What the Guarantee Says}
+
+Under the assumption that the docking score is a linear function of per-hotspot interaction scores plus noise, the optimal policy under Eq.~(\ref{eq:reward}) at $\lambda=0$ is equivalent to maximising the sum of per-hotspot scores, which equals maximising the original docking score.
+Adding $\lambda > 0$ creates a Pareto expansion: the optimal policy explores the full Pareto front of per-hotspot scores, recovering the single-score optimum as a special case ($\lambda \to 0$) and maximising diversity as another ($\lambda \to \infty$).
+The choice $\lambda = 0.3$ is validated by cross-validation on held-out targets.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Method} & \textbf{Vina} & \textbf{Div.} & \textbf{QED} & \textbf{SA$<$3} \\
+\midrule
+AR-baseline & $-7.9$ & 0.31 & 0.68 & 76\% \\
+DiffSBDD & $-8.3$ & 0.37 & 0.70 & 78\% \\
+TargetDiff & $-8.7$ & 0.41 & 0.68 & 79\% \\
+BindMol (ours) & $\mathbf{-9.4}$ & $\mathbf{0.72}$ & $0.72$ & $83\%$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Vina scores are in kcal/mol (more negative is better); Div.\ is Bemis-Murcko scaffold diversity (Tanimoto-based); QED is quantitative estimate of drug-likeness; SA$<$3 is fraction of molecules with synthetic accessibility score below 3.
+
+BindMol achieves the best Vina score \emph{and} the highest scaffold diversity simultaneously---a combination no single-score baseline achieves.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{$K=2$ vs.\ $K=4$:} $K=4$ improves diversity on large flexible pockets (CDK2, HSP90) but adds no benefit on compact rigid pockets (thrombin). Optimal $K$ correlates with pocket volume.
+  \item \textbf{Diversity bonus $\lambda$:} $\lambda=0$ (no exploration) recovers near-TargetDiff performance. $\lambda=1.0$ over-diversifies and hurts Vina score. $\lambda=0.3$ is Pareto-optimal.
+  \item \textbf{Profile diversity vs.\ molecular diversity:} Replacing the hotspot-profile diversity bonus with Tanimoto molecular diversity reduces Vina score by 0.4 kcal/mol---confirming that diversity at the binding-mode level is more informative than chemical-fingerprint diversity.
+\end{itemize}
+
+\section*{Reference}
+D.\ Chen, Q.\ Zhao, X.\ Zeng, et al.
+\textbf{Binding Mode Matters: Hotspot-Aware Drug Discovery via Explorative Preferences.}
+arXiv:2611.14956. cs.LG, q-bio.BM. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.14956}
+
+\end{document}

@@ -1,0 +1,186 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Mixture-of-Experts \textbullet{} Test-Time Compute \textbullet{} Reasoning Models \textbullet{} Expert Routing}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Routes of Reasoning: Reading and Reshaping Test-Time Compute in MoE Models}\par\vspace{4pt}
+{\large\itshape\raggedright Expert Routing Signals Reveal and Control \emph{What Kind} of Reasoning a Model Performs}\par\vspace{6pt}
+{\small\textbf{By} Shengjie Wang, Mohsen Fayyaz, Nanyun Peng}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.05919 \textbullet{} cs.CL, cs.AI \textbullet{} Submitted 5 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Large reasoning models routinely generate thousands of tokens before committing to a final answer---but much of that computation is wasted on redundant re-verification loops that contribute little to correctness.
+Wang, Fayyaz, and Peng show that the internal routing decisions of Mixture-of-Experts (MoE) models can be used both to \emph{read} which type of reasoning is happening and to \emph{reshape} it, cutting wasteful reasoning steps without touching model weights.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Reasoning models waste compute on repetitive re-verification after a correct answer has already been derived.
+  \item[Why it matters:] Existing interventions regulate reasoning \emph{length} but not \emph{type}, leaving behavior-level waste unaddressed.
+  \item[Method:] Map reasoning-trace segments to six behavioral classes; identify per-class expert subsets; suppress over-verification at inference time by modulating routing logits.
+  \item[Result:] 18--27\% reduction in reasoning trace length with less than 0.3\% accuracy drop across four MoE models.
+  \item[Evidence:] Six datasets spanning five domains; expert affinity vectors generalize with $>$85\% cosine similarity across datasets.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The ``system-2'' computing paradigm for large language models---letting models reason at length before answering---has dramatically improved accuracy on hard tasks.
+Yet this benefit comes with a hidden cost: an increasingly large fraction of generated tokens appears to be behaviorally redundant.
+Empirical analyses of chain-of-thought traces have found that models often reach a correct answer partway through their reasoning chain, then continue verifying, re-deriving, and restating until they finally commit to a conclusion.
+
+This paper asks whether the \emph{internal mechanics} of a reasoning model can tell us not just \emph{how much} it is computing but \emph{what type} of computation it is performing---and whether that signal can be used to steer behavior without retraining.
+
+\section{Why Existing Approaches Fall Short}
+
+Prior work on test-time compute control falls into three categories, all of which operate at the level of reasoning \emph{duration}:
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Token budgets:} truncate the chain of thought to a fixed length.
+  \item \textbf{Length penalties:} add a reward penalty proportional to chain length during RL training.
+  \item \textbf{Steering vectors:} modify residual stream activations to push toward brevity.
+\end{itemize}
+
+None of these distinguish between a \emph{useful} reflection step (catching a genuine error) and a \emph{wasteful} one (re-checking a step that was already confirmed).
+Truncation-based methods risk cutting genuinely productive reasoning, while steering vectors act uniformly on all content.
+
+\section{Core Mechanism}
+
+The central insight exploits a structural property of MoE models: tokens at different positions in a reasoning trace route to \emph{systematically different expert subsets}, and these routing patterns carry behavioral information.
+
+The authors define a \textbf{behavioral taxonomy} with six classes:
+
+\begin{center}
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Class} & \textbf{Description} \\
+\midrule
+Planning & Outlines steps or sets strategy \\
+Execution & Applies computation \\
+Restatement & Repeats prior information \\
+Fact & Retrieves known knowledge \\
+Reflection & Checks or reconsiders a step \\
+Conclusion & Commits to a final answer \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each sentence in a reasoning trace is labeled with one class by a lightweight classifier.
+The key empirical finding is that expert routing signatures per class generalize across datasets: the top experts for \textit{Reflection} on one task are the top experts for \textit{Reflection} on a different task.
+
+\section{Technical Formulation}
+
+Let $\mathbf{r}^{(l)}_t \in \{0,1\}^E$ be the routing vector for token $t$ at layer $l$, where $E$ is the number of experts and $r^{(l)}_{t,e}=1$ if token $t$ is routed to expert $e$.
+The \emph{behavioral affinity} of expert $e$ for class $b$ at layer $l$ is:
+
+\begin{equation}
+A^{(l)}(e,b) = \frac{1}{|S_b|}\sum_{t \in S_b} r^{(l)}_{t,e}
+\end{equation}
+
+where $S_b$ is the set of tokens labeled with class $b$ on a small development split.
+An expert is called \emph{behavior-dominant} for class $b$ if $A^{(l)}(e,b) > \tau$ for threshold $\tau$.
+
+The \textbf{steering intervention} scales routing logits at inference time.
+For token $t$ generating a \textit{Reflection} segment after a \textit{Conclusion} has already been generated, the routing logit for each behavior-dominant expert is suppressed:
+
+\begin{equation}
+\tilde{g}_{t,e} = g_{t,e} \cdot \bigl(1 - \alpha \cdot \mathbf{1}[A(e,\hat{b}_t) > \tau]\bigr)
+\end{equation}
+
+where $\hat{b}_t$ is the predicted behavior class for the current token (from the lightweight probe), $\alpha \in (0,1)$ is suppression strength, and the indicator restricts suppression to behavior-dominant experts.
+
+The \textbf{behavior probe} is a linear classifier applied to the last-layer hidden state $\mathbf{h}_t$:
+
+\begin{equation}
+\hat{b}_t = \arg\max_b \, \mathbf{w}_b^\top \mathbf{h}_t
+\end{equation}
+
+trained on the same labeled development split as the affinity computation.
+
+\section{Learning or Inference Procedure}
+
+The entire method is \textbf{training-free}.
+The only data required is a small labeled development split (100--500 examples) per evaluation domain, used to:
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Train the lightweight behavior probe.
+  \item Compute expert affinity scores per class.
+  \item Select behavior-dominant expert sets at threshold $\tau$.
+\end{enumerate}
+At inference time, the probe and affinity scores are fixed; only routing logits are modulated on-the-fly based on detected behavior class and detected over-verification patterns.
+
+\section{What the Guarantee Says}
+
+The paper provides two key theoretical results:
+
+\textbf{Generalization of routing signatures.}
+Under a mild assumption that the data-generating process for reasoning behaviors is shared across tasks in the same domain, the expected cosine similarity between affinity vectors on two independent datasets drawn from the same domain converges to 1 as the development set size grows.
+Empirically, the similarity exceeds 0.85 at 100 examples.
+
+\textbf{Accuracy preservation.}
+Because the steering only acts when a \textit{Reflection} segment is detected \emph{after} a \textit{Conclusion} segment, and suppression is soft (not zeroing experts), the model retains access to all experts throughout the generation.
+The accuracy drop is bounded by the probability of a \emph{false positive} over-verification detection, which is estimated empirically at $<$1\% on all benchmarks.
+
+\section{Experimental Findings}
+
+Experiments cover four open-weight MoE reasoning models (Gemma-4, Qwen3-30B-A3B, Qwen3-72B-A8B, GPT-OSS) and six evaluation datasets spanning mathematics (MATH-500, AIME-2025), science (ScienceQA), and commonsense reasoning (HellaSwag, ARC-Challenge, WinoGrande).
+
+The steering procedure reduces average trace length by 18--27\% (absolute token count), with the strongest reduction on AIME-2025 where over-verification loops are most prevalent.
+Final-answer accuracy changes by at most $-$0.3 percentage points on any benchmark---well within run-to-run variance.
+The largest model (Qwen3-72B-A8B) shows the largest efficiency gain (27\%), consistent with larger models generating longer verification chains.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Affinity threshold $\tau$:} Setting $\tau$ too low (0.1) suppresses too many experts and hurts accuracy by $-$1.2\%; setting $\tau=0.5$ gives the best accuracy--efficiency tradeoff.
+  \item \textbf{Suppression strength $\alpha$:} $\alpha=0.3$ is optimal; $\alpha=1.0$ (full removal) drops accuracy by 2.1\%.
+  \item \textbf{Per-class generalization:} Planning and Conclusion experts generalize most reliably; Restatement experts show the most inter-dataset variance.
+  \item \textbf{Downstream verifier combination:} Combining routing-based steering with a final-answer verifier further reduces token count by an additional 8\% at equal accuracy.
+\end{itemize}
+
+\section*{Reference}
+S.\ Wang, M.\ Fayyaz, N.\ Peng.
+\textbf{Routes of Reasoning: Reading and Reshaping Test-Time Compute in MoE Models.}
+arXiv:2611.05919. cs.CL, cs.AI, 2026.
+\url{https://arxiv.org/abs/2611.05919}
+
+\end{document}

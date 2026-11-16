@@ -1,0 +1,208 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Test-Time Training \textbullet{} Parallel Reasoning \textbullet{} LoRA \textbullet{} Multi-Agent \textbullet{} NeurIPS 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Consolidating Reasoning with Test-Time Training}\par\vspace{4pt}
+{\large\itshape\raggedright A LoRA Adapter Distils Many Reasoning Paths into One High-Quality Answer at Inference Time}\par\vspace{6pt}
+{\small\textbf{By} Haotian Wu, Zeming Chen, Hao Zhao, Antoine Bosselut}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.02104 \textbullet{} cs.AI, cs.CL \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Sampling many reasoning trajectories from a language model and then voting or selecting among their final answers wastes the rich complementary information locked inside each trajectory.
+Wu~et~al.\ propose TTT-Consolidate: a method that absorbs $N$ parallel reasoning paths into a temporary LoRA adapter through test-time training, then uses the consolidated adapter to generate a single, higher-quality answer.
+Presented at NeurIPS 2026, the work shows that even a handful of gradient steps at inference time can outperform sophisticated ensemble and verifier baselines.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Parallel reasoning generates diverse, complementary trajectories that existing aggregation methods (vote, best-of-N) integrate only at the answer level.
+  \item[Why it matters:] Deeper integration of trajectory content can recover more signal from the same parallel compute budget.
+  \item[Method:] Inner loop: fine-tune LoRA adapter on N trajectories. Outer loop: meta-learn adapter initialization. Decode final answer from consolidated adapter.
+  \item[Result:] +2.8 pp over majority voting on MATH-500 at N=16; +4.1 pp on AIME-2025.
+  \item[Evidence:] MATH-500, GSM8K, AIME-2024/2025, HellaSwag; both SFT and RL outer-loop variants evaluated.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Scaling test-time compute through parallel sampling has become a standard recipe for improving reasoning accuracy.
+The idea is conceptually simple: sample $N$ independent reasoning attempts from the model, then aggregate their answers.
+This scales gracefully---more attempts yield better answers---and requires no model retraining.
+
+However, existing aggregation strategies operate on \emph{surface answers} rather than \emph{reasoning content}.
+Majority voting counts output strings.
+Best-of-N selects one trajectory based on a verifier score.
+Neither method asks: what can be learned from the \emph{combination} of reasoning paths?
+
+Different trajectories often reach correct answers via different intermediate steps.
+One might spot a computational shortcut missed by others; another might correctly resolve an ambiguity that led others astray.
+TTT-Consolidate is designed to integrate this complementary content into a consolidated model state before answer generation.
+
+\section{Why Existing Approaches Fall Short}
+
+The fundamental limitation of answer-level aggregation is information loss.
+Consider a problem where three out of eight trajectories are correct.
+Majority voting with $N=8$ will select the wrong answer if the six incorrect trajectories happen to converge on the same wrong output.
+Yet the three correct trajectories contain exactly the right reasoning steps---information that voting discards.
+
+Best-of-N with a verifier selects one trajectory and discards seven.
+Even a perfect verifier cannot combine content from multiple trajectories.
+Verifier-guided combination strategies (e.g., weighted decoding) mix \emph{token distributions} from trajectories but do not update model parameters, limiting how deeply the integration can be.
+
+\section{Core Mechanism}
+
+TTT-Consolidate uses test-time training (TTT) to encode trajectory content into model parameters rather than combining distributions:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Sample} $N$ reasoning trajectories $\tau_1,\ldots,\tau_N$ from the base model.
+  \item \textbf{Adapt} a LoRA module by gradient descent on the trajectories (inner loop).
+  \item \textbf{Generate} the final answer from the adapted model.
+\end{enumerate}
+
+The LoRA adapter $\Delta\theta = BA$ (where $B \in \mathbb{R}^{d\times r}$, $A \in \mathbb{R}^{r\times d}$, rank $r \ll d$) is initialized from meta-learned parameters $\phi_0$ rather than zero, so the inner loop starts from a point that makes consolidation useful.
+
+\section{Technical Formulation}
+
+\subsection*{Inner Loop: Test-Time LoRA Adaptation}
+
+Given $N$ sampled trajectories for query $q$, the inner loop minimizes:
+
+\begin{equation}
+\Delta\theta^* = \arg\min_{\Delta\theta} \sum_{i=1}^{N} \mathcal{L}_{\mathrm{SFT}}\!\bigl(\mathrm{LM}(\cdot \mid q;\,\theta + \Delta\theta),\;\tau_i\bigr)
+\label{eq:inner}
+\end{equation}
+
+starting from initialization $\phi_0$ and running $K$ gradient steps (typically $K \in \{5,20\}$).
+The loss $\mathcal{L}_{\mathrm{SFT}}$ is the standard token-level cross-entropy, treating each trajectory as a training example.
+
+Because all trajectories share the same query $q$, the adapter learns to predict the \emph{aggregate} distribution of reasoning steps across trajectories, not any single one.
+Steps that appear consistently across many trajectories are reinforced; idiosyncratic errors in individual trajectories are averaged out.
+
+\subsection*{Outer Loop: Meta-Learning for Consolidation}
+
+A naive inner loop starting from random $\Delta\theta=0$ does not automatically produce a consolidating adapter.
+The outer loop meta-learns $\phi_0$ such that a few steps of inner-loop adaptation produce an adapter useful for final answer synthesis:
+
+\begin{equation}
+\min_{\phi_0} \;\mathbb{E}_{(q,\tau_{1:N})} \bigl[\mathcal{L}_{\mathrm{eval}}\bigl(\mathrm{LM}(a^* \mid q;\;\theta + \Delta\theta^*(\phi_0,\tau_{1:N}))\bigr)\bigr]
+\label{eq:outer}
+\end{equation}
+
+where $a^*$ is the gold answer and $\Delta\theta^*(\phi_0,\tau_{1:N})$ is the result of running Eq.~(\ref{eq:inner}) starting from $\phi_0$.
+The gradient of Eq.~(\ref{eq:outer}) with respect to $\phi_0$ passes through the inner optimization, computed via MAML-style second-order differentiation or first-order approximation.
+
+Two variants of $\mathcal{L}_{\mathrm{eval}}$ are studied:
+\begin{itemize}[leftmargin=1em,itemsep=1pt]
+  \item \textbf{SFT variant:} $\mathcal{L}_{\mathrm{eval}} = -\log p(a^* \mid q;\,\theta+\Delta\theta^*)$.
+  \item \textbf{RL variant:} $\mathcal{L}_{\mathrm{eval}} = -\mathbb{E}[\mathcal{R}(\hat{a},a^*)]$ where $\mathcal{R}$ is a verifiable reward (1 if correct, 0 otherwise) and $\hat{a}$ is sampled from the adapted model.
+\end{itemize}
+
+\subsection*{Final Generation}
+
+After inner-loop adaptation, the final answer is generated autoregressively:
+
+\begin{equation}
+\hat{a} = \mathrm{LM}(\cdot \mid q;\;\theta + \Delta\theta^*)
+\end{equation}
+
+The consolidated adapter encodes aggregate reasoning signal from all $N$ trajectories, so the final pass benefits from information across the entire parallel sample.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training phase (outer loop):} Performed once per domain on a labeled training set.
+Given a training problem $(q, a^*)$, sample $N$ trajectories from the \emph{current} model, run the inner loop, evaluate the outer-loop loss, and update $\phi_0$ via backpropagation.
+Training requires approximately 10$\times$ the FLOP cost of standard fine-tuning.
+
+\textbf{Inference phase (inner loop):} For each test query $q$:
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Sample $N$ trajectories (parallelizable on $N$ GPUs).
+  \item Initialize LoRA weights from $\phi_0$; run $K$ gradient steps on the $N$ trajectories.
+  \item Generate final answer from $\theta + \Delta\theta^*$.
+\end{enumerate}
+Inner-loop cost is small: $K=10$ steps on $N=16$ trajectories adds roughly 15\% overhead versus generating and discarding those trajectories without adaptation.
+
+\section{What the Guarantee Says}
+
+Under a simplified setting (mixture-of-Gaussians over trajectory types), the authors prove that the inner-loop minimizer $\Delta\theta^*$ approximates the \emph{posterior mean} over trajectory types given the observed $N$ samples.
+As $N \to \infty$, the consolidating adapter converges to the optimal (oracle) adapter that knows the correct trajectory type.
+For finite $N$, the consolidation error decreases as $O(1/\sqrt{N})$, the same rate as ensemble averaging---but with an additive gain from the structured inductive bias of the LoRA parameterization.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Method} & \textbf{MATH-500} & \textbf{AIME-25} & \textbf{GSM8K} \\
+\midrule
+Majority Vote ($N=16$) & 86.4 & 48.3 & 95.8 \\
+Best-of-16 (oracle) & 94.2 & 65.7 & 98.1 \\
+Verifier-guided & 87.9 & 51.2 & 96.2 \\
+TTT-Consolidate (SFT) & 88.4 & 51.9 & 96.5 \\
+TTT-Consolidate (RL) & \textbf{89.2} & \textbf{52.4} & \textbf{96.9} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The RL outer-loop variant consistently outperforms the SFT variant, especially on AIME where pass@1 is low and trajectories are noisy.
+Best-of-16 (oracle) is an upper bound---it assumes perfect answer verification.
+TTT-Consolidate exceeds the verifier-guided baseline while operating on trajectory \emph{content}, not just scores.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Meta-initialization matters:} Random initialization of $\phi_0$ recovers about half the gain over majority voting; meta-learned $\phi_0$ doubles it.
+  \item \textbf{$K$ gradient steps:} Performance saturates by $K=10$; more steps slightly overfits to idiosyncratic trajectories.
+  \item \textbf{Trajectory diversity:} Gains are largest when trajectory diversity is highest (AIME-2025 vs.\ GSM8K), consistent with the hypothesis that consolidation is most useful when trajectories are complementary.
+  \item \textbf{Rank $r$:} $r=16$ is optimal; smaller ranks lose capacity, larger ranks overfit.
+\end{itemize}
+
+The companion dataset \textbf{OpenParallelThinking} contains 50K problems with 32 parallel reasoning trajectories per problem, released to support future consolidation research.
+
+\section*{Reference}
+H.\ Wu, Z.\ Chen, H.\ Zhao, A.\ Bosselut.
+\textbf{Consolidating Reasoning with Test-Time Training.}
+arXiv:2611.02104. cs.AI, cs.CL. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.02104}
+
+\end{document}

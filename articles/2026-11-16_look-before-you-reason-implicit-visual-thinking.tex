@@ -1,0 +1,222 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Vision-Language Models \textbullet{} Multimodal Reasoning \textbullet{} KV Cache \textbullet{} Implicit Attention \textbullet{} NeurIPS 2026}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Look Before You Reason: Implicit Visual Thinking for Efficient Multimodal Reasoning}\par\vspace{4pt}
+{\large\itshape\raggedright Teaching VLMs to Silently Identify Decision-Relevant Image Regions Before Generating a Single Word}\par\vspace{6pt}
+{\small\textbf{By} Research team (NeurIPS 2026 Poster)}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2610.27341 \textbullet{} cs.CV, cs.AI \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Before a vision-language model (VLM) generates its first reasoning token, it should already know \emph{where} in the image to focus.
+The LoRe (Look-before-Reason) framework teaches VLMs to predict the most relevant image region and amplify the corresponding key-value cache entries so the decoder naturally attends to those patches throughout reasoning---no extra tool calls, no additional image inputs, no multi-turn interaction.
+Accepted as a Poster at NeurIPS 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] VLM decoders must attend to relevant patches without guidance; external tools add latency; multi-turn inspection complicates training.
+  \item[Why it matters:] Fine-grained visual reasoning (medical imaging, robotics, dense scenes) requires precise visual focus that standard patch encoding does not guarantee.
+  \item[Method:] Lightweight region-prediction head outputs a bounding box; KV cache entries for enclosed patches are amplified; RL aligns region quality with answer accuracy.
+  \item[Result:] +2.5 on MMBench, +2.4 on ScienceQA, +7.2 on COCO-ObjQA.
+  \item[Evidence:] Three multimodal benchmarks; new COCO-ObjQA benchmark released; \textless{}5\% inference overhead.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Modern vision-language models encode an image as a grid of patch embeddings appended to the token sequence.
+The decoder must attend to all patches simultaneously via self-attention, with no prior knowledge of which patches carry task-relevant information.
+For simple visual questions---``What color is the car?''---this works well: the relevant region is large and prominent.
+For fine-grained reasoning---``Which of the labeled containers shows a greater volume?''---the relevant region may be a small sub-image, indistinguishable from background at the patch embedding level.
+
+The natural solution is to let the model \emph{look first}, then reason.
+But existing implementations of this idea rely on external detection models, zoom operations, or OCR tools---adding significant inference overhead, complicating deployment, and introducing failure modes when tool calls go wrong.
+
+LoRe asks: can a VLM learn to focus attention \emph{internally}, without any external machinery?
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Explicit visual tools.}
+Methods like ``thinking with images'' use the model to generate a sequence of tool calls (detect, crop, zoom, OCR) that progressively inspect the relevant parts of the image.
+These are powerful but add latency proportional to the number of tool calls and require the model to generate syntactically valid tool invocations---a training challenge distinct from reasoning quality.
+
+\textbf{Multi-turn visual inspection.}
+Some approaches re-query the image in a second turn after generating an initial assessment.
+This extends context length and requires specialised multi-turn training pipelines.
+It also constrains deployment to systems that support interactive reasoning.
+
+\textbf{Coarse attention biasing.}
+Prior work has explored injecting visual saliency maps as soft position biases.
+These are computed from visual features alone and do not condition on the \emph{question}, missing the fundamental point that relevance is question-dependent.
+
+\section{Core Mechanism}
+
+LoRe introduces two components that work together:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Region Prediction Head:} A lightweight MLP on top of the visual encoder that outputs a bounding box $(x_1,y_1,x_2,y_2)$ conditioned on the question.
+    It is computed \emph{before} the decoder generates any tokens.
+  \item \textbf{KV Cache Amplification:} Key and value vectors for image patches whose positions fall within the predicted bounding box are scaled by a constant $\alpha > 1$.
+    This soft amplification steers decoder attention toward the predicted region throughout the entire reasoning chain.
+\end{enumerate}
+
+Both components are trained end-to-end with a joint reinforcement learning objective that rewards region quality \emph{through} downstream answer accuracy.
+
+\section{Technical Formulation}
+
+\subsection*{Region Prediction Head}
+
+Let $\mathbf{V} = [\mathbf{v}_1, \ldots, \mathbf{v}_P] \in \mathbb{R}^{P \times d}$ be the patch embedding matrix from the visual encoder.
+Let $\mathbf{q} \in \mathbb{R}^{d_q}$ be the pooled question representation from the language model's first few transformer layers.
+The region prediction head is:
+
+\begin{equation}
+\hat{b} = \mathrm{MLP}\bigl(\mathrm{pool}(\mathbf{V}),\; \mathbf{q}\bigr) \in [0,1]^4
+\end{equation}
+
+where pool is global average pooling over patch embeddings and the MLP has two hidden layers of dimension $d$.
+The output $\hat{b} = (\hat{x}_1, \hat{y}_1, \hat{x}_2, \hat{y}_2)$ represents normalized image coordinates.
+
+The supervised training loss combines L2 regression and IoU loss:
+
+\begin{equation}
+\mathcal{L}_{\mathrm{region}} = \|\hat{b} - b^*\|_2^2 + \bigl(1 - \mathrm{IoU}(\hat{b}, b^*)\bigr)
+\end{equation}
+
+where $b^*$ is the ground-truth bounding box for the question-relevant region.
+
+\subsection*{KV Cache Amplification}
+
+Identify the set of patches $\mathcal{P}_{\hat{b}}$ that fall within predicted box $\hat{b}$:
+
+\begin{equation}
+\mathcal{P}_{\hat{b}} = \{p : \mathrm{center}(p) \in \hat{b}\}
+\end{equation}
+
+For each patch $p \in \mathcal{P}_{\hat{b}}$ and each transformer layer $l$, amplify its key-value representations:
+
+\begin{equation}
+K^{(l)}_p \leftarrow \alpha \cdot K^{(l)}_p, \qquad V^{(l)}_p \leftarrow \alpha \cdot V^{(l)}_p
+\label{eq:amplify}
+\end{equation}
+
+with amplification factor $\alpha \in [1.5, 2.0]$.
+Patches outside $\mathcal{P}_{\hat{b}}$ are unchanged.
+This manipulation is performed once, before any decoder tokens are generated, and persists throughout the reasoning chain.
+
+The effect on attention weights is tractable:
+given attention logits $e_{t,p} = (\mathbf{q}_t)^\top K_p / \sqrt{d_k}$, the scaled logit for $p \in \mathcal{P}_{\hat{b}}$ becomes $e_{t,p} + \log\alpha$.
+Softmax normalization then increases the attention weight on amplified patches by a factor of approximately $\alpha$ (in the limit of many patches), without zeroing non-amplified patches.
+
+\subsection*{RL Fine-Tuning}
+
+After supervised pre-training of the region head, the full model is fine-tuned with GRPO:
+
+\begin{equation}
+\mathcal{R}(q, \hat{b}, \hat{a}) = \underbrace{\mathbf{1}[\hat{a} = a^*]}_{\text{answer reward}} + \lambda_{\mathrm{iou}} \cdot \underbrace{\mathrm{IoU}(\hat{b}, b^*)}_{\text{region reward}}
+\label{eq:rl}
+\end{equation}
+
+GRPO generates a group of $G$ responses per question and normalises the reward within the group before computing the policy gradient.
+The joint reward in Eq.~(\ref{eq:rl}) aligns region quality with answer correctness: the model is rewarded only when it both identifies the right region \emph{and} answers correctly.
+Over training, this causes the region predictor to learn which visual context is causally relevant to the answer, not just visually salient.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training stages:}
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item \textbf{Visual grounding pre-train:} Train region head with $\mathcal{L}_{\mathrm{region}}$ on a visual grounding dataset (RefCOCO+). Decoder weights frozen.
+  \item \textbf{Joint SFT:} Fine-tune region head and decoder jointly on question-answer pairs with grounding annotations.
+  \item \textbf{RL fine-tuning:} Fine-tune with GRPO using reward Eq.~(\ref{eq:rl}) on 50K QA pairs without grounding annotations.
+\end{enumerate}
+
+Stage 3 is the most important: it aligns region prediction with answer quality using only binary answer feedback, making the method applicable to benchmarks where ground-truth bounding boxes are unavailable.
+
+\textbf{Inference:} Standard single-pass generation.
+The region head runs once ($\approx$3\% of forward-pass FLOP); KV amplification is a free element-wise multiply.
+Total overhead: $<$5\% per token on average.
+
+\section{What the Guarantee Says}
+
+Under the cross-attention view of the VLM, Eq.~(\ref{eq:amplify}) is equivalent to adding a constant $\log\alpha$ to the attention logits of the predicted region.
+This is a form of \emph{attention bias injection}, which has been shown to shift the effective attention distribution without altering the model's expressive power.
+The model retains the ability to attend to non-amplified patches; amplification is a soft prior, not hard masking.
+
+The RL training guarantee (from GRPO theory) is that the policy converges to a local optimum of the expected reward Eq.~(\ref{eq:rl}) under mild regularity conditions on the reward landscape.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Method} & \textbf{MMBench} & \textbf{SciQA} & \textbf{ObjQA} \\
+\midrule
+Base VLM & 80.7 & 89.4 & 69.2 \\
++ Zoom tool & 81.9 & 90.3 & 72.8 \\
++ Multi-turn & 82.1 & 90.6 & 73.4 \\
+LoRe (ours) & \textbf{83.2} & \textbf{91.8} & \textbf{76.4} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+LoRe outperforms both tool-based and multi-turn baselines on all three benchmarks, with the largest advantage on COCO-ObjQA, the benchmark most requiring precise object-level visual focus.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Region only (no amplification):} +1.1 on MMBench. Region embeddings are richer, but attention is unfocused.
+  \item \textbf{Amplification with random region:} $-$0.4 on MMBench. Misfocusing attention hurts.
+  \item \textbf{Full LoRe:} +2.5 on MMBench.  Both components are necessary.
+  \item \textbf{Amplification factor $\alpha$:} $\alpha=1.5$--$2.0$ is optimal; $\alpha > 3$ overly suppresses non-amplified patches and hurts accuracy by 0.9 on MMBench.
+  \item \textbf{Region predictor quality:} IoU with ground truth correlates with final accuracy improvement, confirming that region quality drives the gain.
+\end{itemize}
+
+\section*{Reference}
+(NeurIPS 2026 Poster).
+\textbf{Look Before You Reason: Implicit Visual Thinking for Efficient Multimodal Reasoning.}
+arXiv:2610.27341. cs.CV, cs.AI. NeurIPS 2026.
+\url{https://arxiv.org/abs/2610.27341}
+
+\end{document}

@@ -1,0 +1,209 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-16}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  SignSGD \textbullet{} Adam \textbullet{} Optimization \textbullet{} Scaling Laws \textbullet{} NeurIPS 2026 Spotlight}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright When and How SignSGD Outperforms SGD: A Functional Scaling Law Perspective}\par\vspace{4pt}
+{\large\itshape\raggedright Noise-Induced Preconditioning Explains Why Sign-Based Optimisers Dominate on Hard Tasks}\par\vspace{6pt}
+{\small\textbf{By} Zilin Wang, Binghui Li, Jia-Nan Wang, Lean Wang, Jinbo Wang, Lei Wu}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.16560 \textbullet{} stat.ML, cs.LG \textbullet{} NeurIPS 2026 Spotlight}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+SignSGD---and its momentum variant Adam---has empirically dominated stochastic gradient descent for training large language models for years, yet the theoretical explanation has remained elusive.
+Wang~et~al.\ now provide the first rigorous account: by deriving a functional scaling law for SignSGD in power-law kernel regression, they prove that gradient noise induces an effective diagonal preconditioner, and derive exact conditions under which SignSGD outperforms SGD.
+Accepted as a Spotlight at NeurIPS 2026.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] No rigorous theory explains when or why SignSGD/Adam beats SGD.
+  \item[Why it matters:] Optimizer selection is empirical; theory would let practitioners match optimisers to task properties without costly sweeps.
+  \item[Method:] Derive functional scaling laws for both optimisers in power-law kernel regression; compare signal learning vs.\ noise forgetting kernels.
+  \item[Result:] SignSGD wins on hard tasks ($\beta$ high) and large batches; SGD wins on easy tasks with small batches.
+  \item[Evidence:] Synthetic kernel regression, transformer language models, large-batch training experiments.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The optimiser at the heart of virtually every large language model training run is Adam---a variant of SignSGD with moment estimates.
+Its dominance over SGD is so empirically robust that it has become an unquestioned default.
+Yet explaining \emph{why} has proven surprisingly difficult.
+
+Informal accounts point to adaptive learning rates, gradient clipping, or invariance to gradient scale.
+But these are partial explanations that do not predict \emph{when} the advantage appears, how large it is, or how it depends on task difficulty and training conditions.
+
+This paper provides a complete, quantitative answer by working in a tractable theoretical setting---power-law kernel regression---that is rich enough to capture the essential structure of learning under power-law data distributions.
+
+\section{Why Existing Approaches Fall Short}
+
+Three prior approaches have tried to explain SignSGD:
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Step-size invariance:} SignSGD is invariant to gradient scaling, which is useful when gradients vary in magnitude across layers.
+    But this cannot explain task-difficulty dependence.
+  \item \textbf{Heavy-tail noise analysis:} Under heavy-tailed gradient noise, sign-based updates have smaller variance.
+    This is a valid benefit but does not apply to Gaussian noise, the standard assumption.
+  \item \textbf{Implicit regularization:} Sign updates have been linked to sparsity-inducing regularization in some settings, but this connection is loose and setting-specific.
+\end{itemize}
+
+None of these gives a \emph{quantitative} prediction of when SignSGD outperforms SGD as a function of task difficulty $\beta$, batch size $B$, and noise level $\sigma^2$.
+
+\section{Core Mechanism}
+
+The key mechanism identified is \textbf{noise-induced preconditioning}.
+In a stochastic gradient setting, the update of SignSGD is:
+
+\begin{equation}
+\theta_{t+1} = \theta_t - \eta_t \cdot \mathrm{sign}(g_t + \xi_t)
+\end{equation}
+
+where $g_t$ is the true gradient and $\xi_t \sim \mathcal{N}(0, \Sigma)$ is gradient noise.
+Taking the expectation over noise in direction $k$:
+
+\begin{equation}
+\mathbb{E}_\xi[\mathrm{sign}(g_{t,k} + \xi_{t,k})] = \mathrm{erf}\!\left(\frac{g_{t,k}}{\sqrt{2\sigma^2_k}}\right) \approx \sqrt{\frac{2}{\pi\sigma^2_k}}\, g_{t,k}
+\end{equation}
+
+for $|g_{t,k}| \ll \sigma_k$ (the noise-dominated regime).
+When noise variance scales with curvature, $\sigma^2_k \propto \lambda_k$ (the $k$-th eigenvalue of the Hessian), this becomes:
+
+\begin{equation}
+\mathbb{E}_\xi[\mathrm{sign}(g_{t,k} + \xi_{t,k})] \approx c \cdot \lambda_k^{-1/2} \cdot g_{t,k}
+\label{eq:precond}
+\end{equation}
+
+which is precisely a $\mathrm{diag}(H)^{-1/2}$ preconditioned gradient step.
+This is the theoretical core: \emph{gradient noise turns SignSGD into an approximate Newton-type method}.
+
+\section{Technical Formulation}
+
+\subsection*{Setting}
+
+The analysis considers kernel regression with target function $f^* = \sum_k f^*_k \phi_k$ where $\phi_k$ are eigenfunctions of the kernel $\mathcal{K}$ with eigenvalues $\lambda_k = k^{-\alpha}$ (power-law decay, exponent $\alpha > 1$).
+The target coefficients satisfy $f^*_k \sim k^{-\beta}$, with $\beta > \alpha/2 + 1/2$ ensuring $f^* \in L^2$.
+The parameter $\beta$ controls task difficulty: larger $\beta$ means coefficients decay faster, the target is ``smoother'', and---counter-intuitively---\emph{harder} to learn from limited data because signal concentrates in a few high-eigenvalue directions.
+
+\subsection*{Functional Scaling Law for SGD}
+
+The expected loss at step $t$ under SGD with schedule $\{\eta_s\}$ decomposes as:
+
+\begin{equation}
+\mathcal{L}_{\mathrm{SGD}}(t) = \underbrace{\sum_k (f^*_k)^2 \cdot \mathcal{S}(k,t)}_{\text{signal term}} + \underbrace{\sigma^2 \cdot \sum_k \mathcal{N}(k,t)}_{\text{noise term}}
+\end{equation}
+
+where the signal kernel $\mathcal{S}(k,t) = \prod_{s=1}^{t}(1-\eta_s \lambda_k)^2$ measures how much signal in direction $k$ has been learned, and the noise kernel $\mathcal{N}(k,t)$ measures accumulated gradient noise.
+
+\subsection*{Functional Scaling Law for SignSGD}
+
+Under Eq.~(\ref{eq:precond}), the effective learning rate in direction $k$ for SignSGD is $\tilde{\eta}_{t,k} = \eta_t \cdot c\lambda_k^{-1/2}$, yielding:
+
+\begin{equation}
+\mathcal{L}_{\mathrm{Sign}}(t) = \sum_k (f^*_k)^2 \cdot \tilde{\mathcal{S}}(k,t) + \sigma^2 \cdot \sum_k \tilde{\mathcal{N}}(k,t)
+\end{equation}
+
+Comparing the two laws shows:
+\begin{itemize}[leftmargin=1em,itemsep=1pt]
+  \item $\tilde{\mathcal{S}}(k,t) < \mathcal{S}(k,t)$ for all $k$ at all $t$: SignSGD \emph{learns signal faster}.
+  \item $\tilde{\mathcal{N}}(k,t) > \mathcal{N}(k,t)$: SignSGD \emph{forgets noise more slowly}.
+\end{itemize}
+
+The optimiser comparison reduces to whether faster signal learning outweighs slower noise forgetting---a tradeoff governed by the signal-to-noise ratio:
+
+\begin{equation}
+\mathrm{SNR}(\beta,B) = \frac{\sum_k (f^*_k)^2}{\sigma^2/B} \propto \frac{B}{\sigma^2} \cdot \zeta(2\beta)
+\end{equation}
+
+where $\zeta$ is the Riemann zeta function.
+\textbf{SignSGD wins when SNR is low}: i.e., hard tasks ($\beta$ large, $\zeta(2\beta)$ small) or small effective per-step signal (large noise, small batch).
+
+\section{Learning or Inference Procedure}
+
+The functional scaling laws yield closed-form predictions of when to prefer SignSGD vs.\ SGD:
+
+\begin{equation}
+\text{Use SignSGD if} \quad \frac{B}{\sigma^2} < \Phi(\beta, \alpha, T)
+\end{equation}
+
+where $\Phi$ is a function derived analytically from the signal and noise kernels at a given training horizon $T$.
+This provides the \emph{first optimizer selection rule} with explicit dependence on task difficulty, batch size, noise level, and training horizon.
+
+\section{What the Guarantee Says}
+
+The main theorem (Theorem~3.1 in the paper) states: for any $\epsilon > 0$ and task parameters $(\beta, \alpha, \sigma^2)$, there exist closed-form thresholds $B^*(\beta,\alpha,\sigma^2,T)$ and $\beta^*(\alpha,B,\sigma^2,T)$ such that:
+
+\begin{itemize}[leftmargin=1em,itemsep=1pt]
+  \item If $B > B^*$ (large batch): $\mathcal{L}_{\mathrm{Sign}}(T) < \mathcal{L}_{\mathrm{SGD}}(T) - \epsilon$.
+  \item If $\beta > \beta^*$ (hard task): $\mathcal{L}_{\mathrm{Sign}}(T) < \mathcal{L}_{\mathrm{SGD}}(T) - \epsilon$.
+  \item Otherwise: $\mathcal{L}_{\mathrm{SGD}}(T) \leq \mathcal{L}_{\mathrm{Sign}}(T) + \epsilon$.
+\end{itemize}
+
+The result is non-asymptotic: it holds at any finite training horizon $T$.
+
+\section{Experimental Findings}
+
+\textbf{Synthetic validation.}
+On power-law kernel regression with varying $\beta$ and $B$, the theoretical phase boundary between ``SignSGD wins'' and ``SGD wins'' matches observed crossover points with less than 2\% error in predicted transition batch size.
+
+\textbf{Transformer language models.}
+Experiments on character-level and word-level language modeling use the leading eigenvalue decay rate of the embedding matrix as a proxy for $\beta$.
+Tasks with steeper eigenvalue decay (harder, $\beta$ larger by proxy) show larger SignSGD advantages, consistent with theory.
+
+\textbf{Large-batch training.}
+At batch size $B \geq 4096$, SignSGD outperforms SGD across \emph{all} difficulty levels tested, as predicted by $B > B^*$ regardless of $\beta$.
+This directly explains the practical advice to prefer Adam over SGD for large-batch distributed training.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Noise structure:} The preconditioning mechanism requires $\sigma^2_k \propto \lambda_k$; with isotropic noise, SignSGD's advantage is weaker but still present on hard tasks.
+  \item \textbf{Momentum:} Adding momentum to SignSGD (yielding Adam-like behavior) amplifies the signal-learning advantage while reducing the noise-forgetting disadvantage, explaining Adam's superiority over both.
+  \item \textbf{WSD schedule:} Warmup-stable-decay schedules interact favorably with SignSGD's noise characteristics, achieving the best scaling efficiency among schedules tested---consistent with their widespread adoption in LLM training.
+\end{itemize}
+
+\section*{Reference}
+Z.\ Wang, B.\ Li, J.-N.\ Wang, L.\ Wang, J.\ Wang, L.\ Wu.
+\textbf{When and How SignSGD Outperforms SGD: A Functional Scaling Law Perspective.}
+arXiv:2611.16560. stat.ML, cs.LG. NeurIPS 2026 Spotlight.
+\url{https://arxiv.org/abs/2611.16560}
+
+\end{document}
