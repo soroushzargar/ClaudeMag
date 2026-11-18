@@ -1,0 +1,174 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-18}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Sim-to-Real \textbullet{} Robot Learning \textbullet{} Reinforcement Learning \textbullet{} Reasoning Models}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Training Reasoning Models in Simulation to Natively Use Real Robots}\par\vspace{4pt}
+{\large\itshape\raggedright PEAR Trains a 27B Model Entirely in Simulation and Transfers Zero-Shot to Physical Hardware}\par\vspace{6pt}
+{\small\textbf{By} MIT Han Lab (PEAR Team)}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.18562 \textbullet{} cs.RO, cs.LG \textbullet{} Submitted 13 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A 27-billion-parameter open-weight reasoning model, trained entirely via reinforcement learning in simulation with no expert demonstrations, achieves 74.4\% task success in the LIBERO suite---up from 1.6\%---and transfers zero-shot to a real dual-arm robot at 60\% success (18\,/\,30 trials), where the base model succeeds in none.
+The MIT Han Lab's PEAR system, presented in arXiv:2611.18562, demonstrates that the data-collection bottleneck of robot learning can be bypassed when a large reasoning model is paired with scalable simulation-based RL.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Generalist robot policies require large-scale expert demonstration data, which is expensive and embodiment-specific.
+  \item[Why it matters:] Eliminating demonstrations removes the main cost and embodiment barrier to deploying robot learning at scale.
+  \item[Method:] Robot-use RL (RURL) in simulation with binary success rewards; PEAR orchestrates rollouts via vLLM+Ray and training via veRL.
+  \item[Result:] LIBERO: 1.6\%$\rightarrow$74.4\%; real robot (zero-shot): 0/30$\rightarrow$18/30; RoboLab-120: 37.3\%.
+  \item[Evidence:] LIBERO, RoboDojo, RoboLab-120 (simulation); YAM dual-arm robot (real hardware, 30 trials).
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Robot learning has long depended on demonstration data: a human operator teleoperates a robot to collect thousands of successful trajectories, which are then used for imitation learning.
+This pipeline works, but it scales poorly: each new embodiment needs its own demonstrations, and rare failure modes are hard to cover.
+
+Reinforcement learning from scratch offers an alternative---let the robot explore and learn from outcomes---but standard RL with physical robots is slow and risky.
+Simulation bridges this gap in principle, but prior approaches required dense reward shaping or privileged simulation state that does not exist on real hardware.
+
+PEAR asks whether a large reasoning model can close the loop differently: use the model's pre-existing planning capabilities to bootstrap exploration in simulation, provide only binary task completion rewards, and trust the model's generalization to carry learned behavior to physical hardware.
+The answer is a striking affirmative.
+
+\section{Why Existing Approaches Fall Short}
+
+Imitation learning methods such as ACT, Diffusion Policy, and $\pi_0$ achieve strong performance but require demonstration data at every new task.
+Scaling them to diverse tasks multiplies data collection cost linearly.
+
+RL-from-demonstrations hybrids reduce data requirements but do not eliminate them; they also inherit the coverage problem---rare object configurations and grasps that do not appear in demonstrations are handled poorly.
+
+Previous sim-to-real transfer work for manipulation typically required dense reward functions (e.g., distance to target, grasp success sub-stages) that must be manually engineered per task.
+Engineering these rewards for the breadth of tasks in benchmarks like LIBERO-Plus is a significant research effort in itself.
+
+\section{Core Mechanism}
+
+PEAR trains a 27B reasoning model (Qwen3.8-27B) on robotic tasks using robot-use RL (RURL):
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Observation:} At each step, the model receives an image observation and proprioception, tokenized and fed as context.
+  \item \textbf{Action:} The model outputs a motor command sequence via autoregressive decoding.
+  \item \textbf{Reward:} A binary signal ($r=1$ at successful task completion, $r=0$ otherwise) is provided by the simulator.
+  \item \textbf{Update:} PPO updates the model's parameters based on rollout returns.
+\end{enumerate}
+
+The two-stage training schedule first trains on LIBERO (225 steps), then extends to RoboDojo for generalization, before evaluation on the held-out RoboLab-120 benchmark.
+
+\section{Technical Formulation}
+
+\subsection*{RURL Objective}
+
+PEAR optimizes the standard RL objective with a sparse reward:
+\begin{equation}
+\mathcal{J}(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_{t=0}^{T} \gamma^t r_t\right], \quad r_t = \mathbf{1}[\text{task complete at } t]
+\label{eq:rurl}
+\end{equation}
+No dense reward shaping, no auxiliary losses, and no demonstration data enter the objective.
+The model must discover manipulation strategies from binary outcome feedback alone.
+
+\subsection*{PPO Clipped Surrogate}
+
+Policy gradient updates use the PPO clipped surrogate:
+\begin{equation}
+\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t(\theta)\hat{A}_t,\; \mathrm{clip}(r_t(\theta),1\pm\epsilon)\hat{A}_t\right)\right]
+\label{eq:ppo}
+\end{equation}
+where $r_t(\theta) = \pi_\theta(a_t \mid s_t) / \pi_{\theta_\text{old}}(a_t \mid s_t)$ is the probability ratio and $\hat{A}_t$ is the generalized advantage estimate computed from the binary reward trajectory.
+The clip threshold $\epsilon = 0.2$ is standard.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training (PEAR infrastructure):}
+\begin{itemize}[leftmargin=1em,itemsep=1pt]
+  \item \textbf{Rollout:} vLLM + Ray generate episodes in the LIBERO simulator across $N$ parallel workers.
+  \item \textbf{KV-cache:} LMCache reuses observation encodings across timesteps within an episode, reducing decoding cost by approximately 40\%.
+  \item \textbf{Update:} veRL performs PPO updates, with periodic checkpoint saves.
+\end{itemize}
+
+\textbf{Inference (zero-shot transfer):}
+The trained checkpoint is loaded into the same 27B model and queried with real sensor observations, with no fine-tuning or domain adaptation.
+The model generates motor commands at $\approx$10 Hz on the YAM dual-arm robot.
+
+\section{What the Guarantee Says}
+
+No formal guarantee is provided in the paper.
+The empirical evidence for zero-shot sim-to-real transfer rests on 30 trials, which is a limited sample.
+The authors note that the binary reward signal provides no gradient signal for failed episodes until the model first achieves success---a cold-start problem that the model's pre-trained planning capabilities appear to resolve in practice, but which could fail for tasks with very low initial success probability.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Benchmark} & \textbf{Base} & \textbf{PEAR} \\
+\midrule
+LIBERO (sim)         & 1.6\%  & 74.4\% \\
+RoboLab-120 (sim)    & 5.4\%  & 22.1\% \\
+RoboLab-120 w/ RoboDojo & —    & 37.3\% \\
+Real robot (30 trials) & 0\%  & 60.0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The base model's near-zero LIBERO success rate reflects a fundamental mismatch between pre-training tasks (language) and the required behavior (motor control).
+PEAR's 225-step training on LIBERO is enough to bridge this gap.
+The generalization to RoboLab-120 from LIBERO-only training (22.1\%) confirms that the model learns generalizable rather than task-specific behavior.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{LMCache impact:} Disabling KV-cache reuse reduces throughput by approximately 40\%, making training impractically slow at the 27B scale.
+  \item \textbf{Model size:} Smaller variants (7B, 14B) trained with PEAR reach lower LIBERO plateaus, consistent with scaling laws for reasoning tasks.
+  \item \textbf{Reward sparsity:} Adding dense intermediate rewards (joint-velocity penalty, grasp detection) does not improve final performance and sometimes hurts generalization, confirming that binary task rewards are sufficient.
+  \item \textbf{Two-stage schedule:} Skipping RoboDojo and training only on LIBERO reduces RoboLab-120 performance from 37.3\% to 22.1\%, showing that domain diversity during RL is important for generalization.
+\end{itemize}
+
+\section*{Reference}
+MIT Han Lab.
+\textbf{Training Reasoning Models in Simulation to Natively Use Real Robots.}
+arXiv:2611.18562. cs.RO, cs.LG. November 2026.
+\url{https://arxiv.org/abs/2611.18562}
+
+\end{document}

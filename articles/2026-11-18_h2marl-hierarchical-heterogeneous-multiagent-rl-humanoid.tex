@@ -1,0 +1,176 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-18}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Humanoid Robotics \textbullet{} Multi-Agent RL \textbullet{} Hierarchical Control \textbullet{} Whole-Body Coordination}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright H$^2$MARL: Hierarchical Heterogeneous Multi-Agent RL for Humanoid Robot Control}\par\vspace{4pt}
+{\large\itshape\raggedright Treating Each Joint as an Independent Agent with Physical Descriptors Unlocks Coordinated Whole-Body Motion}\par\vspace{6pt}
+{\small\textbf{By} Xuemin Hu, Kaixin Li, Qingqing Xia, Yuxin Wang, Wei Xie, Bo Tang, Long Chen}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.06523 \textbullet{} cs.RO, cs.MA \textbullet{} Submitted 4 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Hu~et~al.\ propose H$^2$MARL, a framework that treats each torque-actuated joint degree of freedom in a humanoid robot as an independent RL agent conditioned on an explicit physical descriptor---covering actuation limits, range of motion, mass, and inertia.
+A hierarchical controller that jointly trains a high-level locomotion planner and low-level motor executors, combined with a centralized critic, achieves coordinated whole-body motion that outperforms prior monolithic and coarsely-grouped multi-agent baselines.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Humanoid whole-body control requires coordinating joints with fundamentally different physical properties; prior methods ignore heterogeneity or optimize planning and execution in isolation.
+  \item[Why it matters:] Uncoordinated motion degrades locomotion stability and task success; physically-aware decomposition can enable specialization without sacrificing coordination.
+  \item[Method:] Each joint-DoF is a separate actor conditioned on physical descriptors; a hierarchical planner-executor is jointly trained with a centralized critic (CTDE).
+  \item[Result:] Outperforms monolithic and coarse-grouping baselines on locomotion stability and task success.
+  \item[Evidence:] Whole-body humanoid locomotion benchmark; ablations on descriptor conditioning and centralized critic.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Humanoid robots are mechanically complex: a typical full-body system has 30--50 degrees of freedom spanning joints as different as a heavy hip actuator and a lightweight finger joint.
+No two joints share the same dynamics, and the control policy must coordinate them all simultaneously to achieve stable locomotion and manipulation.
+
+Multi-agent reinforcement learning (MARL) offers a natural decomposition: assign each joint (or group of joints) its own agent, and let the agents learn to cooperate.
+But naive MARL ignores the physical heterogeneity between joints---an agent controlling the ankle and an agent controlling the shoulder face entirely different physical constraints and require different control strategies.
+
+H$^2$MARL addresses this by giving every joint agent an explicit physical self-model and embedding joint training in a hierarchical structure that couples locomotion planning with motor execution.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Monolithic controllers} treat the entire body as one agent.
+They work for simple tasks but struggle with the high-dimensional action space, and they cannot leverage joint-level physical heterogeneity.
+
+\textbf{Coarse-grouped MARL} divides joints into a small number of groups (e.g., arms, legs, spine) and trains one agent per group.
+This introduces physical incoherence within groups and fails to capture the specialization needed for high-precision tasks.
+
+\textbf{Staged hierarchical training} trains a high-level locomotion planner first, then freezes it and trains a low-level executor.
+This creates an interface mismatch: the planner generates plans assuming an ideal executor, and the executor optimizes for plans it was never trained to receive.
+The result is motion artifacts---jitter, delayed recovery from perturbations---that do not appear when training is joint.
+
+\section{Core Mechanism}
+
+H$^2$MARL decomposes whole-body control into three interacting components:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Joint agents:} Each torque-actuated JDoF $i$ has an actor $\pi_i$ conditioned on its local observation $o_i$ and physical descriptor $d_i$.
+  \item \textbf{Hierarchical planner:} A high-level policy $\pi_H$ generates a locomotion plan $z_H$ (target velocity, orientation) that all joint agents receive as additional input.
+  \item \textbf{Centralized critic:} During training, a shared value function $V$ observes all joint states and actions to provide coordinated gradient signals. At inference, only the decentralized actors are used.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+\subsection*{Physical Descriptor}
+
+Each joint $i$ is characterized by:
+\begin{equation}
+d_i = [\tau^{\max}_i,\;\theta^{\min}_i,\;\theta^{\max}_i,\;\dot{\theta}^{\max}_i,\;m_i,\;I_i]
+\end{equation}
+where $\tau^{\max}_i$ is peak torque, $[\theta^{\min}_i, \theta^{\max}_i]$ is the range of motion, $\dot{\theta}^{\max}_i$ is maximum angular velocity, $m_i$ is the link mass, and $I_i$ is the moment of inertia.
+This descriptor is a fixed property of the hardware, not learned.
+
+\subsection*{Joint Actor Policy}
+
+Joint actor $i$ produces a torque command:
+\begin{equation}
+a_i \sim \pi_i(a_i \mid o_i, d_i, z_H;\,\theta_i)
+\end{equation}
+where $z_H = \pi_H(s_H;\,\phi)$ is the plan from the high-level policy, $s_H$ is the global robot state, and $\theta_i, \phi$ are the learnable parameters of the joint actor and planner, respectively.
+
+\subsection*{Centralized Critic}
+
+The centralized critic estimates the joint value:
+\begin{equation}
+V(s, \{a_i\}_{i=1}^{N}, z_H;\,\psi) \approx \mathbb{E}\!\left[\sum_{k=0}^\infty \gamma^k r_{t+k}\right]
+\end{equation}
+The critic observes the full state and all joint actions during training, enabling it to attribute rewards to joint-level coordination patterns that a decentralized critic cannot observe.
+Only $\{\pi_i\}$ and $\pi_H$ are used at inference.
+
+\subsection*{Joint Training Objective}
+
+All actors and the planner are trained jointly via PPO:
+\begin{equation}
+\mathcal{L}(\theta_{1:N},\phi) = \sum_i \mathcal{L}^{\text{CLIP}}_i + \lambda\, \mathcal{L}^{\text{CLIP}}_H - \beta H(\pi_H)
+\end{equation}
+where $\mathcal{L}^{\text{CLIP}}_i$ and $\mathcal{L}^{\text{CLIP}}_H$ are the PPO objectives for joint actor $i$ and the planner, respectively, $H(\pi_H)$ is the planner's policy entropy, and $\lambda, \beta$ are weighting coefficients.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:} A single PPO rollout collects $(s_t, \{a_{i,t}\}, z_{H,t}, r_t, s_{t+1})$ tuples.
+The centralized critic computes advantages for all actors simultaneously.
+Physical descriptors $d_i$ are fixed constants read from the robot's URDF specification and require no learning.
+Training runs for $5\times10^7$ environment steps in a MuJoCo humanoid simulator.
+
+\textbf{Inference:} The high-level planner generates $z_H$ at a coarse 10 Hz.
+Joint actors query $z_H$ and their local observation $o_i$ to produce torques at 100 Hz.
+The centralized critic is not used at inference, so the system is fully decentralized---each joint controller is a small neural network that runs in microseconds.
+
+\section{What the Guarantee Says}
+
+H$^2$MARL does not provide formal convergence guarantees.
+The empirical evidence shows consistent improvement over baselines, and the ablations provide causal evidence for each design choice.
+The centralized-training, decentralized-execution framework has well-established convergence properties from the MADDPG and MAPPO literature, which H$^2$MARL inherits.
+
+\section{Experimental Findings}
+
+H$^2$MARL is evaluated on a whole-body locomotion benchmark requiring simultaneous balance, speed regulation, and upper-body manipulation under perturbation.
+Metrics include average walking speed, perturbation recovery rate, and task completion rate.
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{vs. Monolithic PPO:} H$^2$MARL achieves higher locomotion stability and faster perturbation recovery.
+  \item \textbf{vs. Coarse grouping:} The fine-grained JDoF decomposition outperforms 2-group and 4-group baselines, with the gap widening on tasks requiring precise limb coordination.
+  \item \textbf{vs. Staged training:} Joint training eliminates the motion artifacts (jitter, 0.3--0.8 s recovery delay) observed in staged training.
+\end{itemize}
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Physical descriptor ablation:} Removing $d_i$ (all agents receive the same generic descriptor) reduces coordination quality by approximately 15\% on the perturbation recovery metric.
+  \item \textbf{Centralized critic ablation:} Replacing the centralized critic with per-agent critics degrades task success by approximately 12\%, confirming that cross-agent advantage estimation is necessary for coordination.
+  \item \textbf{Hierarchy ablation:} Replacing the hierarchical planner-executor design with a flat multi-agent system (no $z_H$) degrades locomotion stability, particularly at high speeds.
+  \item \textbf{Granularity:} The optimal decomposition treats each JDoF independently; grouping nearby joints (e.g., knee + ankle) loses the benefit of specialized physical conditioning.
+\end{itemize}
+
+\section*{Reference}
+X.\ Hu, K.\ Li, Q.\ Xia, Y.\ Wang, W.\ Xie, B.\ Tang, L.\ Chen.
+\textbf{H$^2$MARL: Hierarchical Heterogeneous Multi-agent Reinforcement Learning for Humanoid Robot Control.}
+arXiv:2611.06523. cs.RO, cs.MA. November 2026.
+\url{https://arxiv.org/abs/2611.06523}
+
+\end{document}

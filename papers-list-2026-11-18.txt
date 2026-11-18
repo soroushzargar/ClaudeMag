@@ -1,0 +1,32 @@
+ML Papers List — 2026-11-18
+Generated for ClaudeMag
+
+1. Training Reasoning Models in Simulation to Natively Use Real Robots
+   Authors: MIT Han Lab (Qwen3.8-27B-PEAR team)
+   Venue/ID: arXiv:2611.18562 — cs.RO, cs.LG (submitted 13 Nov 2026)
+   URL: https://arxiv.org/abs/2611.18562
+   Summary: This paper introduces PEAR (Post-training Engine for Agentic Robotics), a system that trains a 27B open-weight reasoning model to operate real robots through reinforcement learning conducted entirely in simulation, with no demonstrations. Robot-use RL (RURL) in the LIBERO simulator raises task success from 1.6% to 74.4%; the same checkpoint transfers zero-shot to a real dual-arm robot, succeeding in 60% of trials (18/30) compared to 0% for the base model. The paper also reports that combining LIBERO and RoboDojo training achieves 37.3% on the RoboLab-120 leaderboard.
+
+2. H²MARL: Hierarchical Heterogeneous Multi-agent Reinforcement Learning for Humanoid Robot Control
+   Authors: Xuemin Hu, Kaixin Li, Qingqing Xia, Yuxin Wang, Wei Xie, Bo Tang, Long Chen
+   Venue/ID: arXiv:2611.06523 — cs.RO, cs.MA (submitted 4 Nov 2026)
+   URL: https://arxiv.org/abs/2611.06523
+   Summary: H²MARL treats each torque-actuated joint degree of freedom in a humanoid robot as an independent RL agent with an explicit physical descriptor encoding its actuation, kinematic, and dynamic properties. A hierarchical controller couples a high-level locomotion planner with a low-level executor, with a centralized critic that lets heterogeneous actors specialize while maintaining whole-body coordination. The framework addresses the core failure mode of prior methods, which optimized planning and execution in isolation and produced uncoordinated motion.
+
+3. Teaching Agents the "Principle", Not the "Reward": Prescriptive Policy Learning
+   Authors: Shan Yang
+   Venue/ID: arXiv:2611.07130 — cs.LG, cs.AI (submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.07130
+   Summary: Prescriptive Policy Learning (PPL) replaces scalar reward signals with a per-step principle coefficient indicating whether and to what extent an agent follows a high-level behavioral principle. Agents trained with PPL learn good, generalizable policies without any explicit reward function, outperforming reward-based baselines such as PPO-R on sample efficiency by roughly 2×10⁴ steps on a wind-affected landing benchmark. The method also avoids reward-hacking behavior that arises when agents exploit distributional gaps between the reward and the designer's intent.
+
+4. Towards Robust Vision-Language Reasoning: A Multi-Stage Optimization Pipeline with Masked Diffusion Model
+   Authors: Shunming Liu, Pei Huang, Yajing Sun, Huaxiao Liu
+   Venue/ID: arXiv:2611.15238 — cs.AI, cs.CV (submitted 11 Nov 2026)
+   URL: https://arxiv.org/abs/2611.15238
+   Summary: This paper proposes a multi-stage optimization pipeline for vision-language models applied to autonomous driving, and builds Masked Diffusion Drive (MD-Drive) on top of it. MD-Drive achieves a 29.7% improvement over the unoptimized baseline on planning metrics, a PDMS of 88.9 on NAVSIM (outperforming DrivingGPT by 6.5 points), and the best average L2 trajectory error of 0.78 on DriveCoT (improving over the strongest autoregressive baseline by 1.68). The masked diffusion formulation outperforms both standard autoregressive and competing discrete-diffusion methods on trajectory quality.
+
+5. Concertina: Embodying Manipulation and Cognition in One Diffusion Vision-Language Model
+   Authors: Chengcheng Wang, Wei He, Wenhao Li, Hongguang Li, Kai Han, Jianyuan Guo, Chang Xu
+   Venue/ID: arXiv:2611.07513 — cs.CV, cs.AI, cs.RO (submitted 5 Nov 2026)
+   URL: https://arxiv.org/abs/2611.07513
+   Summary: Concertina integrates robotic manipulation and language understanding into a single diffusion VLM backbone by inserting continuous action representations directly into the model, with no action-boundary special tokens, embodiment-specific adapters, or soft prompts. The unified architecture achieves 98.15% average success on LIBERO, 85.9% on the 10,030-task LIBERO-Plus benchmark, and a 4.142 average completed chain length on CALVIN ABC-D, outperforming prior methods that separate perception and action modules.

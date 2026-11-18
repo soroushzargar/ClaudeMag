@@ -1,0 +1,192 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-18}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Autonomous Driving \textbullet{} Masked Diffusion \textbullet{} Vision-Language Models \textbullet{} Trajectory Planning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Towards Robust Vision-Language Reasoning: A Multi-Stage Pipeline with Masked Diffusion}\par\vspace{4pt}
+{\large\itshape\raggedright MD-Drive Cuts Trajectory Error by 1.68 on DriveCoT and Scores 88.9 PDMS on NAVSIM}\par\vspace{6pt}
+{\small\textbf{By} Shunming Liu, Pei Huang, Yajing Sun, Huaxiao Liu}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.15238 \textbullet{} cs.AI, cs.CV \textbullet{} Submitted 11 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Liu~et~al.\ build Masked Diffusion Drive (MD-Drive) on a three-stage VLM optimization pipeline for autonomous driving planning.
+MD-Drive achieves a PDMS of 88.9 on NAVSIM, outperforming DrivingGPT by 6.5 points, and an average L2 trajectory error of 0.78 on DriveCoT---1.68 better than the strongest autoregressive baseline---representing a 29.7\% gain over the unoptimized backbone.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Autoregressive VLMs generate trajectories token-by-token, creating sequential dependencies and failing to capture the multi-modal distribution of valid driving futures.
+  \item[Why it matters:] Planning quality directly determines safety in autonomous driving; small improvements in L2 error translate to fewer near-misses.
+  \item[Method:] Three-stage VLM training (visual pre-training, driving fine-tuning, diffusion head training) followed by masked diffusion trajectory decoding.
+  \item[Result:] PDMS 88.9 on NAVSIM; L2 error 0.78 on DriveCoT; 29.7\% gain over unoptimized backbone.
+  \item[Evidence:] NAVSIM, DriveCoT, nuScenes benchmarks; ablations on training stages.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Autonomous driving planning has benefited enormously from large vision-language models: by grounding scene understanding in natural language descriptions of road conditions, weather, and traffic, VLMs can reason about complex scenarios that overwhelm purely geometric planners.
+
+However, the generation mechanism matters.
+Standard autoregressive VLMs decode trajectories token by token, left to right.
+This creates two problems.
+First, early tokens commit the trajectory to a direction before later tokens can correct for scene dynamics observed mid-sequence.
+Second, autoregressive models generate a single trajectory mode, unable to represent the \emph{distribution} of valid futures (e.g., a highway merge can be executed earlier or later, with different spacing, all correctly).
+
+Diffusion models address both problems by iterative denoising: a trajectory is initialized as noise and refined over $K$ steps, with each step able to attend to the entire trajectory simultaneously.
+The key question for MD-Drive is whether a masked diffusion head can be integrated into a VLM backbone through a principled training pipeline---without the backbone losing its visual reasoning capabilities.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Autoregressive planners} (DrivingGPT, FSDrive) produce good scene descriptions but generate trajectories with the same token-by-token mechanism used for text, losing the multi-modality and temporal coherence that diffusion provides.
+
+\textbf{Separate diffusion planners} operate on features from a frozen VLM encoder.
+The frozen encoder was not trained to produce representations optimal for diffusion-based trajectory generation, leaving performance on the table.
+
+\textbf{Prior discrete diffusion methods} (MVLAD-AD) introduce a diffusion planner but do not use a multi-stage optimization pipeline to align the backbone with the planner.
+MD-Drive shows that this alignment is the key driver of the performance gain: ablating the pipeline while keeping the diffusion head reduces PDMS by approximately 8 points.
+
+\section{Core Mechanism}
+
+MD-Drive has three interacting components:
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{VLM backbone:} A vision-language model trained through the three-stage pipeline to produce scene embeddings conditioned on the task description.
+  \item \textbf{Trajectory tokenizer:} Encodes continuous trajectory waypoints $\mathbf{x}_{1:T}$ into discrete tokens via VQ-VAE.
+  \item \textbf{Masked diffusion head:} Decodes trajectory tokens iteratively, conditioning on the backbone's scene embedding at each denoising step.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+\subsection*{Three-Stage Pipeline}
+
+\textbf{Stage 1 (Visual Pre-training):}
+The backbone $f_\phi$ is trained on a large-scale driving scene description dataset:
+\begin{equation}
+\mathcal{L}_{\text{S1}} = -\mathbb{E}\bigl[\log p_\phi(\text{caption} \mid \text{image})\bigr]
+\end{equation}
+
+\textbf{Stage 2 (Driving Fine-tuning):}
+The backbone is fine-tuned on paired driving descriptions and reference trajectories:
+\begin{equation}
+\mathcal{L}_{\text{S2}} = -\mathbb{E}\bigl[\log p_\phi(\text{decision} \mid \text{image}, \text{scene description})\bigr]
+\end{equation}
+
+\textbf{Stage 3 (Diffusion Head):}
+The backbone is frozen; the diffusion head $h_\psi$ is trained:
+\begin{equation}
+\mathcal{L}_{\text{S3}} = \mathbb{E}_{\mathbf{x}^{(0)}, k}\Bigl[\bigl\|\mathbf{x}^{(0)} - h_\psi(\mathbf{x}^{(k)}, k, \mathbf{z}_{\text{scene}})\bigr\|^2\Bigr]
+\end{equation}
+where $\mathbf{z}_{\text{scene}} = f_\phi(\text{image}, \text{description})$ and $\mathbf{x}^{(k)}$ is the trajectory at diffusion step $k$.
+
+\subsection*{Masked Diffusion Denoising}
+
+At diffusion step $k$, a subset of trajectory tokens $\mathbf{x}^{(k)}$ is masked:
+\begin{equation}
+q(\mathbf{x}^{(k)} \mid \mathbf{x}^{(0)}) = \prod_{t=1}^{T} \text{Mask}(x_t, k/K)
+\end{equation}
+where tokens are independently masked with probability $k/K$ (more masking at earlier steps).
+The head predicts masked tokens:
+\begin{equation}
+p_\psi(\mathbf{x}^{(0)} \mid \mathbf{x}^{(k)}, \mathbf{z}_{\text{scene}}) = \prod_t p_\psi(x_t \mid \mathbf{x}^{(k)}_{\neq t}, \mathbf{z}_{\text{scene}})
+\label{eq:denoise}
+\end{equation}
+At inference, $K=10$ denoising steps are used, initializing $\mathbf{x}^{(K)}$ as fully masked.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+Stages 1 and 2 require no special hardware beyond standard VLM fine-tuning.
+Stage 3 trains the diffusion head with batch size 128 for 100K steps on a 4-GPU cluster, taking approximately 24 hours.
+The backbone is frozen in Stage 3 to preserve visual reasoning capabilities.
+
+\textbf{Inference:}
+Given an image and task description:
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Compute scene embedding $\mathbf{z}_{\text{scene}} = f_\phi(\text{image}, \text{description})$.
+  \item Initialize trajectory as fully masked: $\mathbf{x}^{(K)} = [\text{MASK}]^T$.
+  \item Iteratively denoise using Eq.~(\ref{eq:denoise}) for $K$ steps.
+  \item Decode the final trajectory $\mathbf{x}^{(0)}$ via VQ-VAE decoder.
+\end{enumerate}
+Total inference latency is 243.9 tokens/s, comparable to autoregressive baselines.
+
+\section{What the Guarantee Says}
+
+No formal planning guarantees are provided.
+The empirical evidence covers three driving benchmarks with diverse conditions.
+The 29.7\% gain is measured on the primary planning metric (PDMS); the L2 improvement on DriveCoT provides a geometry-based validation that is independent of the PDMS formulation.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Method} & \textbf{PDMS\,$\uparrow$} & \textbf{DriveCoT L2\,$\downarrow$} \\
+\midrule
+DrivingGPT        & 82.4 & 2.84 \\
+FSDrive           & 85.1 & 2.46 \\
+MVLAD-AD          & 86.3 & 1.28 \\
+MD-Drive (ours)   & \textbf{88.9} & \textbf{0.78} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 29.7\% gain over the unoptimized backbone (PDMS~68.5, L2~1.10) reflects the cumulative contribution of all three training stages.
+Ablating the multi-stage pipeline and training the diffusion head on a vanilla backbone reduces PDMS to approximately 80.4.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Stage 1 only:} +3.5 PDMS over unoptimized backbone; establishes visual scene representations.
+  \item \textbf{Stages 1--2:} +7.1 PDMS; driving-specific fine-tuning aligns representations with planning decisions.
+  \item \textbf{Stages 1--2 + diffusion head (MD-Drive):} +20.4 PDMS; the full pipeline is synergistic.
+  \item \textbf{Autoregressive head on Stage-1--2 backbone:} +11.3 PDMS; diffusion adds 9.1 points beyond autoregressive decoding, confirming the value of multi-modal trajectory generation.
+  \item \textbf{Denoising steps $K$:} $K=10$ is optimal; $K=5$ degrades L2 by 0.12; $K=20$ provides no additional benefit.
+\end{itemize}
+
+\section*{Reference}
+S.\ Liu, P.\ Huang, Y.\ Sun, H.\ Liu.
+\textbf{Towards Robust Vision-Language Reasoning: A Multi-Stage Optimization Pipeline with Masked Diffusion Model.}
+arXiv:2611.15238. cs.AI, cs.CV. November 2026.
+\url{https://arxiv.org/abs/2611.15238}
+
+\end{document}

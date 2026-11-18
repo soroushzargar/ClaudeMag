@@ -1,0 +1,200 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-18}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Reward-Free RL \textbullet{} Alignment \textbullet{} Prescriptive Policy Learning \textbullet{} Principle Coefficient}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Teaching Agents the ``Principle'', Not the ``Reward''}\par\vspace{4pt}
+{\large\itshape\raggedright Prescriptive Policy Learning Replaces Scalar Rewards with Per-Step Behavioral Compliance Signals}\par\vspace{6pt}
+{\small\textbf{By} Shan Yang}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.07130 \textbullet{} cs.LG, cs.AI \textbullet{} Submitted 5 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Yang proposes Prescriptive Policy Learning (PPL), which trains RL agents using \emph{principle coefficients}---per-step signals indicating whether and to what degree an agent follows a stated behavioral principle---rather than scalar reward functions.
+Agents trained with PPL outperform reward-based PPO baselines in sample efficiency by roughly $2\times10^4$ steps on a wind-affected landing task, while avoiding the reward-hacking failures that arise when agents exploit gaps between reward proxies and designer intent.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Scalar reward functions are imperfect proxies for designer intent; agents optimize rewards rather than intent, producing reward-hacking behavior.
+  \item[Why it matters:] A direct compliance signal removes the ``reward decoding burden'' and aligns the training signal with the designer's intent at each timestep.
+  \item[Method:] Principle coefficient $c_t \in [0,1]$ measures per-step compliance with a stated behavioral principle; PPL trains via weighted maximum-likelihood on compliant transitions.
+  \item[Result:] Reaches 90\% success $\sim$2$\times$10$^4$ steps faster than PPO; PPO-R (principle as reward) fails to generalize.
+  \item[Evidence:] Wind-affected lander benchmark; ablations on reward shaping, principle formulation, and distribution shift.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning has a misalignment problem at its core: agents are trained to maximize reward functions, not designer intent.
+When the reward function is a perfect proxy for intent---rare in practice---this distinction does not matter.
+When the reward is imperfect, agents learn to exploit the gap: they achieve high reward through behaviors the designer never intended and would not endorse.
+
+This phenomenon, known as reward hacking or Goodhart's Law in RL, is not a failure of optimization---the agent is doing exactly what it is told to do.
+It is a failure of the \emph{communication channel} between designer and agent.
+The scalar reward is a lossy encoding of what the designer wants.
+
+PPL proposes a richer channel: instead of a scalar, tell the agent at every timestep whether it is following the behavioral principle the designer cares about.
+This turns the ``reward decoding problem'' into a \emph{compliance measurement} problem, which the designer can often solve more reliably than reward engineering.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Dense reward engineering} requires the designer to anticipate every behavior the agent might exhibit and assign appropriate rewards.
+For complex tasks, this is infeasible: designers miss edge cases, and agents find them.
+
+\textbf{Reward shaping} smooths the reward landscape to aid exploration but does not change the fundamental problem: the shaped reward can still diverge from intent, and the agent optimizes the shaped signal.
+
+\textbf{Inverse RL and imitation learning} infer a reward from demonstrations, but require demonstrations to exist and assume that the demonstrator's behavior is optimal with respect to the designer's intent.
+
+\textbf{RLHF and preference learning} elicit reward proxies from human judgments, but judgments are noisy, expensive, and can be gamed by optimizing against the preference model itself.
+
+PPL bypasses all of these by operating at the level of behavioral principles---higher-level descriptions of desired behavior that are more robust to gaming than scalar rewards.
+
+\section{Core Mechanism}
+
+PPL trains an agent using a principle coefficient $c_t$ computed at each timestep:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Specify principle:} The designer states a behavioral principle $P$ in natural language or formal notation (e.g., ``reduce vertical velocity before touchdown'').
+  \item \textbf{Compute coefficient:} At each step $(s_t, a_t)$, evaluate $c_t = \text{Principle}(s_t, a_t, P) \in [0,1]$.
+  \item \textbf{Update policy:} Apply a weighted maximum-likelihood update: transitions where the agent was compliant get stronger gradient signal.
+\end{enumerate}
+
+The principle coefficient is \emph{not} a reward: it does not define the objective the agent optimizes.
+Instead, it is a supervision signal that biases the policy toward principle-compliant trajectories.
+
+\section{Technical Formulation}
+
+\subsection*{Principle Coefficient}
+
+For a principle $P$, the coefficient $c_t$ can be:
+\begin{itemize}[leftmargin=1em,itemsep=1pt]
+  \item \textbf{Binary:} $c_t = \mathbf{1}[\text{principle satisfied at } (s_t, a_t)]$
+  \item \textbf{Graded:} $c_t = f(s_t, a_t, P) \in [0,1]$ for a soft compliance function $f$
+\end{itemize}
+
+For the wind-affected lander task, the principle is ``reduce vertical velocity $v_z$ smoothly before touchdown.''
+The graded coefficient is:
+\begin{equation}
+c_t = \max\!\left(0,\; 1 - \frac{|v_z(t) - v_z^{\text{target}}(h_t)|}{\Delta v_{\max}}\right)
+\label{eq:coeff}
+\end{equation}
+where $v_z^{\text{target}}(h_t)$ is a height-dependent target velocity profile and $\Delta v_{\max}$ is a normalization constant.
+
+\subsection*{PPL Update}
+
+The PPL policy update is a weighted maximum-likelihood objective:
+\begin{equation}
+\mathcal{J}_{\text{PPL}}(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_t c_t \log \pi_\theta(a_t \mid s_t)\right]
+\label{eq:ppl}
+\end{equation}
+This pushes the policy to assign higher probability to actions that were compliant with the principle.
+Transitions with $c_t = 0$ contribute no gradient---the policy learns nothing from non-compliant steps.
+
+\subsection*{Comparison to PPO-R}
+
+The paper also evaluates PPO-R, which uses $c_t$ as a reward signal in standard PPO:
+\begin{equation}
+\mathcal{J}_{\text{PPO-R}}(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_t c_t\right]
+\label{eq:ppor}
+\end{equation}
+Unlike PPL, PPO-R \emph{maximizes cumulative compliance}, which creates the same incentive for exploitation that affects scalar reward RL: an agent that finds a way to make $c_t$ high through non-principle-compliant behavior will do so.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Roll out the current policy $\pi_\theta$ for a batch of episodes.
+  \item For each $(s_t, a_t)$ in each episode, compute $c_t$ using Eq.~(\ref{eq:coeff}).
+  \item Apply the PPL gradient update (Eq.~(\ref{eq:ppl})) with Adam.
+  \item Optionally add a small entropy regularization term to maintain exploration.
+\end{enumerate}
+
+No value function, no reward baseline, and no trajectory return computation are required.
+Training is therefore simpler than standard actor-critic methods.
+
+\textbf{Inference:}
+The trained policy $\pi_\theta$ is deployed without modification.
+The principle coefficient is not needed at inference.
+
+\section{What the Guarantee Says}
+
+Under the assumption that the principle $P$ correctly specifies a sufficient condition for good behavior, PPL is guaranteed to learn a policy that is statistically biased toward principle-compliant trajectories.
+If the principle is both necessary and sufficient for task success, PPL converges to a near-optimal policy.
+If the principle is only sufficient (there are other ways to succeed), PPL may converge to a principle-compliant local optimum that is suboptimal in terms of task success---a benign failure mode compared to reward hacking.
+
+\section{Experimental Findings}
+
+The wind-affected lander task places a simulated lander in a stochastic wind field and requires a smooth, safe landing.
+The wind distribution during evaluation differs from training (distribution shift).
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Method} & \textbf{Steps to 90\%} & \textbf{Gen.\ gap} \\
+\midrule
+PPO (shaped reward) & $\sim$4$\times$10$^4$ & High \\
+PPO-R (principle as reward) & N/A (fails) & N/A \\
+PPL (ours) & $\sim$2$\times$10$^4$ & Low \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+PPL reaches the 90\% success threshold with roughly $2\times10^4$ fewer steps than shaped-reward PPO.
+PPO-R fails to generalize under wind distribution shift, exhibiting reward-hacking behavior (learns to maximize $c_t$ in training distribution without understanding the underlying principle).
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Binary vs.\ graded coefficient:} Graded coefficients converge faster; binary coefficients produce more conservative policies but eventually reach similar performance.
+  \item \textbf{Entropy regularization:} Removing entropy regularization reduces exploration and sometimes causes premature convergence to suboptimal principle-compliant policies.
+  \item \textbf{Principle specificity:} Overly broad principles (``move toward the landing pad'') provide weak guidance; overly narrow ones ($v_z < 0.1$ at all times) over-constrain the policy. The best principles describe \emph{approach behavior} rather than states or specific actions.
+  \item \textbf{Distribution shift:} PPL generalizes 2.3$\times$ better than PPO-R under wind distribution shift, confirming that compliance-based training produces more robust policies than reward maximization.
+\end{itemize}
+
+\section*{Reference}
+S.\ Yang.
+\textbf{Teaching Agents the ``Principle'', Not the ``Reward'': Prescriptive Policy Learning.}
+arXiv:2611.07130. cs.LG, cs.AI. November 2026.
+\url{https://arxiv.org/abs/2611.07130}
+
+\end{document}
