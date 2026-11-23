@@ -1,0 +1,185 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Self-Modification \textbullet{} Weight Editing \textbullet{} LLM \textbullet{} Meta-Learning \textbullet{} Gradient-Free Repair}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Language Models Can Rewrite Their Own Weights}\par\vspace{4pt}
+{\large\itshape\raggedright Self-modifying LLMs diagnose their own failure modes and edit weights directly---no gradients required}\par\vspace{6pt}
+{\small\textbf{By} Jiajun Fan, Neil He, et al.}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.21885 \textbullet{} cs.LG, cs.AI \textbullet{} Submitted 16 Nov 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Fan, He, and colleagues demonstrate that a 27B language model can read its own weight matrices, attribute behavioral failures to specific matrices, and rewrite those matrices directly---without gradient descent and without access to the original training procedure.
+Repairs learned from text-based arithmetic problems transfer to six image benchmarks the model never saw, suggesting the model computes a general structural diagnostic rather than a task-specific memorization fix.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Fixed post-training weights encode failures that require expensive fine-tuning or full retraining to correct.
+  \item[Why it matters:] A model that can repair itself removes the dependency on training infrastructure for maintenance.
+  \item[Method:] Failure attribution chain localizes the responsible matrix; structured correction $\Delta W_l$ is applied directly, overwriting targeted elements.
+  \item[Result:] 88--94\% recovery on synthetic corruption tasks; cross-modal transfer improves six image benchmarks by 2.1--4.8 pp.
+  \item[Evidence:] 27B model; corruption recovery ablations; scaling from 7B--70B.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Trained language models are, in the standard view, static artifacts: once weights are fixed, changing them requires fine-tuning or retraining.
+This paper challenges that view.
+It asks whether a sufficiently capable model can reason about its own parameters---understand what a weight matrix computes, detect when that computation is wrong, and propose a correction---without any optimization loop.
+
+The analogy is software debugging: a programmer who understands a codebase can read the code, identify the bug, and patch it---no compiler feedback loop required.
+If a language model understands neural-network computation well enough, it should be able to do the same for its own weights.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Fine-tuning} requires labeled data and compute, may introduce regressions, and is unavailable when the original training infrastructure is not on hand.
+
+\textbf{Model editing methods} (e.g.\ ROME, MEMIT) can patch factual associations but target narrow declarative facts, not systematic behavioral failures or corrupted matrix structure.
+
+\textbf{Retrieval-augmented generation} routes around weight failures at inference but does not fix the underlying model and adds latency for every query.
+
+\textbf{Self-adapting fine-tuning} (e.g.\ SEAL) generates new training data and uses it for fine-tuning---still requiring a gradient step and failing when training infrastructure is unavailable.
+
+Self-rewriting bypasses all of these by operating at the level of weight values: the model reasons about and edits its own matrices without any backward pass.
+
+\section{Core Mechanism}
+
+Self-rewriting proceeds in three stages:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Failure attribution:} Given a set of failing behaviors, the model traces the computation through its layer stack, identifying the layer and matrix where the error originates.
+  \item \textbf{Correction proposal:} The model inspects the statistical properties of the identified matrix (singular value distribution, row norms, sparsity) and proposes a correction $\Delta W_l$.
+  \item \textbf{Direct application:} The correction is applied by overwriting targeted elements:
+  \[
+    W_l \leftarrow W_l + \Delta W_l
+  \]
+  No gradient is computed; all other weights are untouched.
+\end{enumerate}
+
+The model's self-rewriting capability emerges from general numerical and functional reasoning, not from a specialized self-editing head or fine-tuning on weight-editing examples.
+
+\section{Technical Formulation}
+
+\subsection*{Failure Attribution Chain}
+
+Given failing outputs $\hat{y} \neq y^*$ on task $T$, the model constructs:
+\begin{equation}
+\text{Failure}(\hat{y}) \;\to\; \text{Layer}(l^*) \;\to\; \text{Matrix}(W_{l^*}) \;\to\; \Delta W_{l^*}
+\label{eq:chain}
+\end{equation}
+
+Each arrow is a chain-of-thought reasoning step.
+The diagnostic checks whether intermediate activations at layer $l$ match expected statistical properties and whether the deviation is consistent with the observed failure pattern.
+
+\subsection*{Structural Correction Generalization}
+
+The key theoretical property is that the correction function $f: \mathcal{W} \to \mathcal{C}$ depends on \emph{structural} properties of $W$ rather than on the specific task distribution:
+\begin{equation}
+f(W) \approx f_{\mathrm{struct}}\!\left(\sigma(W),\;\|W\|_F,\;\text{sparsity}(W)\right)
+\label{eq:struct}
+\end{equation}
+where $\sigma(W)$ denotes the singular value spectrum.
+This structural dependence explains cross-modal transfer: a correction derived from text-math failures applies to visually analogous attention structures because those structures share the same pathological singular value pattern.
+
+\section{Learning or Inference Procedure}
+
+No special training is required.
+Self-rewriting is a zero-shot emergent capability of sufficiently capable models.
+At inference, the procedure is:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Provide the model with serialized weight matrices of the target layer(s), formatted as structured numerical text.
+  \item Prompt the model to perform the attribution chain (Eq.~\ref{eq:chain}).
+  \item Parse the model's correction proposal into a structured delta $\Delta W_l$.
+  \item Apply the delta in a single write operation.
+  \item Re-evaluate the model on the failing task to verify improvement.
+\end{enumerate}
+
+The process runs on a single GPU in a few hours for a 27B model.
+No backward pass, no optimizer state, and no training data are required.
+
+\section{What the Guarantee Says}
+
+There is no formal convergence guarantee; this is an empirical demonstration, not a theoretical framework.
+The practical claim is weaker but useful: for failures with a detectable statistical signature (corrupted matrices, systematic biases, miscalibrated norms), the model can identify and repair the responsible component.
+
+Failures that are behaviorally invisible at the weight level --- unknown unknowns, distributional gaps with no matrix-level signature --- lie outside the method's current scope.
+
+\section{Experimental Findings}
+
+The authors inject four categories of synthetic corruption and measure recovery rate (restoring task performance to within 5\% of the uncorrupted baseline):
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Corruption Type} & \textbf{27B} & \textbf{7B} \\
+\midrule
+Row zeroing & 94\% & 71\% \\
+Column swap & 88\% & 64\% \\
+Magnitude scale & 91\% & 68\% \\
+Random noise & 73\% & 51\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Cross-modal transfer: after text-math repair, the same correction improves six held-out image benchmarks by 2.1--4.8 percentage points with no additional image examples.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Scaling:} Self-rewriting attribution accuracy scales log-linearly with model size from 7B to 70B.
+    At 7B, the model often attributes failure to the wrong layer; at 27B, attribution is reliable.
+  \item \textbf{Structural vs.\ task-specific reasoning:} When the model is prompted to reason about task content rather than weight structure, transfer degrades, confirming the structural generalization hypothesis.
+  \item \textbf{Verification step:} Closing the loop with a re-evaluation step catches over-corrections and reduces net performance degradation from spurious edits by 60\%.
+  \item \textbf{Scope:} Random-noise corruption is the hardest case: the statistical signature is diffuse, making attribution difficult. Structured corruptions (zeroing, scaling) are attributed reliably.
+\end{itemize}
+
+\section*{Reference}
+J.\ Fan, N.\ He, et al.
+\textbf{Language Models Can Rewrite Their Own Weights.}
+arXiv:2611.21885. cs.LG, cs.AI. November 2026.
+\url{https://arxiv.org/abs/2611.21885}
+
+\end{document}

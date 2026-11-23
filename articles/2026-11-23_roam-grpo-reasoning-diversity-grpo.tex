@@ -1,0 +1,186 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  GRPO \textbullet{} Reasoning Diversity \textbullet{} RLVR \textbullet{} Policy Collapse \textbullet{} Math Reasoning}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright ROAM-GRPO: Enforcing Reasoning Diversity in GRPO}\par\vspace{4pt}
+{\large\itshape\raggedright Routing well-solved problems off the main learning track prevents the diversity collapse that plagues vanilla GRPO fine-tuning}\par\vspace{6pt}
+{\small\textbf{By} Jeff Duan, Matt Thomson}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.25926 \textbullet{} cs.LG, cs.AI \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Duan and Thomson identify a systematic failure mode of GRPO fine-tuning: once the model discovers a solution strategy, the policy collapses to that strategy exclusively, eliminating the diversity needed for high-$k$ sampling.
+ROAM-GRPO routes well-solved problems to an ``off-mode'' diversity track, raising peak pass@16 by 4.7\% and doubling solution cosine distance on MATH level~5.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] GRPO converges to a single reasoning mode; additional samples yield diminishing returns at high $k$.
+  \item[Why it matters:] pass@$k$ is the operative metric in production systems that sample many solutions; diversity is load-bearing.
+  \item[Method:] Track per-problem success rate; route well-solved problems to an off-mode diversity loss instead of the main GRPO update.
+  \item[Result:] +4.7\% peak pass@16; $1.5\text{--}2\times$ increase in correct-solution cosine distance.
+  \item[Evidence:] Qwen3.5-2B; 1,000 MATH level 5 episodes; $<3\%$ compute overhead.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Reinforcement learning from verifiable rewards (RLVR) has become the dominant post-training paradigm for math and coding LLMs.
+The standard recipe: sample many solutions, check them with a verifier, and update the policy to favor correct solutions.
+GRPO operationalizes this cleanly, and in its first few thousand steps it reliably increases pass@1 on training distributions.
+
+But pass@1 is not the only metric that matters.
+Production systems often deploy beam search or best-of-$n$ sampling: generate 16 or 64 solutions, run all of them through a verifier, return the best.
+For this strategy to work, solutions must be diverse---if all 64 samples are paraphrases of the same approach, the system is wasting $63 \times$ the inference budget.
+
+This paper documents, then fixes, the reason vanilla GRPO degrades diversity: once one approach achieves high reward, the policy is updated to maximize that approach's probability, suppressing exploration of alternatives.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Temperature scaling} increases lexical diversity but not semantic diversity: high-temperature samples of a collapsed policy produce varied surface forms of the same underlying approach.
+
+\textbf{Diverse beam search} encourages $n$-gram diversity within a beam but does not interact with the policy update; it cannot recover diversity lost during RL training.
+
+\textbf{DAPO and DRA-GRPO} add diversity terms to the policy loss but apply them uniformly to all problems.
+Easy problems, where the model already knows many approaches, do not need diversity incentive; hard problems do.
+Uniform application misallocates diversity training signal.
+
+ROAM-GRPO allocates diversity incentive precisely to problems where collapse has already occurred.
+
+\section{Core Mechanism}
+
+ROAM-GRPO operates by monitoring each training problem's success rate across recent rollouts.
+A problem crosses into the ``well-solved'' regime when its moving-average success rate exceeds a threshold $\tau$:
+
+\begin{equation}
+\text{WellSolved}(q) = \mathbf{1}\!\left[\frac{1}{K}\sum_{k=1}^{K} \mathbf{1}[r_k = 1] \geq \tau\right]
+\label{eq:ws}
+\end{equation}
+
+Well-solved problems are excluded from the main GRPO update (which would only reinforce the already-dominant strategy) and redirected to the off-mode track, which applies a diversity-encouraging loss to those problems' rollouts.
+
+\section{Technical Formulation}
+
+\subsection*{Off-Mode Diversity Loss}
+
+For a well-solved problem $q$ with rollouts $\hat{y}_1, \ldots, \hat{y}_M$, the off-mode loss maximizes pairwise embedding distance among solutions:
+\begin{equation}
+\mathcal{L}_{\mathrm{off}}(q) = -\alpha_{\mathrm{off}} \sum_{i < j} \cos\!\left(\mathbf{e}(\hat{y}_i),\, \mathbf{e}(\hat{y}_j)\right)
+\label{eq:off}
+\end{equation}
+where $\mathbf{e}(\hat{y})$ is a fixed encoder embedding of solution $\hat{y}$.
+Minimizing this loss pushes the policy to produce solutions spread widely in embedding space.
+
+\subsection*{Full Objective}
+
+\begin{equation}
+\mathcal{J}(\theta) = \mathcal{J}_{\mathrm{GRPO}}(\theta;\, \mathcal{D}_{\mathrm{main}}) + \lambda \sum_{q \in \mathcal{D}_{\mathrm{off}}} \mathcal{L}_{\mathrm{off}}(q)
+\label{eq:full}
+\end{equation}
+
+where $\mathcal{D}_{\mathrm{main}}$ contains problems with success rate $< \tau$ and $\mathcal{D}_{\mathrm{off}}$ contains problems with success rate $\geq \tau$.
+Both sets are defined per-minibatch; a problem migrates from main to off-mode as its success rate rises.
+
+The GRPO main-track loss is standard proximal policy optimization:
+\begin{equation}
+\mathcal{J}_{\mathrm{GRPO}}(\theta) = \mathbb{E}_{q,\hat{y}}\!\left[\min\!\left(\rho_t A_t,\; \mathrm{clip}(\rho_t, 1-\epsilon, 1+\epsilon)\, A_t\right)\right]
+\label{eq:grpo}
+\end{equation}
+where $\rho_t = \pi_\theta(\hat{y}|q)/\pi_{\theta_{\mathrm{old}}}(\hat{y}|q)$ is the importance ratio and $A_t = r(\hat{y},q) - b(q)$ is the advantage with group mean baseline.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training modifications:}
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Maintain a per-problem success-rate buffer (exponential moving average with $K=20$ rollouts).
+  \item Before each gradient step, partition the minibatch into $\mathcal{D}_{\mathrm{main}}$ and $\mathcal{D}_{\mathrm{off}}$ using Eq.~(\ref{eq:ws}) with $\tau = 0.75$.
+  \item Compute GRPO loss on $\mathcal{D}_{\mathrm{main}}$; compute off-mode diversity loss on $\mathcal{D}_{\mathrm{off}}$ (Eq.~\ref{eq:off}).
+  \item Sum the objectives (Eq.~\ref{eq:full}) and take a single gradient step.
+\end{enumerate}
+
+\textbf{Inference:} The trained policy is used unchanged.
+Diversity is baked into the policy; no special sampling procedure is needed to obtain diverse outputs.
+
+\section{What the Guarantee Says}
+
+The method provides no formal guarantee against mode collapse for all problem distributions.
+The empirical claim is that on hard (level~5) math problems, ROAM-GRPO consistently maintains higher diversity metrics throughout training without sacrificing pass@1 accuracy.
+
+The well-solved routing threshold $\tau$ is a hyperparameter; too low routes problems to off-mode before they are truly well-solved, degrading accuracy; too high delays diversity incentive until after collapse has already occurred.
+The paper recommends $\tau = 0.75$ as a robust default.
+
+\section{Experimental Findings}
+
+Training: Qwen3.5-2B, 1,000 MATH level 5 problems, 100 training episodes.
+
+\begin{center}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Method} & \textbf{p@1} & \textbf{p@8} & \textbf{p@16} & \textbf{Cos.\ dist.} \\
+\midrule
+GRPO & 51.3\% & 71.4\% & 74.8\% & 0.31 \\
+ROAM-GRPO & 52.1\% & 73.2\% & \textbf{79.5\%} & \textbf{0.56} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The largest gain is at $k=16$: ROAM-GRPO compounds diversity gains across samples while vanilla GRPO saturates.
+Cosine distance increases by 81\%, confirming semantic (not merely surface-level) diversity gains.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Threshold $\tau$:} At $\tau = 0.5$, problems are routed off-mode too early; pass@1 drops 1.3\% but p@16 gains only 2.1\%.
+    At $\tau = 0.9$, problems stay on main track too long; diversity gains are halved.
+  \item \textbf{Off-mode loss only:} Applying Eq.~(\ref{eq:off}) to all problems (no routing) degrades pass@1 by 2.8\%, confirming that diversity incentive should be targeted, not uniform.
+  \item \textbf{Compute overhead:} The frozen encoder for off-mode embeddings adds $<3\%$ to per-step wall-clock time.
+  \item \textbf{Generalization:} The routing structure trained on MATH level~5 improves pass@16 by 3.1\% on AIME 2026 out-of-distribution problems, showing the diversity effect transfers.
+\end{itemize}
+
+\section*{Reference}
+J.\ Duan, M.\ Thomson.
+\textbf{ROAM-GRPO: Enforcing Reasoning Diversity in GRPO via Routed Off-mode Approach Mining.}
+arXiv:2611.25926. cs.LG, cs.AI. NeurIPS 2026.
+\url{https://neurips.cc/virtual/2026/172338}
+
+\end{document}

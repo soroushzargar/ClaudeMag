@@ -1,0 +1,195 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-23}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Safety Alignment \textbullet{} Verifiable Rewards \textbullet{} Large Reasoning Models \textbullet{} RLVR \textbullet{} Gradient Projection}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright SAVeR$^2$: Reasoning-based Safety Alignment via Verifiable Rewards}\par\vspace{4pt}
+{\large\itshape\raggedright Four fine-grained verifiable reward signals resolve the safety--reasoning tension in large reasoning models from 1.5B to 671B parameters}\par\vspace{6pt}
+{\small\textbf{By} NeurIPS 2026 Poster}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.07482 \textbullet{} cs.LG, cs.AI \textbullet{} Submitted 5 Nov 2026 \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+SAVeR$^2$ (Safety Alignment via Verifiable Rewards$^2$) addresses the safety--reasoning trade-off in large reasoning models (LRMs) by decomposing the safety objective into four measurable reward components, selecting training data by difficulty, and projecting safety gradients onto the reasoning gradient subspace to prevent conflicts.
+The method scales from 1.5B to 671B parameters, achieving a 93.7\% safety rate while reducing over-refusal by 47\% relative to RLHF and maintaining or improving reasoning benchmark scores.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] LRMs' reasoning capability conflicts with safety training; coarse rewards lead to over-refusal and reasoning degradation.
+  \item[Why it matters:] Reasoning ability and safety alignment are both required; methods that trade one for the other are unacceptable at deployment.
+  \item[Method:] 4 verifiable safety rewards + difficulty-aware data selection + reasoning-preserving gradient projection.
+  \item[Result:] 93.7\% safety rate, 6.4\% over-refusal, MATH-500 preserved at 74.3\% (vs.\ 69.8\% for RLHF).
+  \item[Evidence:] Models 1.5B--671B; evaluated on safety, over-refusal, and MATH-500/GPQA/AIME 2026.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Large reasoning models (LRMs) --- trained with chain-of-thought reinforcement learning to produce explicit multi-step reasoning traces before answering --- present a qualitatively new challenge for safety alignment.
+Standard alignment methods operate on input--output pairs: they teach the model to produce safe outputs given unsafe inputs.
+LRMs, however, reason explicitly \emph{before} producing outputs; a safety alignment method that only checks the output misses the reasoning chain, which may contain the harmful content.
+
+Worse, the RL gradient that teaches the model to reason well (maximize correctness on math problems) often conflicts with the safety gradient.
+Averaging the two in a standard multi-objective loss degrades both objectives simultaneously.
+SAVeR$^2$ addresses both failure modes: it verifies safety at the reasoning-chain level, and it surgically removes the safety gradient's component that conflicts with reasoning.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{SFT safety baselines} train on static refusal demonstrations.
+On adaptive adversarial prompts, the model pattern-matches surface features of unsafe queries rather than understanding the underlying harm.
+
+\textbf{RLHF preference models} provide a continuous reward signal but are coarse: they score entire responses, missing fine-grained reasoning-chain safety, and are gameable by optimizing against the preference model.
+
+\textbf{Coarse binary rewards} (safe/unsafe) produce a training signal too weak to teach nuanced distinctions: a model maximizing binary safety scores learns to refuse broadly rather than precisely.
+
+\textbf{Naive multi-objective training} averages safety and reasoning gradients.
+When these vectors form an obtuse angle, the average points away from both objectives --- a well-known multi-task learning pathology.
+
+\section{Core Mechanism: Four Verifiable Rewards}
+
+SAVeR$^2$ decomposes safety into four independently verifiable components:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{Threat identification:} Does the reasoning chain correctly name the specific harm in the prompt?
+    Measured by a classifier applied to the scratchpad.
+  \item \textbf{Refusal correctness:} Does the refusal target the specific harmful element (not just the topic)?
+    Measured by overlap with harm-specific criteria.
+  \item \textbf{Non-over-refusal:} Does the model respond helpfully to benign prompts resembling unsafe ones?
+    Measured against a held-out benign-query set.
+  \item \textbf{Reasoning integrity:} Is the reasoning chain internally consistent?
+    A verifier checks logical coherence of the scratchpad against the conclusion.
+\end{enumerate}
+
+\section{Technical Formulation}
+
+\subsection*{Combined Objective}
+
+\begin{equation}
+\mathcal{J}(\theta) = \mathcal{J}_R(\theta) + \lambda \sum_{i=1}^{4} w_i \mathcal{J}_{S_i}(\theta)
+\label{eq:combined}
+\end{equation}
+
+where $\mathcal{J}_R$ is the standard reasoning objective (GRPO with math verifiers), $\mathcal{J}_{S_i}$ are the four verifiable safety objectives with per-dimension weights $w_i$, and $\lambda$ controls the safety--reasoning trade-off.
+
+\subsection*{Reasoning-Preserving Gradient Projection}
+
+Let $g_S = \nabla_\theta \sum_i w_i \mathcal{J}_{S_i}$ and $g_R = \nabla_\theta \mathcal{J}_R$.
+Standard training applies $g_S + \lambda g_R$, which degrades reasoning when $g_S \cdot g_R < 0$.
+SAVeR$^2$ projects away the conflicting component:
+\begin{equation}
+\tilde{g}_S = g_S - \frac{g_S \cdot g_R}{\|g_R\|^2}\, g_R
+\label{eq:proj}
+\end{equation}
+
+The projected safety gradient $\tilde{g}_S$ is orthogonal to $g_R$ by construction, so the parameter update
+\begin{equation}
+\theta_{t+1} = \theta_t + \alpha\!\left(\tilde{g}_S + g_R\right)
+\label{eq:update}
+\end{equation}
+cannot decrease the reasoning objective.
+Reasoning performance is preserved as a hard constraint, not a soft regularization term.
+
+\subsection*{Difficulty-Aware Data Selection}
+
+Training data is filtered dynamically to maintain a target success rate range $[p_{\min}, p_{\max}]$ (e.g., $[0.4, 0.7]$) on the current model checkpoint.
+Let $p_q$ denote the model's moving-average success rate on problem $q$:
+\begin{equation}
+q \in \mathcal{D}_{\text{train}} \iff p_{\min} \leq p_q \leq p_{\max}
+\label{eq:difficulty}
+\end{equation}
+
+This keeps training in the ``learning zone'' --- neither trivially easy nor impossibly hard --- which stabilizes RL training dynamics and prevents both reward saturation and vanishing gradients.
+
+\section{Learning or Inference Procedure}
+
+\textbf{Training:}
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Pre-warm with standard reasoning RL (GRPO on math problems).
+  \item Compute dynamic data selection mask using Eq.~(\ref{eq:difficulty}).
+  \item For each minibatch, compute $g_R$ and $\tilde{g}_S$ separately, then apply Eq.~(\ref{eq:update}).
+  \item Monitor the four reward components independently; adjust $w_i$ if one dominates.
+\end{enumerate}
+
+\textbf{Inference:} The trained policy is deployed unchanged.
+The safety improvements are baked into the weights; no inference-time safety filter is added.
+
+\section{What the Guarantee Says}
+
+The gradient projection (Eq.~\ref{eq:proj}) guarantees that the safety update does not decrease the reasoning objective \emph{in expectation over minibatches}.
+No guarantee is provided on worst-case safety failures; the method provides statistical improvement, not formal verification.
+
+The empirical claim is that across a broad distribution of prompts, SAVeR$^2$ achieves a Pareto improvement over prior methods on the safety--reasoning frontier.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Method} & \textbf{Safety} & \textbf{Over-ref.} & \textbf{MATH-500} \\
+\midrule
+SFT baseline & 81.3\% & 18.2\% & 72.1\% \\
+RLHF preference & 87.4\% & 12.1\% & 69.8\% \\
+SAVeR$^2$ (ours) & \textbf{93.7\%} & \textbf{6.4\%} & \textbf{74.3\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+SAVeR$^2$ achieves the best safety rate while simultaneously reducing over-refusal by 47\% and maintaining MATH-500 performance above both baselines.
+The result holds across model sizes from 1.5B to 671B, with larger models showing greater absolute improvements.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Without gradient projection:} Safety rate drops to 89.1\% and MATH-500 falls to 70.4\%, confirming gradient conflict is the dominant failure mode.
+  \item \textbf{Without difficulty selection:} Training becomes unstable at later stages; safety reward saturates early, leaving over-refusal high.
+  \item \textbf{Single reward vs.\ 4 rewards:} Using a single combined reward (identical total reward budget) reduces safety rate to 88.6\%, showing the benefit of fine-grained decomposition.
+  \item \textbf{Scaling:} The gap between SAVeR$^2$ and RLHF grows with model size, suggesting that larger reasoning models benefit more from reasoning-aware safety training.
+\end{itemize}
+
+\section*{Reference}
+(Author list at NeurIPS 2026 proceedings.)
+\textbf{SAVeR$^2$: Reasoning-based Safety Alignment for Large Reasoning Models via Verifiable Rewards.}
+arXiv:2611.07482. cs.LG, cs.AI. NeurIPS 2026.
+\url{https://arxiv.org/abs/2611.07482}
+
+\end{document}

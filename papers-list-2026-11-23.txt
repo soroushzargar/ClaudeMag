@@ -1,0 +1,32 @@
+ML Papers List — 2026-11-23
+Generated for ClaudeMag
+
+1. Language Models Can Rewrite Their Own Weights
+   Authors: Jiajun Fan, Neil He, et al.
+   Venue/ID: arXiv:2611.21885 — cs.LG, cs.AI (submitted 16 Nov 2026)
+   URL: https://arxiv.org/abs/2611.21885
+   Summary: This paper demonstrates that a language model can inspect its own behavior, diagnose failure modes, and edit its own weight matrices—without gradient descent and without retraining. A 27B model correctly identified and repaired a corrupted weight matrix in a targeted test; learning from text-based math problems transferred to six image benchmarks the model never saw, suggesting that self-rewriting computes a general diagnostic routine rather than task-specific memorization. The process runs on a single GPU in a few hours, and self-rewriting capability scales with model size.
+
+2. SAVeR²: Reasoning-based Safety Alignment for Large Reasoning Models via Verifiable Rewards
+   Authors: (NeurIPS 2026 poster; full author list at proceedings)
+   Venue/ID: arXiv:2611.07482 — cs.LG, cs.AI (submitted 5 Nov 2026; NeurIPS 2026 poster)
+   URL: https://arxiv.org/abs/2611.07482
+   Summary: SAVeR² (Safety Alignment via Verifiable Rewards²) addresses the safety-reasoning trade-off in large reasoning models (LRMs). Instead of a single coarse safety reward, it decomposes the safety objective into four fine-grained verifiable reward signals and uses difficulty-aware data selection for training stability. A reasoning-preserving gradient projection mechanism resolves gradient conflicts between safety and reasoning objectives. Experiments on models from 1.5B to 671B parameters show improved safety rates, lower over-refusal, and preserved general reasoning ability compared to prior methods.
+
+3. ROAM-GRPO: Enforcing Reasoning Diversity in GRPO via Routed Off-mode Approach Mining
+   Authors: Jeff Duan, Matt Thomson
+   Venue/ID: NeurIPS 2026 (also arXiv:2611.25926 — cs.LG, cs.AI; submitted ~20 Nov 2026)
+   URL: https://neurips.cc/virtual/2026/172338
+   Summary: ROAM-GRPO augments the GRPO reinforcement-learning algorithm to prevent diversity collapse—the tendency of RLVR fine-tuning to converge on a single low-entropy reasoning mode. The method detects well-solved problems during training and routes them to an "off-mode" track so the main policy update continues to explore new approaches. Training Qwen3.5-2B on 1,000 episodes of MATH level 5, ROAM-GRPO raises peak pass@16 by 4.7% and increases the average cosine distance between correct solutions by 1.5–2× relative to vanilla GRPO.
+
+4. La-JEPA: Compact Robot Policies with Latent World Modeling
+   Authors: (arXiv:2611.08156 author list at paper)
+   Venue/ID: arXiv:2611.08156 — cs.RO, cs.LG (submitted ~8 Nov 2026)
+   URL: https://arxiv.org/abs/2611.08156
+   Summary: La-JEPA builds compact robot manipulation policies by training a JEPA (Joint Embedding Predictive Architecture) latent world model directly from raw observations, then conditioning the policy on predicted latent future states. Despite using far fewer parameters than competing approaches, La-JEPA outperforms LeapBot-WA (10.4B parameters) on the LIBERO-Plus benchmark and achieves superior performance on a 20-task subset of RoboTwin 2.0. The authors extrapolate this advantage to all 50 RoboTwin tasks, confirming the result holds beyond the originally reported subset.
+
+5. Thinking with Visual Primitives
+   Authors: Ruijie Lu, Yiyang Ma, Gang Zeng, Ting Chen, et al. (DeepSeek-AI; Peking University; Tsinghua University)
+   Venue/ID: NeurIPS 2026 poster (released as technical report 30 Apr 2026; NeurIPS presentation Nov 2026)
+   URL: https://neurips.cc/virtual/2026/poster/154630
+   Summary: This paper proposes treating spatial markers—points and bounding boxes—as "minimal units of thought" to be interleaved directly into a multimodal model's reasoning chain, rather than cropping or zooming the image in post-hoc. The method closes what the authors call the Reference Gap: the ambiguity introduced when language-only tokens must refer to dense spatial layouts. Built on DeepSeek-V4-Flash (a Mixture-of-Experts backbone) with KV-cache compression over visual tokens, the model achieves 98.7% accuracy on the authors' spatial reasoning benchmark, outperforming other top models by 1–2 percentage points, while maintaining strong performance on standard multimodal benchmarks.
