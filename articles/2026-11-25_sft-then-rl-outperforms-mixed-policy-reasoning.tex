@@ -1,0 +1,167 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-25}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  SFT-then-RL \textbullet{} Mixed-Policy Training \textbullet{} LLM Reasoning \textbullet{} Optimizer Bug \textbullet{} Reproducibility}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright SFT-then-RL Outperforms Mixed-Policy Methods for LLM Reasoning}\par\vspace{4pt}
+{\large\itshape\raggedright Two bugs in the standard baseline were suppressing performance; after fixes, the sequential pipeline beats every published mixed-policy method by up to 22 points}\par\vspace{6pt}
+{\small\textbf{By} Alexis Limozin, Eduard Durech, Torsten Hoefler, Imanol Schlag, Valentina Pyatkin}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2604.23747 \textbullet{} cs.LG, cs.CL \textbullet{} NeurIPS 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Limozin and colleagues identify an optimizer bug and a loss aggregation bug in the standard SFT-then-RL baseline used in every published mixed-policy comparison.
+After fixing both, sequential SFT-then-RL outperforms LUFFY, ReLIFT, SRFT, and two other mixed-policy methods by up to $+22.2$ points on math benchmarks---calling into question much of the case for interleaved training.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Published comparisons of mixed-policy methods against sequential SFT-then-RL used a buggy baseline, inflating the apparent advantage of mixed approaches.
+  \item[Why it matters:] A large body of recent work has built increasingly complex interleaved training algorithms to close a gap that may not exist.
+  \item[Method:] Identify and correct two bugs (optimizer state reset, loss aggregation); re-evaluate five published mixed-policy methods against the fixed baseline.
+  \item[Result:] +3.8 pts (Qwen2.5-Math-7B); +22.2 pts (Llama-3.1-8B) over best mixed-policy method; 50-step truncated variant beats mixed approaches at 0.3$\times$ FLOPs.
+  \item[Evidence:] OpenR1-Math benchmark; Qwen2.5-Math-7B and Llama-3.1-8B; code at github.com/alek6kun/sft\_then\_rl.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+RLVR training for LLM reasoning follows a standard recipe: supervised fine-tuning on correct reasoning chains, followed by policy gradient updates guided by a verifiable reward.
+The simplest instantiation---sequential SFT-then-RL---was reported to perform worse than more complex ``mixed-policy'' methods that interleave SFT and RL data or updates within a single stage.
+This motivated a wave of work designing ever-more-sophisticated interleaving algorithms.
+
+This paper traces the apparent advantage of mixed-policy methods to implementation errors in the sequential baseline.
+Once those errors are corrected, the picture reverses: sequential SFT-then-RL is both simpler and stronger.
+
+\section{Why Existing Approaches Fall Short}
+
+Mixed-policy methods were designed to solve a problem they did not need to solve.
+The leading hypothesis in prior work was that the two-stage sequential pipeline fails because the RL stage is initialized from a checkpoint that has ``overfit'' to SFT data, limiting its ability to explore new strategies.
+Mixed-policy methods addressed this by keeping the policy on-distribution throughout training.
+
+The alternative hypothesis---that the sequential baseline was simply misconfigured---was not tested.
+This paper tests it, finding that the misconfiguration explains the entire gap.
+
+\section{The Two Bugs}
+
+\subsection*{Bug 1: Stale Optimizer State}
+
+When the pipeline transitions from SFT to RL, the optimizer should be reset.
+SFT uses cross-entropy loss; RL uses a policy gradient loss with advantages as coefficients.
+The gradient statistics accumulated by AdamW during SFT reflect a fundamentally different loss landscape.
+Using those statistics to initialize the RL phase produces miscalibrated step sizes and distorted momentum, destabilizing the first few hundred RL updates.
+
+The fix: zero the optimizer's first and second moment estimates at the SFT-to-RL transition and restart the learning rate schedule.
+
+\subsection*{Bug 2: Loss Aggregation}
+
+Policy gradient loss must normalize over sequence length to weight all training examples equally, regardless of how long their responses are.
+The buggy implementation used batch-level mean reduction (dividing total loss by total tokens in a minibatch), rather than sequence-level mean reduction (averaging per-sequence means across the minibatch):
+
+\begin{equation}
+\text{Buggy:}\quad \mathcal{L} = \frac{\sum_{i,t} A_{i,t} \log \pi_\theta(y_{i,t})}{\sum_i |y_i|}
+\end{equation}
+
+\begin{equation}
+\text{Fixed:}\quad \mathcal{L} = \frac{1}{|B|}\sum_i \frac{1}{|y_i|}\sum_t A_{i,t} \log \pi_\theta(y_{i,t})
+\end{equation}
+
+Batch-level reduction down-weights long responses: a 400-token reasoning chain contributes the same total loss as four 100-token chains, but four times less per sequence.
+Since RLVR is intended to encourage long, correct reasoning chains, this bug systematically penalizes the behavior being trained.
+
+\section{Learning or Inference Procedure}
+
+The fixed SFT-then-RL pipeline:
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item Train with cross-entropy on SFT dataset to convergence.
+  \item \textbf{Reset optimizer state.} Restart learning rate schedule.
+  \item Train with GRPO using correctness reward and \textbf{sequence-level loss normalization}.
+  \item Evaluate on held-out math benchmarks.
+\end{enumerate}
+
+The truncated variant runs only 50 RL steps in stage~3.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Method} & \textbf{Qwen-7B} & \textbf{Llama-8B} \\
+\midrule
+LUFFY & 61.4 & 46.3 \\
+ReLIFT & 62.1 & 47.1 \\
+SRFT & 62.8 & 48.3 \\
+SFT-then-RL (buggy) & 59.2 & 46.1 \\
+SFT-then-RL (fixed) & \textbf{66.6} & \textbf{70.5} \\
+SFT-then-RL-50 (fixed) & 65.1 & 68.4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 22.2-point gap on Llama-3.1-8B reflects that model's higher sensitivity to the optimizer bug---its SFT checkpoint is farther from the RL-optimal initialization than Qwen2.5-Math-7B, so stale optimizer state causes larger initial instability.
+
+The 50-step truncated variant achieves 97.7\% of the full fixed pipeline's performance at 0.3$\times$ FLOPs.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Optimizer bug alone:} Fixing only the optimizer reset improves performance by +4.1 points on Qwen-7B.
+  \item \textbf{Loss bug alone:} Fixing only the normalization improves performance by +2.8 points.
+  \item \textbf{Both bugs:} Combined fix produces +7.4 points---confirming super-additive interaction.
+  \item \textbf{Generalization:} The fixed pipeline generalizes beyond the OpenR1-Math training distribution: on AIME 2026, the fixed pipeline outperforms the best mixed-policy method by +6.2 points.
+  \item \textbf{Stability:} Training loss variance in the first 100 RL steps is $3.4\times$ lower with the optimizer reset, confirming the stabilization mechanism.
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+The paper does not claim that mixed-policy methods have no merit in principle.
+It claims that the specific comparisons made in prior work were confounded by implementation errors.
+Mixed-policy methods may still offer advantages in settings with very limited SFT data, non-stationary reward functions, or online environments where the SFT checkpoint ages quickly.
+But the burden of proof is now on mixed-policy methods to demonstrate advantages over a correctly implemented sequential baseline.
+
+\section*{Reference}
+A.\ Limozin, E.\ Durech, T.\ Hoefler, I.\ Schlag, V.\ Pyatkin.
+\textbf{SFT-then-RL Outperforms Mixed-Policy Methods for LLM Reasoning.}
+arXiv:2604.23747. cs.LG, cs.CL. NeurIPS 2026.
+\url{https://arxiv.org/abs/2604.23747}
+
+\end{document}

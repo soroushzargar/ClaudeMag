@@ -1,0 +1,32 @@
+ML Papers List — 2026-11-25
+Generated for ClaudeMag
+
+1. Leaderboard Hacking: Preference-Based Model Evaluations are Vulnerable to Manipulation
+   Authors: (NeurIPS 2026 oral; full author list at proceedings)
+   Venue/ID: arXiv:2611.14769 — cs.LG, cs.AI (NeurIPS 2026 oral)
+   URL: https://arxiv.org/abs/2611.14769
+   Summary: This paper demonstrates that arena-style leaderboards—which aggregate pairwise preference votes using the Bradley–Terry model—are systematically vulnerable to three distinct manipulation strategies: strategic voting (submitting targeted votes to boost a model's rank), strategic prompting (selecting prompts that disproportionately favor a particular model), and strategic nomination (inserting irrelevant decoy models to distort the ranking). Each individual attack can boost a model's rank by up to 15–21 places; combined, the three strategies can move a model up by as many as 45 places. The paper proves these vulnerabilities hold for any pairwise preference-based evaluation that uses Bradley–Terry scoring, raising broad concerns about the trustworthiness of widely used benchmarks such as LMArena.
+
+2. Unbundling Multimodal Vision Encoding
+   Authors: Ellis Brown, Chris Hoang, Shang-Wen Li, Mike Lewis, Marjan Ghazvininejad, Luke Zettlemoyer, Lucas Beyer, Mengye Ren, Jakob Verbeek, Saining Xie, Hu Xu (NYU; Meta FAIR)
+   Venue/ID: arXiv:2611.17334 — cs.CV, cs.LG (submitted ~18 Nov 2026)
+   URL: https://arxiv.org/abs/2611.17334
+   Summary: Standard multimodal models bundle three separate design decisions into a single vision encoder component: a visual prior from upstream pretraining, dedicated vision capacity, and the placement of that capacity relative to language-vision fusion. This paper disentangles the three and evaluates each independently. The main result is that dedicated vision capacity trained jointly with the language backbone and inserted early within it performs comparably to a separately pretrained pre-fusion encoder, while also reducing time to first token. An encoder-free 1.7B ablation trails the best configuration by 5.4 points on average VQA, confirming that dedicated capacity—not upstream visual pretraining—is the load-bearing ingredient.
+
+3. SFT-then-RL Outperforms Mixed-Policy Methods for LLM Reasoning
+   Authors: Alexis Limozin, Eduard Durech, Torsten Hoefler, Imanol Schlag, Valentina Pyatkin
+   Venue/ID: arXiv:2604.23747 — cs.LG, cs.CL (submitted 26 Apr 2026; NeurIPS 2026 poster)
+   URL: https://arxiv.org/abs/2604.23747
+   Summary: Mixed-policy training methods for LLM reasoning—which interleave SFT and RL updates within a single training stage—have been reported as superior to the standard sequential SFT-then-RL pipeline. This paper argues the comparison was unfair: the SFT-then-RL baselines in prior work contained an optimizer bug and a loss aggregation bug that substantially degraded their performance. After correcting both bugs, the standard pipeline outperforms every published mixed-policy method by +3.8 points on math benchmarks with Qwen2.5-Math-7B and by +22.2 points with Llama-3.1-8B. Even a truncated SFT-then-RL variant with only 50 RL steps beats the best mixed-policy method while using fewer FLOPs, calling into question much of the case for more complex interleaved approaches.
+
+4. Nemotron-Cascade: Scaling Cascaded Reinforcement Learning for General-Purpose Reasoning Models
+   Authors: (NVIDIA Research; full author list at arXiv)
+   Venue/ID: arXiv:2512.13607 — cs.CL, cs.LG (submitted 15 Dec 2025; NeurIPS 2026 oral)
+   URL: https://arxiv.org/abs/2512.13607
+   Summary: Nemotron-Cascade proposes a sequential, domain-by-domain RL training pipeline—Cascade RL—that sidesteps the engineering complexity introduced by mixing cross-domain data with heterogeneous verification latencies and response lengths. The pipeline trains domains in sequence (SFT → RLHF → Instruction Following RL → Math RL → Code RL → Software Engineering RL), and experiments show that later domain-specific stages rarely degrade the performance attained in earlier ones. The design allows per-domain hyperparameter tuning and scales to general-purpose reasoning across math, code, and software engineering tasks with a single coherent training framework.
+
+5. Reinforcement Learning Unlearns Corrupted SFT Reasoning
+   Authors: (arXiv:2611.26756 author list at paper)
+   Venue/ID: arXiv:2611.26756 — cs.LG, cs.CL (submitted ~19 Nov 2026)
+   URL: https://arxiv.org/abs/2611.26756
+   Summary: This paper tests whether RL fine-tuning can recover correct reasoning ability when a model has been SFT-trained on deliberately corrupted chain-of-thought traces. The key finding is that SFT accuracy on corrupted data is a poor predictor of post-RL accuracy: models with highly corrupted SFT traces can recover near-full reasoning performance through RL, while models with clean SFT traces show only modest RL gains. The authors interpret this as evidence that SFT primarily establishes structural output format (form), while RL independently rediscovers functional reasoning (function). The separation has implications for diagnosing training failures and for understanding how much of reasoning capability is attributable to each training stage.

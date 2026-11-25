@@ -1,0 +1,168 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-25}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Cascade RL \textbullet{} Sequential Training \textbullet{} Multi-Domain Reasoning \textbullet{} NVIDIA \textbullet{} PPO}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Nemotron-Cascade: Scaling Cascaded Reinforcement Learning for General-Purpose Reasoning}\par\vspace{4pt}
+{\large\itshape\raggedright Sequential, domain-by-domain RL training eliminates cross-domain interference and enables per-domain tuning---later stages rarely degrade earlier gains}\par\vspace{6pt}
+{\small\textbf{NVIDIA Research}}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2512.13607 \textbullet{} cs.CL, cs.LG \textbullet{} NeurIPS 2026 Oral}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+NVIDIA Research proposes Cascade RL: a training pipeline that runs domain-specific RL stages sequentially---SFT, then RLHF, then instruction-following RL, then math RL, code RL, and software-engineering RL---rather than mixing all domains into a single RL run.
+Later stages rarely degrade earlier gains, and per-domain hyperparameter tuning consistently improves results.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Cross-domain RL mixing introduces heterogeneous verification latency and response lengths, destabilizing training and preventing per-domain optimization.
+  \item[Why it matters:] General-purpose reasoning models must master math, code, and software engineering---a training framework that scales to all three cleanly is a production necessity.
+  \item[Method:] Sequential domain-wise RL (Cascade RL): each domain trains in isolation using its own verifiers and hyperparameters.
+  \item[Result:] 70B model achieves 84.2\% on MATH-500, 78.6\% on HumanEval+, 41.3\% on SWE-bench Verified---outperforming mixed RL on all three.
+  \item[Evidence:] 7B to 70B models; six sequential RL stages; catastrophic forgetting $<$1 point on re-evaluation of earlier benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Training a single model to excel at math reasoning, code generation, instruction following, and repository-level software engineering simultaneously is one of the central challenges in LLM development.
+The na\"ive approach---mixing prompts from all domains into a single RL training run---appears attractive: a unified reward signal should, in principle, produce a model that balances all capabilities.
+
+In practice, this mixing strategy runs into three engineering obstacles that compound as the domain set grows:
+verification latency heterogeneity, response length heterogeneity, and conflicting gradient signals across domains.
+Cascade RL sidesteps all three by treating each domain as a separate sequential training stage.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Cross-domain mixing} creates a bottleneck at the slowest verifier.
+Math verification completes in milliseconds; software engineering verification requires running test suites in a sandboxed environment, which takes seconds.
+Mixed batches spend most of their wall-clock time waiting for SWE verifiers, inflating training time for all domains.
+
+\textbf{Length heterogeneity} in mixed batches produces gradients of wildly varying magnitude.
+A 100-token math solution and a 3,000-token SWE patch compete in the same minibatch.
+Loss normalization schemes that handle both correctly are non-trivial to design and highly sensitive to hyperparameter choices.
+
+\textbf{Uniform hyperparameters} cannot be simultaneously optimal for domains with different reward sparsity, response length, and verifier noise levels.
+Math RL converges quickly with high KL penalty; SWE RL requires a lower penalty and longer rollouts.
+
+\section{Cascade RL Pipeline}
+
+The Cascade RL pipeline proceeds through six sequential stages.
+Each stage begins from the checkpoint of the previous stage.
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt]
+  \item \textbf{SFT:} Broad instruction fine-tuning; establishes output format.
+  \item \textbf{RLHF:} Human preference alignment; general behavior calibration.
+  \item \textbf{Instruction Following RL:} Rule-based rewards for format compliance and instruction coverage.
+  \item \textbf{Math RL:} Symbolic verifier; binary correctness reward per problem.
+  \item \textbf{Code RL:} Execution-based verifier; reward proportional to test-case pass rate.
+  \item \textbf{SWE RL:} Repository-level test suite verifier; reward proportional to passing tests after patch application.
+\end{enumerate}
+
+Each stage uses domain-specific data and verifiers only.
+Hyperparameters (learning rate, KL penalty weight, rollout length) are tuned independently for each stage using a brief sweep at the stage's start.
+
+\section{Technical Formulation}
+
+Each RL stage uses PPO with a domain-specific reward:
+
+\textbf{Math RL:} $r = \mathbf{1}[\text{answer correct}]$ (symbolic equality)
+
+\textbf{Code RL:} $r = |\{t : t\text{ passes}\}| / |\{t : t\in\text{test suite}\}|$
+
+\textbf{SWE RL:} $r = |\{t : t\text{ passes after patch}\}| / |\{t : t\in\text{repo tests}\}|$
+
+The KL penalty $\beta$ between the current policy $\pi_\theta$ and the reference policy $\pi_\text{ref}$ is set higher for earlier stages to prevent large deviations from the SFT checkpoint:
+
+\begin{equation}
+\mathcal{J}(\theta) = \mathbb{E}[r] - \beta\, \mathrm{KL}(\pi_\theta \| \pi_\text{ref})
+\end{equation}
+
+$\beta$ is tuned per domain; typical values are $\beta = 0.05$ for Math RL and $\beta = 0.02$ for SWE RL.
+
+\section{Why Later Stages Preserve Earlier Gains}
+
+The empirical finding that later stages rarely degrade earlier benchmarks is explained by two mechanisms.
+First, domain-specific RL stages update primarily the parameters most responsive to domain-specific reward gradients, leaving parameters encoding prior-domain capabilities relatively stable.
+Second, the sequential structure ensures that each new domain trains on a checkpoint that already has strong prior-domain representations; the new domain's gradients reinforce rather than replace them.
+
+The paper also shows that stage order matters: running SWE RL before Math RL degrades MATH-500 by 3.1 points, suggesting that building foundation reasoning capabilities first makes later domain specialization more stable.
+
+\section{Experimental Findings}
+
+Results for the 70B Nemotron-Cascade model:
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Benchmark} & \textbf{Cascade} & \textbf{Mixed} & \textbf{SFT} \\
+\midrule
+MATH-500 & \textbf{84.2} & 81.7 & 72.3 \\
+HumanEval+ & \textbf{78.6} & 76.4 & 65.1 \\
+SWE-bench Verified & \textbf{41.3} & 37.8 & 24.6 \\
+IFEval (strict) & \textbf{83.1} & 80.9 & 78.4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Cascade RL outperforms the mixed RL baseline on all four benchmarks.
+The SWE-bench result ($+3.5$ over mixed) is the largest absolute gain, reflecting that SWE verification is most disruptive in mixed-batch training.
+
+Re-evaluating MATH-500 after the final SWE RL stage shows only a $-0.7$-point regression from the Math RL checkpoint, confirming minimal catastrophic forgetting.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Stage order:} Reversed order (SWE $\rightarrow$ Code $\rightarrow$ Math $\rightarrow$ \ldots) degrades MATH-500 by 3.1 points.
+  \item \textbf{Shared hyperparameters:} Using uniform $\beta$ and learning rate across all stages degrades average benchmark performance by 1.8 points.
+  \item \textbf{KL ablation:} Removing KL penalty from Math RL gives $+1.2$ on MATH-500 but $-4.3$ on IFEval, confirming domain-specific tuning necessity.
+  \item \textbf{Model scale:} A 7B Cascade model achieves 73.1\% on MATH-500 and 61.4\% on HumanEval+, confirming the cascade structure scales down without architectural modification.
+\end{itemize}
+
+\section*{Reference}
+NVIDIA Research.
+\textbf{Nemotron-Cascade: Scaling Cascaded Reinforcement Learning for General-Purpose Reasoning Models.}
+arXiv:2512.13607. cs.CL, cs.LG. NeurIPS 2026 (oral).
+\url{https://arxiv.org/abs/2512.13607}
+
+\end{document}

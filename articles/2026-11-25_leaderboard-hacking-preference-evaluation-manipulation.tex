@@ -1,0 +1,162 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-25}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Leaderboard Manipulation \textbullet{} Bradley-Terry \textbullet{} LMArena \textbullet{} Evaluation Integrity \textbullet{} Preference Aggregation}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Leaderboard Hacking: Preference-Based Model Evaluations Are Vulnerable to Manipulation}\par\vspace{4pt}
+{\large\itshape\raggedright Three targeted attack strategies can boost a model's arena rank by up to 45 places, exposing Bradley--Terry scoring as structurally gameable}\par\vspace{6pt}
+{\small\textbf{NeurIPS 2026 Oral}}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.14769 \textbullet{} cs.LG, cs.AI \textbullet{} NeurIPS 2026 Oral}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Arena-style leaderboards have become the dominant benchmark for comparing large language models, yet their underlying Bradley--Terry scoring mechanism is structurally vulnerable to three distinct manipulation strategies.
+Each strategy alone moves a model 15--21 positions; combined, they produce rank boosts of up to 45 places---enough to elevate a median model into the top five.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Arena leaderboards aggregate pairwise preferences with Bradley--Terry; the statistical mechanism is gameable by any actor who controls even a small fraction of the data.
+  \item[Why it matters:] Leaderboard rank is widely used as a proxy for model quality in research, procurement, and media coverage---manipulation distorts all downstream decisions.
+  \item[Method:] Three attack strategies: strategic voting, strategic prompting, and strategic nomination; each exploits a different data-injection point.
+  \item[Result:] Each attack raises rank by 15--21 places; all three combined raise rank by up to 45 places.
+  \item[Evidence:] Simulated LMArena environment; 72 models; 50,000 preference votes; results replicated across starting rank positions.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+Arena-style leaderboards---most prominently LMArena---have largely displaced fixed benchmark suites as the community's preferred tool for comparing large language models.
+Their appeal is intuitive: rather than testing on a frozen dataset that may be contaminated by training data, they aggregate organic human preferences expressed through pairwise battles.
+The Bradley--Terry model converts these preferences into a global ranking that is updated continuously as new votes arrive.
+
+This paper argues that the apparent robustness of human-preference aggregation is illusory.
+The Bradley--Terry model is a maximum-likelihood estimator trained on the win/loss matrix it is given.
+Whoever controls what prompts enter the arena, how votes are cast, and which models compete controls the data the estimator sees.
+If that control is exercised strategically, the resulting ranking can be steered far from any honest quality ordering.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Rate limiting and bot detection} constrain the volume of a single attacker's contributions, but the strategies documented here achieve large rank gains with realistic budgets.
+A 10\% vote-budget fraction is sufficient to move a model 8--12 places.
+
+\textbf{Rater quality weighting} (downweighting low-quality or inconsistent raters) does not address strategic voting, because an attacker who provides internally consistent but biased votes is indistinguishable from a genuine user with strong preferences.
+
+\textbf{Bradley--Terry extensions} (Davidson ties, weighted variants) inherit the same structural vulnerability because the attack operates on the win-probability matrix, not on specific estimator parameters.
+
+\section{The Three Attack Strategies}
+
+\textbf{Strategic Voting.}
+The attacker submits pairwise votes using an oracle policy: upvote the target model against strong competitors (which raises the target's estimated win probability against those models) and vote in unrelated battles in ways that benefit the target's relative standing.
+An attacker need not vote in every battle involving the target---targeted votes against the most influential competitors have outsized effect.
+
+\textbf{Strategic Prompting.}
+The attacker preferentially submits prompts drawn from a portfolio known to elicit strong responses from the target model.
+If the target excels at structured reasoning and poorly-performing models struggle with it, flooding the arena with structured reasoning prompts shifts the battle distribution in the target's favor without casting a single strategic vote.
+
+\textbf{Strategic Nomination.}
+The attacker registers decoy models that are systematically weak against specific competitors but strong against the target.
+Because Bradley--Terry is a global estimator, the presence of a model that beats competitor $A$ but loses to the target inflates the target's inferred strength relative to $A$---even if the target has never directly competed with $A$.
+
+\section{Technical Formulation}
+
+\subsection*{Bradley--Terry Model}
+
+Let $\beta_i > 0$ be the ``strength'' parameter for model $i$.
+The probability that model $i$ beats model $j$ is:
+\begin{equation}
+P(i \succ j) = \frac{\beta_i}{\beta_i + \beta_j}
+\label{eq:bt}
+\end{equation}
+Given observed win counts $w_{ij}$ (wins of $i$ against $j$), the maximum-likelihood estimates $\hat{\beta}_i$ maximize:
+\begin{equation}
+\ell(\boldsymbol{\beta}) = \sum_{i,j} w_{ij} \log\frac{\beta_i}{\beta_i + \beta_j}
+\label{eq:btll}
+\end{equation}
+
+\subsection*{Rank Sensitivity}
+
+The paper shows that a perturbation $\delta W$ to the win matrix produces a rank change that grows as $O(\log N)$ in the number of models $N$.
+For an arena of 72 models, a vote budget of 10\% of total votes can achieve a rank change of 8--12 positions through strategic voting alone.
+
+\section{Experimental Findings}
+
+The evaluation uses a simulated LMArena environment: 72 models, 50,000 preference votes, pairwise battles drawn from a Zipf-distributed prompt pool.
+The target model starts at median rank (rank 36).
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Attack} & \textbf{Median gain} & \textbf{Max gain} \\
+\midrule
+Strategic voting & +13.2 & +21 \\
+Strategic prompting & +10.8 & +18 \\
+Strategic nomination & +7.4 & +15 \\
+All three combined & +31.6 & \textbf{+45} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Combined attacks are super-additive: the three strategies interact to amplify each other's effects.
+Results are robust across starting rank positions from rank~10 to rank~65.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Vote budget:} At 20\% of the optimal vote budget, rank gains are 5--8 positions---well within the range that affects leaderboard visibility.
+  \item \textbf{Model pool size:} The logarithmic growth prediction holds empirically: 100-model arenas show 10\% higher maximum rank gains than 72-model arenas.
+  \item \textbf{Partial execution:} Running only strategic voting (the simplest attack) achieves 70\% of the combined attack's rank gain.
+  \item \textbf{Mitigation attempts:} The authors test three candidate mitigations (vote rate limiting, rater quality weighting, and nomination limits) and find that none reduces rank gains below 5 positions for any single attack.
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+There is no formal impossibility result ruling out manipulation-resistant pairwise preference aggregation.
+The paper shows that the specific statistical mechanism currently used (Bradley--Terry with maximum-likelihood estimation) is vulnerable, and that the natural mitigations are insufficient.
+The authors call for adversarial robustness to be treated as a first-class design criterion alongside statistical efficiency in future leaderboard design.
+
+\section*{Reference}
+\textbf{Leaderboard Hacking: Preference-Based Model Evaluations Are Vulnerable to Manipulation.}
+arXiv:2611.14769. cs.LG, cs.AI. NeurIPS 2026 (oral).
+\url{https://arxiv.org/abs/2611.14769}
+
+\end{document}

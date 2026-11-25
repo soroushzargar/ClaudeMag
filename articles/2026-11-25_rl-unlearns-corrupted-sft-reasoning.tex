@@ -1,0 +1,162 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-25}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  SFT Corruption \textbullet{} RLVR \textbullet{} Reasoning Recovery \textbullet{} Form vs.\ Function \textbullet{} Data Quality}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Reinforcement Learning Unlearns Corrupted SFT Reasoning}\par\vspace{4pt}
+{\large\itshape\raggedright RL recovers near-full reasoning from corrupted SFT traces, revealing that SFT installs output format while RL independently discovers functional reasoning}\par\vspace{6pt}
+{\small\color{keywordgray}arXiv:2611.26756 \textbullet{} cs.LG, cs.CL \textbullet{} submitted 19 November 2026}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+A model SFT-trained on heavily corrupted chain-of-thought traces recovers near-full reasoning accuracy through RL fine-tuning.
+SFT accuracy is a poor predictor of post-RL accuracy, suggesting that SFT installs structural output format while RL independently rediscovers functional reasoning---two separable contributions from two separable training stages.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] The standard view holds that SFT trace quality determines post-RL performance; this motivates expensive chain-of-thought curation.
+  \item[Why it matters:] If SFT trace content is not load-bearing, teams are over-investing in data curation and misidentifying training failure modes.
+  \item[Method:] Five corruption levels on GSM8K SFT data; measure pre-RL and post-RL accuracy; diagnostic attention ablations.
+  \item[Result:] Post-RL accuracy stays within 12 points of clean-data performance even at full SFT corruption; SFT$\to$post-RL correlation is $r = 0.41$.
+  \item[Evidence:] GSM8K; GRPO; binary correctness reward; five corruption levels from 20\% step replacement to full noise.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The two-stage SFT-then-RL recipe for training reasoning LLMs is widely used, but the relative contributions of each stage are poorly understood.
+The standard assumption is that SFT quality determines the ceiling on post-RL performance: a model SFT-trained on correct, high-quality chain-of-thought traces starts RL from a better initialization than one trained on noisy or incorrect traces.
+
+This assumption has shaped significant research investment.
+Teams expend substantial effort curating, filtering, and distilling high-quality SFT data for reasoning tasks, on the grounds that every quality improvement in the SFT set propagates to post-RL performance.
+
+This paper tests the assumption with a controlled corruption study and finds it largely wrong.
+RL is a powerful enough optimizer to recover most reasoning ability from a poor initialization, as long as the SFT stage has established the structural scaffolding of step-by-step responses.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{SFT-focused data curation} has been the dominant response to reasoning failure.
+When a trained model performs poorly, the first diagnostic is typically the SFT dataset---is it large enough, is it clean, does it cover the right distribution?
+This paper suggests the RL stage should be the first diagnostic instead.
+
+\textbf{Distillation from strong teachers} (using a large model's correct reasoning chains as SFT data for a smaller model) is expensive but assumed to be necessary for good reasoning.
+The corruption results suggest the content of the teacher's chains may matter less than the structural format they provide.
+
+\textbf{Format-only SFT} has not been studied as a deliberate design choice.
+The ablation in this paper shows that training exclusively on format---correct step-by-step structure with blank content---yields post-RL accuracy of 76.3\%, close to full-corruption results.
+
+\section{Corruption Study Design}
+
+Five corruption levels are applied to the GSM8K SFT training set:
+
+\begin{center}
+\small
+\begin{tabular}{lp{5cm}}
+\toprule
+\textbf{Level} & \textbf{Transformation} \\
+\midrule
+0 & Original correct chain-of-thought \\
+1 & 20\% of intermediate steps replaced with random numbers \\
+2 & 50\% of intermediate steps replaced \\
+3 & Entire reasoning chain replaced; correct final answer kept \\
+4 & Entire reasoning chain and final answer replaced (full noise) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For each level, the same base LM is SFT-trained on the corrupted dataset, then RL-trained using GRPO with a binary correctness reward on GSM8K.
+
+\section{Technical Formulation}
+
+The RL phase uses GRPO with the standard RLVR objective.
+The reward $r(y, q) = \mathbf{1}[\text{final answer of } y \text{ matches ground truth for } q]$ is binary, operating only on the final numeric answer.
+The RL stage has no access to the SFT corruption level and cannot directly evaluate intermediate reasoning steps.
+
+The key diagnostic is the correlation between pre-RL accuracy (SFT model performance on GSM8K) and post-RL accuracy.
+A high correlation would indicate that RL merely amplifies what SFT installs; a low correlation indicates RL discovers reasoning independently.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrl}
+\toprule
+\textbf{Level} & \textbf{SFT acc.} & \textbf{Post-RL} & \textbf{$\Delta$} \\
+\midrule
+0 (clean) & 68.4\% & 84.7\% & +16.3 \\
+1 (20\% corr.) & 61.2\% & 83.9\% & +22.7 \\
+2 (50\% corr.) & 52.8\% & 82.4\% & +29.6 \\
+3 (chain repl.) & 41.3\% & 80.1\% & +38.8 \\
+4 (full noise) & 23.1\% & 72.6\% & +49.5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Post-RL accuracy spans only a 12.1-point range (72.6\%--84.7\%) across corruption levels that span a 45.3-point range in SFT accuracy.
+The correlation between SFT accuracy and post-RL accuracy is $r = 0.41$.
+
+Notably, the RL improvement delta \emph{increases} with corruption severity: more corrupted SFT checkpoints benefit more from RL, as if RL has more to fix.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Format-only SFT:} Training on correct step-by-step structure with blank content yields post-RL accuracy of 76.3\%, close to level~3 (80.1\%), confirming that format is the primary SFT contribution.
+  \item \textbf{No SFT:} RL without any SFT pre-training yields 61.4\%---substantially lower than any SFT-then-RL variant, confirming that format scaffolding (even from corrupted data) is a necessary precondition.
+  \item \textbf{Corruption type:} Shuffled steps (content preserved, order disrupted) yield 81.2\% post-RL; replaced steps (content disrupted) yield 80.1\%, suggesting content is marginally more important than ordering, but both are recoverable.
+  \item \textbf{Attention patterns:} At corruption levels~3--4, attention over corrupted intermediate steps decreases during SFT itself, suggesting the model partially ignores corrupted content at the representational level.
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+The paper does not argue that SFT trace quality is irrelevant.
+The 12.1-point post-RL range confirms that quality still matters---a clean SFT trace yields meaningfully better post-RL performance than full noise.
+The claim is that the marginal value of SFT trace quality is much lower than commonly assumed, and that the relationship is non-linear: moderate corruption (level~1--2) causes almost no post-RL degradation, while severe corruption (level~4) causes only a 12-point loss.
+
+The implications are most practical for settings where high-quality SFT data is expensive or unavailable.
+The paper suggests that a format-correct but content-imperfect SFT set may be a viable substitute---especially when RL training is planned for a subsequent stage.
+
+\section*{Reference}
+\textbf{Reinforcement Learning Unlearns Corrupted SFT Reasoning.}
+arXiv:2611.26756. cs.LG, cs.CL. Submitted 19 November 2026.
+\url{https://arxiv.org/abs/2611.26756}
+
+\end{document}

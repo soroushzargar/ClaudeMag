@@ -1,0 +1,171 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,top=2.4cm,bottom=2cm,columnsep=0.6cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{rulered}{RGB}{180,30,30}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{keywordgray}{RGB}{100,100,100}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textsc{\small Claude Mag}}
+\fancyhead[C]{\small\textit{Machine Learning Research Digest}}
+\fancyhead[R]{\small 2026-11-25}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.8pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{rulered}}{}{0pt}{}%
+  [\vspace{-4pt}\color{rulered}\rule{\columnwidth}{0.4pt}]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\hypersetup{colorlinks=true,urlcolor=rulered,linkcolor=black}
+
+\begin{document}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+{\small\color{keywordgray}\textbf{Keywords:}
+  Vision Encoder \textbullet{} Multimodal LLM \textbullet{} Visual Pretraining \textbullet{} Architecture \textbullet{} Inference Efficiency}\par\vspace{4pt}
+
+{\LARGE\bfseries\raggedright Unbundling Multimodal Vision Encoding}\par\vspace{4pt}
+{\large\itshape\raggedright Dedicated vision capacity placed early in the backbone and trained jointly matches a pretrained encoder---making upstream visual pretraining unnecessary}\par\vspace{6pt}
+{\small\textbf{By} Ellis Brown, Chris Hoang, Shang-Wen Li, Mike Lewis, Marjan Ghazvininejad, Luke Zettlemoyer, Lucas Beyer, Mengye Ren, Jakob Verbeek, Saining Xie, Hu Xu}\par\vspace{2pt}
+{\small\color{keywordgray}arXiv:2611.17334 \textbullet{} cs.CV, cs.LG \textbullet{} NYU; Meta FAIR}
+\par\vspace{2pt}\noindent{\color{rulered}\rule{\columnwidth}{0.6pt}}\vspace{6pt}
+
+Brown, Hoang, Li, et al.\ disentangle three design decisions that standard vision encoders conflate---visual prior, dedicated capacity, and placement within the model.
+The key result: dedicated vision capacity trained jointly with the backbone and inserted early matches a separately pretrained CLIP encoder, while reducing time to first token by 13\%.
+
+\begin{mdframed}[backgroundcolor=boxgray,linecolor=rulered,linewidth=1pt,
+    innerleftmargin=6pt,innerrightmargin=6pt,
+    innertopmargin=6pt,innerbottommargin=6pt]
+\textbf{\small AT A GLANCE}\par\vspace{4pt}
+\begin{description}[leftmargin=0pt,labelsep=4pt,itemsep=2pt,parsep=0pt,
+    font=\small\bfseries]
+  \item[Problem:] Standard VLMs treat the vision encoder as a single monolithic component, conflating upstream pretraining, dedicated capacity, and placement.
+  \item[Why it matters:] If upstream visual pretraining is not load-bearing, the training pipeline can be simplified and latency reduced.
+  \item[Method:] Factorize encoder design into three axes (prior, capacity, placement); train matched-budget variants and evaluate each.
+  \item[Result:] Early-joint dedicated capacity (no upstream prior) matches CLIP pre-fusion baseline to within 0.3 points on average VQA at 0.87$\times$ inference latency.
+  \item[Evidence:] 1.7B backbone; matched FLOPs; five architecture variants; general VQA, visual hallucination, and vision-centric benchmarks.
+\end{description}
+\end{mdframed}
+
+\section{The Big Picture}
+
+The modern multimodal language model is almost universally built from two components: a large pretrained language model and a separately pretrained visual encoder, typically a CLIP ViT.
+The standard view is that the CLIP encoder provides an essential inductive bias from large-scale image--text pretraining, bootstrapping the multimodal learning process.
+
+This paper questions that view.
+It observes that the standard encoder bundles three separate hypotheses:
+(1) the model benefits from a visual prior learned from image-only or image--text data upstream;
+(2) the model needs dedicated parameters devoted to visual processing;
+(3) visual processing must precede language--vision fusion in a separate module.
+
+None of these has been cleanly isolated.
+Prior ablation work varied one while holding others fixed.
+This paper varies all three within a single controlled framework.
+
+\section{Why Existing Approaches Fall Short}
+
+\textbf{Encoder ablations} in prior work typically compare a CLIP encoder to no encoder (encoder-free), without separating the effect of the visual prior from the effect of having dedicated parameters.
+The absence of an encoder conflates both.
+
+\textbf{Joint training experiments} in prior work modify placement or initialization but typically reuse the existing CLIP architecture, so the upstream prior is never cleanly removed.
+
+\textbf{Efficiency work} on vision token compression reduces the number of tokens passed to the LLM but preserves the full CLIP encoder forward pass, leaving time-to-first-token unchanged.
+
+\section{Three-Way Factorization}
+
+The paper defines three orthogonal design axes:
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt]
+  \item \textbf{Prior:} Is vision capacity initialized from upstream visual pretraining (CLIP) or from scratch?
+  \item \textbf{Capacity:} Does the model have dedicated parameters for vision processing, and how many?
+  \item \textbf{Placement:} Does dedicated capacity sit pre-fusion (before the LLM backbone) or inside early backbone layers?
+\end{enumerate}
+
+Five main configurations are evaluated:
+\begin{itemize}[leftmargin=1em,itemsep=1pt,parsep=0pt]
+  \item \textbf{Baseline:} CLIP-pretrained ViT pre-fusion (standard VLM)
+  \item \textbf{Early-joint:} Dedicated capacity in early backbone layers, trained from scratch jointly with the LLM
+  \item \textbf{Late-joint:} Dedicated capacity in late backbone layers, jointly trained
+  \item \textbf{No-prior encoder:} CLIP-architecture encoder with random initialization, fine-tuned jointly
+  \item \textbf{Encoder-free:} No dedicated vision parameters; raw tokens directly into the backbone
+\end{itemize}
+
+\section{Technical Formulation}
+
+The \textbf{early-joint} configuration inserts alternating vision-specific and shared attention blocks into the first third of the backbone transformer layers.
+Vision-specific blocks attend only to image tokens; shared blocks attend to both image and text tokens.
+
+This placement allows the model to establish compact visual representations before language context accumulates in later layers---an information-bottleneck advantage not available to late-placement configurations.
+
+\textbf{Inference efficiency:}
+The early-joint configuration eliminates the separate CLIP forward pass.
+Image tokens enter the backbone directly at layer~1, reducing time to first token by approximately 13\% at the 1.7B scale.
+
+\section{Learning or Inference Procedure}
+
+Training uses identical data, optimizer settings, and compute budget (FLOPs matched within 2\%) across all five configurations.
+The backbone is frozen at the start only for the standard \textbf{Baseline} (a brief encoder--projector warmup period); all other configurations train end to end from the beginning.
+
+The early-joint capacity consists of two additional attention heads per early-layer block, attending exclusively to image tokens, plus one shared cross-modal block per third of the backbone.
+The capacity overhead is approximately 10\% of backbone parameters.
+
+\section{Experimental Findings}
+
+\begin{center}
+\small
+\begin{tabular}{lrrrc}
+\toprule
+\textbf{Config} & \textbf{VQA} & \textbf{VHall} & \textbf{Vision} & \textbf{TTFT} \\
+\midrule
+Baseline (CLIP) & 72.1 & 68.3 & 64.5 & 1.00$\times$ \\
+Early-joint & \textbf{71.8} & \textbf{68.1} & \textbf{64.9} & \textbf{0.87$\times$} \\
+Late-joint & 69.4 & 66.2 & 62.7 & 0.90$\times$ \\
+No-prior encoder & 70.6 & 67.1 & 63.8 & 1.02$\times$ \\
+Encoder-free & 66.4 & 63.8 & 60.1 & 0.78$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textit{VQA}: avg.\ visual QA; \textit{VHall}: visual hallucination; \textit{Vision}: vision-centric tasks; \textit{TTFT}: time to first token relative to baseline.
+
+Early-joint matches CLIP pre-fusion to within 0.3 points on average VQA, with 13\% lower inference latency.
+Encoder-free lags by 5.4 points, confirming dedicated capacity is load-bearing.
+
+\section{Ablations and Interpretation}
+
+\begin{itemize}[leftmargin=1em,itemsep=2pt]
+  \item \textbf{Prior vs.\ capacity:} Comparing no-prior encoder to baseline reveals only a 1.5-point gap, suggesting the CLIP prior contributes marginally once dedicated capacity is present.
+  \item \textbf{Placement:} Early-joint outperforms late-joint by 2.4 points on average VQA, confirming the information-bottleneck advantage of early placement.
+  \item \textbf{Capacity size:} Increasing early-joint capacity from 10\% to 20\% of backbone parameters yields +0.8 points with diminishing returns beyond 15\%.
+  \item \textbf{Data efficiency:} Early-joint reaches 95\% of its final VQA performance with 60\% of training data; the CLIP baseline requires 80\%---a marginal difference, suggesting similar data efficiency.
+\end{itemize}
+
+\section{What the Guarantee Says}
+
+The result does not eliminate the CLIP prior's contribution---it shows the prior is not essential.
+The 1.5-point difference between no-prior encoder and the CLIP baseline confirms the prior helps marginally.
+The claim is that dedicated capacity placed early is \emph{sufficient} for near-baseline performance, not that the prior is \emph{useless}.
+
+The result holds at 1.7B parameters; whether it generalizes to larger scales (7B, 70B) is left as future work.
+
+\section*{Reference}
+E.\ Brown, C.\ Hoang, S.-W.\ Li, M.\ Lewis, M.\ Ghazvininejad, L.\ Zettlemoyer, L.\ Beyer, M.\ Ren, J.\ Verbeek, S.\ Xie, H.\ Xu.
+\textbf{Unbundling Multimodal Vision Encoding.}
+arXiv:2611.17334. cs.CV, cs.LG.
+\url{https://arxiv.org/abs/2611.17334}
+
+\end{document}
